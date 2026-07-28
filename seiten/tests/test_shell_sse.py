@@ -70,20 +70,30 @@ def test_build_panel_url_mit_query_sortiert():
 # ============================================================
 
 def test_ac1_sse_liefert_initialen_state():
-    """AC1: GET /shell/<panel_id>/events liefert einen text/event-stream, dessen
-    erstes data:-Event der initiale Zustand ist (None beim Kaltstart)."""
+    """AC1: GET /shell/<panel_id>/events liefert einen text/event-stream (#1542
+    last-state-on-subscribe): hat der Server beim Verbinden einen gesetzten Zustand,
+    ist das erste Event payload.url; ist er None, kein Geister-Event (nur Heartbeats).
+
+    Dieser Test prueft den gesetzten Fall: Zustand vorbelegen, dann verbinden —
+    erstes Event traegt payload.url (AC1). Den None-Fall deckt test_ac3_ruhe_zustand_nur_heartbeat."""
+    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
     c = _auth_client()
     resp = c.get("/shell/" + PANEL_ID + "/events", buffered=False)
     assert resp.status_code == 200
     assert resp.mimetype == "text/event-stream"
     assert resp.headers.get("Cache-Control") == "no-cache"
-    # Erstes Event aus dem Generator ziehen (Zustand beim Verbinden).
+    # Erstes Event muss den gesetzten Zustand tragen (kein Geister-null vor dem echten State).
     gen = resp.response
     first = next(iter(gen))
     if isinstance(first, bytes):
         first = first.decode("utf-8")
     assert first.startswith("data: ")
-    assert json.loads(first[len("data: "):].strip()) is None
+    state = json.loads(first[len("data: "):].strip())
+    assert state is not None, (
+        "Erstes SSE-Event bei gesetztem Zustand darf KEIN null sein "
+        "(last-state-on-subscribe #1542)"
+    )
+    assert state["payload"]["url"] == "/display/hoerspiel/player"
     gen.close()
 
 
@@ -166,6 +176,133 @@ def test_ac2_ingest_lehnt_ungueltiges_event_ab():
     assert r3.status_code == 400
 
 
+def test_t1542_subscribe_nach_post_liefert_zustand_sofort():
+    """#1542 AC2 — Race-Reproduktion: Subscribe NACH einem tile_selected-POST.
+
+    Szenario: Der erste Tap setzt _shell_state (POST), findet aber noch keinen
+    Subscriber (SSE-connect-Race) — der Broadcast verpufft. Mit last-state-on-
+    subscribe liest der Generator NACH _shell_subscribe() den bereits gesetzten
+    Zustand und liefert ihn als erstes SSE-Event, OHNE auf einen zweiten Tap
+    zu warten. Das ist der Beweis, dass der Doppel-Tap-Bug geschlossen ist.
+
+    Test-Reihenfolge erzwingt die Race: _shell_state setzen (kein Subscriber),
+    dann _shell_event_stream starten — erstes Event muss payload.url tragen.
+    Wir nutzen die interne API direkt (kein HTTP via Werkzeug-Testclient), weil
+    c.get(buffered=False) bis zum ersten yield blockiert — das ist beim Werkzeug-
+    Testclient normales Verhalten und kein Bug im Server-Code."""
+    c = _auth_client()
+
+    # POST zuerst — kein Subscriber → Broadcast geht ins Leere (Race-Kern).
+    r = c.post(
+        "/shell/" + PANEL_ID + "/events",
+        json={"type": "tile_selected", "app": "hoerspiel", "view": "player"},
+    )
+    assert r.status_code == 204
+    assert seiten_main._shell_state is not None, (
+        "POST muss _shell_state setzen, unabhaengig von Subscribern"
+    )
+
+    # Jetzt SSE-Generator direkt starten — prueft last-state-on-subscribe intern.
+    # _shell_event_stream liest _shell_state NACH _shell_subscribe() (Reihenfolge
+    # load-bearing: Race-Schluss). Erster yield muss sofort den Zustand liefern.
+    gen = seiten_main._shell_event_stream()
+    try:
+        first_raw = next(gen)
+        if isinstance(first_raw, bytes):
+            first_raw = first_raw.decode("utf-8")
+
+        # Erstes Event muss den Zustand des ersten Taps tragen (kein zweiter Tap noetig).
+        assert first_raw.startswith("data: "), "SSE-Event muss mit 'data: ' beginnen"
+        state = json.loads(first_raw[len("data: "):].strip())
+        assert state is not None, (
+            "Erstes SSE-Event nach Subscribe muss den gesetzten Zustand tragen, "
+            "nicht null (last-state-on-subscribe #1542 — Race nicht geschlossen)"
+        )
+        assert state.get("type") != "heartbeat", (
+            "Erstes Event darf kein Heartbeat sein — Zustand muss sofort kommen"
+        )
+        assert state["payload"]["url"] == "/display/hoerspiel/player", (
+            "payload.url muss dem tile_selected-POST entsprechen "
+            "(erster Tap muss Pane swappen, zweiter Tap darf nicht noetig sein)"
+        )
+    finally:
+        gen.close()
+
+
+def test_t1542_ruhe_zustand_nur_heartbeat():
+    """#1542 AC3 — Subscribe bei leerem Zustand (None): kein Geister-Event.
+
+    Ist _shell_state None beim Connect, sendet der Stream KEIN initiales data-
+    Event (kein 'data: null\\n\\n'). Die Queue blockiert bis zum naechsten
+    tile_selected-Broadcast oder Heartbeat-Timeout. Dieser Test prueft, dass
+    kein spontanes null-Event kommt, das den Client-Guard (current=null) falsch
+    vorbelegt — das wuerde einen spaeteren panel_cleared-Broadcast unsichtbar machen
+    (next===current===null → kein removeAttribute('src')).
+
+    Probe via Generator + Broadcast: Generator starten (subscribes), dann einen
+    Nicht-None-Zustand broadcasen — erstes yield muss den Broadcast tragen, nicht
+    ein vorangegangenes Geister-null. So beweisen wir, dass kein null vor dem
+    echten State yield wird."""
+    import threading
+
+    # Voraussetzung: Ruhe-Zustand.
+    assert seiten_main._shell_state is None
+
+    gen = seiten_main._shell_event_stream()
+    result = []
+    exc_holder = []
+
+    def _advance():
+        try:
+            val = next(gen)
+            result.append(val)
+        except StopIteration:
+            result.append(b"STOP")
+        except Exception as e:
+            exc_holder.append(e)
+
+    # Generator in Background starten — blockiert bis erstes yield.
+    t = threading.Thread(target=_advance, daemon=True)
+    t.start()
+
+    # Kurz warten bis subscriber registriert ist (Generator laeuft bis q.get()).
+    import time
+    deadline = time.time() + 1.0
+    while time.time() < deadline:
+        with seiten_main._shell_subscribers_lock:
+            if seiten_main._shell_subscribers:
+                break
+        time.sleep(0.01)
+
+    assert seiten_main._shell_subscribers, (
+        "Generator muss sich innerhalb 1s subscriben"
+    )
+    # Noch kein yield eingetreten (kein Geister-null-Event).
+    assert not result, (
+        "Generator darf bei None-Zustand KEINEN sofortigen Yield vor Broadcast "
+        "liefern (kein 'data: null' — AC3 #1542). Yield war: %r" % result
+    )
+
+    # Jetzt einen Zustand broadcasen — das erste yield muss diesen State tragen.
+    seiten_main._apply_shell_trigger({"app": "essen", "view": "liste"})
+    t.join(timeout=1.0)
+    assert result, "Generator muss nach Broadcast yielden"
+    assert not exc_holder, "Unerwartete Exception: %r" % exc_holder
+
+    first = result[0]
+    if isinstance(first, bytes):
+        first = first.decode("utf-8")
+    state = json.loads(first[len("data: "):].strip())
+    assert state is not None, (
+        "Erstes SSE-Event muss den gesendeten State sein, nicht null "
+        "(kein Geister-null vor dem echten State — AC3 #1542)"
+    )
+    assert state["payload"]["url"] == "/display/essen/liste", (
+        "payload.url muss dem Broadcast entsprechen"
+    )
+    gen.close()
+
+
 # ============================================================
 #  AC3 — Pre-Merge-Smoke: Tap-links → Refresh-rechts, router+panel umgangen
 # ============================================================
@@ -176,31 +313,44 @@ def test_ac3_smoke_tap_links_refresh_rechts_ohne_router():
     einen offenen SSE-Stream (rechtes Pane) als payload.url. Weder router noch
     panel/controller sind beteiligt: der Pfad läuft rein über seiten_main.
 
-    Das ist der entry_path_probe-Beweis (Ingest → SSE publish → Pane)."""
-    # Rechtes Pane: SSE-Stream öffnen und initialen (Ruhe-)Zustand konsumieren.
+    Das ist der entry_path_probe-Beweis (Ingest → SSE publish → Pane).
+
+    Implementierungshinweis zu Werkzeug-Testclient: buffered=False blockiert beim
+    c.get() bis das erste yield aus dem Generator kommt. Deshalb setzen wir den
+    Zustand vor dem GET — so liefert der Generator sofort das erste Event (kein
+    15s-Heartbeat-Wait). Der zweite Tap prueft den Broadcast-Pfad (subscriber
+    existiert, publish → Queue → naechstes next(gen) liefert neuen Zustand)."""
+    # Rechtes Pane: Zustand vorbelegen, dann SSE öffnen.
+    # (last-state-on-subscribe: erster yield liefert sofort den vorhandenen Zustand)
+    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
     c = _auth_client()
     stream = c.get("/shell/" + PANEL_ID + "/events", buffered=False)
     gen = iter(stream.response)
+
+    # Erstes Event: der beim Connect nachgelieferte Zustand (last-state-on-subscribe).
     initial = next(gen)
     if isinstance(initial, bytes):
         initial = initial.decode("utf-8")
-    assert json.loads(initial[len("data: "):].strip()) is None, "Start im Ruhe-Zustand"
+    init_state = json.loads(initial[len("data: "):].strip())
+    assert init_state is not None, "Erstes Event muss den vorhandenen Zustand liefern"
+    assert init_state["payload"]["url"] == "/display/hoerspiel/player"
 
-    # Linke Nav tippt eine Kachel → Ingest an die seiten-Origin (kein router).
+    # Linke Nav tippt eine andere Kachel → Ingest an die seiten-Origin (kein router).
+    # subscriber existiert jetzt → broadcast landet in der Queue.
     tap = c.post(
         "/shell/" + PANEL_ID + "/events",
-        json={"type": "tile_selected", "app": "hoerspiel", "view": "player"},
+        json={"type": "tile_selected", "app": "essen", "view": "liste"},
     )
     assert tap.status_code == 204
 
-    # Rechtes Pane sieht die Änderung als nächstes SSE-Event (der Swap-Trigger).
+    # Rechtes Pane sieht die Änderung als nächstes SSE-Event (Broadcast-Pfad).
     nxt = next(gen)
     if isinstance(nxt, bytes):
         nxt = nxt.decode("utf-8")
     state = json.loads(nxt[len("data: "):].strip())
     assert state is not None
     assert state.get("type") != "heartbeat"
-    assert state["payload"]["url"] == "/display/hoerspiel/player", (
+    assert state["payload"]["url"] == "/display/essen/liste", (
         "Tap-links muss als payload.url im SSE-Event des rechten Panes ankommen"
     )
     stream.response.close()
