@@ -184,6 +184,23 @@ def test_shell4_pane_ohne_statischen_src(client):
     assert "pane.src" in body, "iframe.src-Swap-Empfänger fehlt (SHELL-5 RAT-31 E2)"
 
 
+def test_shell4_panel_iframe_traegt_ingest_url_param(client):
+    """SHELL-4 / E2-Sender (T1519 AC1): Der linke Panel-Nav-Iframe bekommt den
+    Query-Param ingest_url=/shell/<panel_id>/events im src mitgegeben, damit
+    app.js im Shell-Kontext an den seiten-Ingest postet statt an den Router."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
+    expected_ingest = "ingest_url=/shell/" + PANEL_ID + "/events"
+    assert expected_ingest in body, (
+        "Panel-Iframe-src muss ingest_url=/shell/<panel_id>/events als Query-Param enthalten "
+        "(SHELL-4 / E2-Sender, T1519 AC1) — app.js liest diesen Param beim Bootstrap"
+    )
+    # Der Param muss im Panel-Iframe-src stehen (nicht irgendwo im Dokument):
+    panel_iframe_src = "/controller/app-panel/" + PANEL_ID + "/?ingest_url=/shell/" + PANEL_ID + "/events"
+    assert panel_iframe_src in body, (
+        "Panel-Iframe-src muss exakt /controller/app-panel/<panel_id>/?ingest_url=... lauten"
+    )
+
+
 def test_shell3_rail_css_enthaelt_280px(client):
     """SHELL-3: heim-shell.css definiert Rail-Breite 280px (Gate-B)."""
     css_path = os.path.join(

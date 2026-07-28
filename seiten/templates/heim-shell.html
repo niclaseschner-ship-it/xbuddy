@@ -25,7 +25,10 @@
     {# SHELL-3: linke Nav-Rail 280px — Panel bleibt unpetraendert (kein 1-Spalten-Nachruestung).
        Panel berechnet Grid-Geometrie adaptiv aus eigener Iframe-Breite (PANEL-12). #}
     <div class="rail">
-      <iframe src="/controller/app-panel/{{ panel_id }}/"
+      {# SHELL-4 / E2-Sender (T1519): ingest_url bringt dem Panel die seiten-
+         seitige Ingest-URL als Query-Param mit. app.js liest ihn beim Bootstrap
+         und postet tile_selected an /shell/<panel_id>/events statt an den Router. #}
+      <iframe src="/controller/app-panel/{{ panel_id }}/?ingest_url=/shell/{{ panel_id }}/events"
               title="Panel-Nav {{ panel_id }}"
               referrerpolicy="same-origin"
               allow="autoplay">
