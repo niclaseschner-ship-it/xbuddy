@@ -405,6 +405,20 @@ def _assert_self_kind(kind_id: str):
 #  HSP-27b — Modell-Listen-Aggregation
 # ============================================================
 
+# HSP-27b / #1510 — ratifizierte V1-Modell-Liste für Mistral. Der direkte
+# httpx-Adapter wurde mit #1281 entfernt (tools.llm-Route trägt den Pfad); die
+# Konstante lebte danach nur noch als reiner Konstanten-Halter in
+# `hoerspiel/providers/mistral.py`. #1510 re-homed sie hierher (die einzige
+# Nutzung ist `_modelle_je_anbieter`) und löscht das Provider-Modul. Die
+# Claude-Konstante bleibt asymmetrisch in `hoerspiel/providers/claude.py`
+# (nicht löschgelistet). Label-Format: "<Bezeichnung> (<Charakterisierung>)".
+_MISTRAL_AVAILABLE_MODELS: list[tuple[str, str]] = [
+    ("mistral-large-2411",  "Large 2.1 (Frontier, kreativ)"),
+    ("mistral-medium-2508", "Medium 3.1 (ausgewogen, V1-Default Mistral)"),
+    ("mistral-small-2503",  "Small 3.1 (schnell, günstig)"),
+]
+
+
 def _modelle_je_anbieter() -> dict:
     """Gibt die AVAILABLE_MODELS aller Provider als Dict zurück (HSP-27b).
 
@@ -420,14 +434,10 @@ def _modelle_je_anbieter() -> dict:
             CLAUDE_MODELS = []
     result["claude"] = [{"id": mid, "label": label} for mid, label in CLAUDE_MODELS]
 
-    try:
-        from hoerspiel.providers.mistral import AVAILABLE_MODELS as MISTRAL_MODELS
-    except ImportError:
-        try:
-            from .providers.mistral import AVAILABLE_MODELS as MISTRAL_MODELS
-        except ImportError:
-            MISTRAL_MODELS = []
-    result["mistral"] = [{"id": mid, "label": label} for mid, label in MISTRAL_MODELS]
+    # #1510: Mistral-Modelle aus der re-homed lokalen Konstante (kein Import aus
+    # dem gelöschten hoerspiel/providers/mistral.py mehr).
+    result["mistral"] = [{"id": mid, "label": label}
+                         for mid, label in _MISTRAL_AVAILABLE_MODELS]
     return result
 
 

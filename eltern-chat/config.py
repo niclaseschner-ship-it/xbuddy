@@ -28,7 +28,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from onboarding_store import KEY_FAMILY_GROUP, KEY_PROVIDER_API_KEY, OnboardingStore
+from onboarding_store import KEY_FAMILY_GROUP, OnboardingStore
 
 from tools import configloader
 
@@ -315,18 +315,29 @@ def resolve(config_path, zd=None):
     if not bot_token:
         raise ConfigError("%s ist nicht gesetzt (Pflicht, EC-15)" % ENV_BOT_TOKEN)
 
-    # Anbieter-Key: Env > Onboarding-Speicher > leer (→ Onboarding-Modus, ONB-1).
-    # T663 Welle A (Watchdog B1): provider_name=values["provider"] aktiviert die
-    # read-both-Naht in OnboardingStore.load — der vendor-spezifische Slot
-    # (`eltern-chat-<vendor>-api-key`, Brand-Vendor via vendor_slug_for_adapter)
-    # gewinnt vor dem Single-Slot. Triggert auch die lazy-Migration (Welle A,
-    # ONB-13): vendor-Slot leer + Single-Slot gefüllt → einmaliger Kopier-
-    # Schreibvorgang in den vendor-Slot beim Bootstrap.
+    # Anbieter-Key-Präsenz: Env > litellm-Motor-Slot > leer (→ Onboarding-Modus,
+    # ONB-1). #1510: der Boot-Gate liest jetzt den litellm-Slot
+    # (`eltern-chat-litellm-<purpose>-api-key`, via `litellm_key_present`) —
+    # GENAU den Slot, den der Laufzeit-Chat-Pfad (LibAgentAdapter) und der
+    # SVC-7-Preflight (main._secret_preflight) ohnehin nutzen. Damit gilt der
+    # KI-Modus-Gate (`cfg.provider_api_key` truthy) an derselben Naht wie der
+    # eager Adapter-Bau — kein Slot-Auseinanderdriften mehr. Der ALTE
+    # vendor/single-Slot-Read (T663 Welle A) ist damit aufgelöst; der Key selbst
+    # holt die Lib aus dem Slot (ZD-5), config trägt ihn nicht mehr.
     provider_adapter = str(values["provider"]).strip()
-    store = OnboardingStore(zd=zd).load(provider_name=provider_adapter)
-    provider_api_key = (os.environ.get(ENV_PROVIDER_API_KEY)
-                        or store.get(KEY_PROVIDER_API_KEY)
-                        or "").strip()
+    store = OnboardingStore(zd=zd)
+    env_key = (os.environ.get(ENV_PROVIDER_API_KEY) or "").strip()
+    # `provider_api_key` bleibt ein truthy KI-Modus-Marker: der ENV-Key wörtlich,
+    # sonst ein nicht-leerer Platzhalter, wenn der litellm-Slot präsent ist. Der
+    # Wert wird nicht mehr als roher Key durchgereicht (tasks.py baut den Motor-
+    # Adapter, der den Key selbst aus dem Slot holt).
+    if env_key:
+        provider_api_key = env_key
+    elif store.litellm_key_present(provider_adapter):
+        provider_api_key = "litellm-slot"   # präsenz-Marker (nie geloggt/gespiegelt)
+    else:
+        provider_api_key = ""
+    store = store.load()
 
     # Familien-Gruppe: Env > Datei > Onboarding-Speicher > leer.
     # Per Env/Datei gesetzt → gesperrt, hat Vorrang vor Onboarding-Bindung (ONB-6).

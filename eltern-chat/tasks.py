@@ -396,17 +396,18 @@ def render_form_b(result, tg, chat_id):
 def _make_llm_fn_for_gericht_loeschen(provider_name, provider_api_key):
     """Erzeugt llm_fn(prompt: str) -> str fuer EC-10 Drei-Phasen-Auswahl-Phase.
 
-    Vorbild: eltern-chat/skills/anbieter_wechseln.py:347-353 — gleiche
-    Provider-Abstraktion (providers.get_provider + GenerationRequest).
+    #1510: baut den Motor-Adapter (`get_lib_agent_provider`) — der holt den Key
+    selbst aus dem litellm-Slot (ZD-5); `provider_api_key` ist nur noch der
+    KI-Modus-Präsenz-Marker (config.py), kein roher Key mehr.
 
-    Gibt None zurück, wenn provider_name oder provider_api_key fehlen
+    Gibt None zurück, wenn provider_name oder der Präsenz-Marker fehlen
     (Fallback: Auswahl-Phase nicht verfügbar, SIGNAL_NICHTS_ZU_TUN).
     """
     if not provider_name or not provider_api_key:
         return None  # Fallback: ohne Provider keine Auswahl-Phase
     from model import GenerationRequest, Message, TextBlock
-    from providers import get_provider
-    provider = get_provider(provider_name, provider_api_key)
+    from providers import get_lib_agent_provider
+    provider = get_lib_agent_provider(provider_name)
 
     def llm_fn(prompt):
         resp = provider.generate(GenerationRequest(
