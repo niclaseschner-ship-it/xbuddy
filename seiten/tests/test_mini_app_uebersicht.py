@@ -478,11 +478,12 @@ def test_ac5_js_laedt_inventar_von_seiten_api():
 
 def test_shell10_mau_panel_eintrag_hat_shell_urls(monkeypatch):
     """AC3 (SHELL-10, AC2): GET /api/v1/seiten gibt Panel-Eintraegen shell_urls
-    (Heim + Tailscale) wenn origins konfiguriert sind — server-seitig gebaut
-    aus panel_id + origins in seiten/main.py::get_seiten (kein JS-Hardcode)."""
+    (Heim + Funnel, Tailscale aufgegeben seit #1458) wenn origins konfiguriert
+    sind — server-seitig gebaut aus panel_id + origins in seiten/main.py::get_seiten
+    (kein JS-Hardcode)."""
     seiten_main.configure(
         heim_origin="http://192.168.1.1:8443",
-        tailscale_origin="https://buddyboard.taile235cf.ts.net",
+        tailscale_origin="https://buddyboard.taile235cf.ts.net",  # ignoriert seit #1458
     )
     monkeypatch.setattr(
         seiten_main, "hole_panels",
@@ -499,9 +500,9 @@ def test_shell10_mau_panel_eintrag_hat_shell_urls(monkeypatch):
         "shell_urls fehlt im Panel-Eintrag — SHELL-10 MAU (AC2/AC3)"
     assert panel["shell_urls"]["heim"] == "http://192.168.1.1:8443/shell/paulas-panel-01", \
         "shell_urls.heim hat falschen Wert — SHELL-10 MAU"
-    assert panel["shell_urls"]["tailscale"] == \
-        "https://buddyboard.taile235cf.ts.net/shell/paulas-panel-01", \
-        "shell_urls.tailscale hat falschen Wert — SHELL-10 MAU"
+    # #1458: tailscale_origin-Param wird ignoriert — tailscale ist immer None
+    assert panel["shell_urls"]["tailscale"] is None, \
+        "shell_urls.tailscale muss None sein seit #1458 (Funnel-only)"
 
 
 def test_shell10_mau_shell_url_aus_panel_id_abgeleitet(monkeypatch):

@@ -192,10 +192,10 @@ def test_bestehende_aufrufe_ohne_funnel_origin_brechen_nicht():
     """baue_layout(inventar, heim, tail) ohne funnel_origin laeuft weiter durch."""
     eintraege = [_view("wetter", "heute", "/display/wetter/heute")]
     out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    # Kein Fehler; heim/tailscale funktionieren wie vorher
+    # Kein Fehler; heim funktioniert wie vorher; tailscale ist seit #1458 immer None
     karte = out["buddy_gruppen"][0]["karten"][0]
     assert karte["urls"]["heim"] == HEIM + "/display/wetter/heute"
-    assert karte["urls"]["tailscale"] == TAIL + "/display/wetter/heute"
+    assert karte["urls"]["tailscale"] is None
     assert karte["urls"]["funnel"] is None
 
 
@@ -233,7 +233,7 @@ def test_live_pfad_funnel_origin_nicht_leer(tmp_path, monkeypatch):
         inventar_path=inventar_path,
         ttl=30,
         heim_origin=HEIM,
-        tailscale_origin=TAIL,
+        tailscale_origin=TAIL,  # wird ignoriert seit #1458 (Funnel-only)
         funnel_origin=FUNNEL,
     )
     seiten_main.app.config["TESTING"] = True
@@ -247,3 +247,7 @@ def test_live_pfad_funnel_origin_nicht_leer(tmp_path, monkeypatch):
     alle_karten = [k for g in data.get("buddy_gruppen", []) for k in g.get("karten", [])]
     assert alle_karten, "Keine Karten im Layout — Manifest-Setup fehlgeschlagen"
     assert alle_karten[0]["urls"]["funnel"] == FUNNEL + "/display/wetter/heute"
+    # #1458 Kerngarantie: tailscale_origin-Param an configure() erzeugt keine Tailscale-URLs
+    assert alle_karten[0]["urls"]["tailscale"] is None
+    assert data["tailscale_origin"] == ""
+    assert data["tailscale_banner"] is True

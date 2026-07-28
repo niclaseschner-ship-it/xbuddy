@@ -330,11 +330,13 @@ wird ein `intern`-Flag oder eine echte Rolle fällig. Bis dahin nicht auf Vorrat
 | `display_url_origin_funnel` | Funnel-FQDN-Origin (LE-Cert, extern erreichbar; für Familien-**User-Geräte** über den Funnel, AUTH-7b) — **RAT-27 (RATIFIZIERT 2026-07-07)** | leer |
 
 **`display_url_origin_tailscale` entfernt** (Slot existiert nicht mehr in
-`eltern-chat/config.py` nach #1458). Der `tailscale_origin`-Parameter in
-`seiten/render.py` und `seiten/main.py` (`SEITEN_TAILSCALE_ORIGIN`) bleibt
-als Leer-String-fähige Schnittstelle erhalten (kein Breaking Change am
-seiten-Service), wird aber nicht mehr gesetzt — er war der V1-Soll-Slot,
-der immer leer blieb. Folge-Aufräumticket für Nic (deploy-gekoppelt).
+`eltern-chat/config.py` nach #1458). `SEITEN_TAILSCALE_ORIGIN` wird in
+`seiten/main.py` nicht mehr gelesen (`resolved_config` setzt den Wert immer
+auf Leer-String). `tailscale_origin` bleibt als Parameter in `seiten/render.py`
+und `configure()` für Rückwärtskompatibilität, wird aber ignoriert —
+`urls.tailscale` ist in jeder Karte immer `None`, `tailscale_banner` ist immer
+`True`. ENV-Variable `SEITEN_TAILSCALE_ORIGIN` am Pi kann Nic beim nächsten
+Deploy-Aufräumen entfernen (kein Effekt mehr).
 
 **V1-Pflicht:** `display_url_origin_heim` muss gesetzt sein, sonst kann der
 SREG-5-Skill keinen tippbaren Link liefern und die SREG-12-Seite hat keine
@@ -611,13 +613,15 @@ gerendert (V1 Zwei-Spalten, V2 gemeinsame Box, V3 Verbinder-Chip). Nic-Wahl:
 V2. Die hier spezifizierten Layout-Pflichten entsprechen V2-Reconcile.
 
 **Inhalt je Karte (Pflicht):** `label` · `zeigt` (1 Satz) · `icons[]` (oder
-Fallback, s. u.) · `typ`-Badge · **zwei kopierbare URLs** mit Copy-Button:
+Fallback, s. u.) · `typ`-Badge · **kopierbare URLs** mit Copy-Button (Funnel-only
+seit #1458, Nic-Setzung 2026-07-25):
 - **„Heim"** = `display_url_origin_heim` + `pfad` (SREG-7)
-- **„Tailscale"** = `display_url_origin_tailscale` + `pfad` (SREG-7)
+- **„Funnel"** = `display_url_origin_funnel` + `pfad` (SREG-7, RAT-27) — *wenn* Wert konfiguriert
 
-*Wenn* `display_url_origin_tailscale` leer ist, *dann* wird die Tailscale-Spalte
-**weggelassen** und ein einmaliger Banner-Hinweis am Seitenkopf erklärt, dass
-nur die Heim-Variante verfügbar ist.
+~~**„Tailscale"** = `display_url_origin_tailscale` + `pfad`~~ — **entfernt (#1458)**:
+self-signed Tailnet-IP-Origins werden nicht mehr angeboten. Die Tailscale-Spalte
+wird nie gerendert; ein Banner-Hinweis am Seitenkopf ist dauerhaft aktiv
+(`tailscale_banner = True`).
 
 **Varianten:** ein Eintrag mit `varianten[]` (SREG-1) rendert **je Variante eine
 eigene Karte** mit der vollständigen `query`-Anhängung am Pfad (z. B.
