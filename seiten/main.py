@@ -1546,13 +1546,25 @@ def _shell_sse_pack(shell_state):
 
 def _shell_event_stream():
     """Generator für den Shell-SSE-Stream (Analog ROU-22 display_event_stream):
-    liefert den aktuellen Zustand beim Verbinden, danach jede Änderung.
-    Heartbeats sind data-Events `{"type":"heartbeat"}` statt SSE-Comments,
-    damit Mobile-Browser-EventSource sie als Lebenszeichen sieht (R6 Track-E
-    2026-06-18). Der Empfänger im Template ignoriert den heartbeat-Typ."""
+    liefert den aktuellen Zustand beim Verbinden (falls gesetzt), danach jede
+    Änderung. Heartbeats sind data-Events `{"type":"heartbeat"}` statt SSE-
+    Comments, damit Mobile-Browser-EventSource sie als Lebenszeichen sieht
+    (R6 Track-E 2026-06-18). Der Empfänger im Template ignoriert heartbeat-Typ.
+
+    Race-Schluss (#1542 last-state-on-subscribe): Snapshot NACH _shell_subscribe(),
+    damit ein POST, der vor dem Connect ins Leere broadcastet hat, beim Connect
+    nachgeliefert wird. Snapshot vor der while-Schleife, nicht beim Generator-
+    Aufbau — sonst liest man den Zustand vor der Queue-Registrierung (neue Race)."""
     q = _shell_subscribe()
     try:
-        yield _shell_sse_pack(_shell_state)        # Zustand beim Verbinden
+        # Snapshot NACH Subscribe lesen (load-bearing Reihenfolge):
+        # Ein POST vor dem Connect setzt _shell_state, findet aber keine Queue
+        # (empty set → Broadcast verpufft). Hier lesen wir den bereits gesetzten
+        # Zustand nach → Pane lädt beim ersten Tap. Ist der Zustand None (Ruhe),
+        # senden wir kein Geister-Event; die Heartbeat-Schleife hält die Leitung.
+        _snapshot = _shell_state
+        if _snapshot is not None:
+            yield _shell_sse_pack(_snapshot)
         while True:
             try:
                 s = q.get(timeout=SHELL_SSE_HEARTBEAT_SECONDS)
