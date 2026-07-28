@@ -13,8 +13,7 @@ beim Abschluss des Onboardings (ONB-5/ONB-6). Die gelesenen dict-Schlüssel
 konsumiert sie unverändert.
 """
 
-from providers import get_provider_class
-
+from tools.llm import litellm_slot_for_provider
 from tools.zugangsdaten import Zugangsdaten, resolve_store_path
 
 # Schlüssel im gelesenen dict (Public-Schnittstelle für config.py — unverändert).
@@ -33,22 +32,30 @@ ZD_NAME_FAMILY_GROUP = "eltern-chat-family-group-chat-id"
 # CLAUDE.md §6).
 ZD_NAME_PROVIDER_NAME = "eltern-chat-provider-name"
 
-def vendor_slug_for_adapter(adapter_name):
-    """Löst einen Adapter-Namen auf den Brand-Vendor-Slug auf (ECP-1, T1022).
+# #1510: Adapter-Name → Brand-Vendor-Slug als schlichte Map. Vorher lag die
+# Zuordnung als `brand_vendor`-Klassen-Attribut an den Hand-Vendor-Adaptern
+# (`providers/claude.py`, `providers/mistral.py`); diese sterben mit #1510 (der
+# Motor-Call läuft über `tools.llm`). Die eine Wahrheitsquelle wandert damit von
+# den Klassen in diese Map — ohne Verhaltensänderung (`claude` → `anthropic`,
+# `mistral` → `mistral`). Unbekannte Adapter-Namen bleiben Passthrough.
+_ADAPTER_BRAND_VENDOR = {
+    "claude": "anthropic",
+    "mistral": "mistral",
+}
 
-    `claude` → `anthropic`, `mistral` → `mistral`. Der Slug wird aus
-    `provider_class.brand_vendor` gelesen — eine Wahrheitsquelle am Adapter
-    (ECP-1). Unbekannte Adapter-Namen (ohne registrierte Provider-Klasse)
-    werden 1:1 zurückgegeben — Pragmatik für künftige Adapter, deren
-    Adapter-Name dem Brand-Vendor entspricht.
+
+def vendor_slug_for_adapter(adapter_name):
+    """Löst einen Adapter-Namen auf den Brand-Vendor-Slug auf (T1022).
+
+    `claude` → `anthropic`, `mistral` → `mistral`. Der Slug kommt aus der
+    zentralen `_ADAPTER_BRAND_VENDOR`-Map (#1510: früher `brand_vendor` an der
+    Provider-Klasse, gelöscht). Unbekannte Adapter-Namen werden 1:1 zurückgegeben —
+    Pragmatik für künftige Adapter, deren Adapter-Name dem Brand-Vendor
+    entspricht. Convention-Rewrite (ECP-1) tracked #1537.
     """
     if not isinstance(adapter_name, str) or not adapter_name:
         raise ValueError("adapter_name muss ein nicht-leerer String sein")
-    try:
-        return get_provider_class(adapter_name).brand_vendor
-    except ValueError:
-        # Kein registrierter Provider → Adapter-Name ist der Vendor (Passthrough).
-        return adapter_name
+    return _ADAPTER_BRAND_VENDOR.get(adapter_name, adapter_name)
 
 
 def zd_name_provider_api_key(adapter_name):
@@ -60,10 +67,10 @@ def zd_name_provider_api_key(adapter_name):
     `load(provider_name=...)` liest vendor-Slot zuerst, fällt auf Single-Slot
     zurück. Welle B (späteres Ticket) entfernt den Single-Slot.
 
-    `adapter_name` ist der Adapter-Name aus `providers.get_provider`
-    (`claude`, `mistral`). Intern wird er über `vendor_slug_for_adapter` auf
-    den Brand-Vendor aufgelöst — die Spec ZD-2 bindet den Slot-Namen an den
-    Brand-Vendor (Watchdog B2).
+    `adapter_name` ist der app-lokale Anbieter-Name (`claude`, `mistral`).
+    Intern wird er über `vendor_slug_for_adapter` auf den Brand-Vendor
+    aufgelöst — die Spec ZD-2 bindet den Slot-Namen an den Brand-Vendor
+    (Watchdog B2).
 
     Helper ist hier zentral, damit der Skill `anbieter_wechseln` denselben
     Namens-Bauer importiert (eine Wahrheitsquelle, CLAUDE.md §6).
@@ -141,3 +148,50 @@ class OnboardingStore:
             self._zd.set(ZD_NAME_PROVIDER_API_KEY, provider_api_key)
         if family_group_chat_id is not None:
             self._zd.set(ZD_NAME_FAMILY_GROUP, family_group_chat_id)
+
+    # ============================================================
+    #  #1510: litellm-Motor-Slot — Probe + Boot-Read
+    # ============================================================
+    #
+    # Der Laufzeit-Chat-Pfad (LibAgentAdapter) liest den API-Key aus dem
+    # anbieter-benannten litellm-Slot (`eltern-chat-litellm-<purpose>-api-key`,
+    # LLMP-5, via `litellm_slot_for_provider`). Onboarding/Anbieter-Wechsel
+    # validieren einen Ad-hoc-Key seit #1510 über GENAU diesen Slot: probeweise
+    # schreiben → über den Motor pingen → bei Fehler löschen (RATIFIZIERT
+    # 20260728-1510). `save`/`load` oben kennen nur die ALTEN Slots; diese
+    # Accessoren schreiben/lesen/löschen den litellm-Slot.
+
+    def litellm_probe_write(self, provider, api_key):
+        """Schreibt `api_key` PROBEWEISE in den litellm-Slot des Anbieters (#1510).
+
+        Der Slot ist der reguläre Laufzeit-Slot (`litellm_slot_for_provider`) —
+        ein gültiger Probe-Wert bleibt einfach stehen und ist damit sofort der
+        persistierte Key (der separate ONB-12-Schreibschritt verschmilzt).
+        `provider` ist der Adapter-Name (`claude`/`mistral`); unbekannter
+        Anbieter → `KeyError` (sichtbar, kein Silent-Fallback — wie die
+        Laufzeit-Naht)."""
+        self._zd.set(litellm_slot_for_provider("eltern-chat", provider), api_key)
+
+    def litellm_probe_delete(self, provider):
+        """Räumt den litellm-Slot des Anbieters nach einem FEHLGESCHLAGENEN
+        Probe-Schreib wieder ab (#1510). `tools.zugangsdaten` kennt kein echtes
+        Löschen (nur set/set_multi); ein liegengebliebener FALSCH-Key ist aber
+        gefährlich (er bestünde den SVC-7-Präsenz-Check und fiele erst live).
+        Darum wird der Slot auf den LEEREN String gesetzt — `litellm_key_present`
+        (bool-Truthy) und der Lib-`slot_present` (bool(resolve_api_key)) werten
+        das identisch als »nicht gesetzt«, ohne einen brauchbaren Key zu behalten."""
+        self._zd.set(litellm_slot_for_provider("eltern-chat", provider), "")
+
+    def litellm_key_present(self, provider):
+        """True, wenn im litellm-Slot des Anbieters ein nicht-leerer Key liegt
+        (#1510). Boot-Gate + Pfad-A-Diskriminante lesen hierüber — genau den
+        Slot, den die Laufzeit auch nutzt (kein Slot-Auseinanderdriften).
+
+        Ein unbekannter Anbieter (kein LLM-Slot-Mapping) hat keinen Slot →
+        `False` statt Crash. Der eager Adapter-Bau / SVC-7-Preflight fängt einen
+        wirklich fehlkonfigurierten Anbieter am Boot mit klarer Meldung ab."""
+        try:
+            slot = litellm_slot_for_provider("eltern-chat", provider)
+        except KeyError:
+            return False
+        return bool(self._zd.get(slot))

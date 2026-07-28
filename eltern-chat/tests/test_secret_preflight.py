@@ -47,6 +47,40 @@ def test_preflight_fails_when_agent_slot_missing(monkeypatch, caplog):
 
 
 # ============================================================
+#  #1510: present-but-invalid (leerer Probe-Rest) → Exit
+# ============================================================
+
+
+def test_preflight_fails_when_slot_holds_empty_probe_remnant(tmp_path, monkeypatch, caplog):
+    """#1510-Härtung des Probe-Crash-Fensters: bricht Onboarding/Wechsel
+    zwischen Probe-Schreib und Ping ab, räumt `litellm_probe_delete` den Slot
+    auf den LEEREN String. Der Boot-Check muss diesen present-but-invalid-Rest
+    fangen (leerer Slot zählt als nicht präsent → FEHLT + Exit), statt mit einem
+    kaputten Key in den KI-Modus zu booten.
+
+    Entry-Path-Probe: hier läuft der ECHTE `slot_present`/`resolve_api_key`
+    gegen einen tmp-Store (kein Monkeypatch der Präsenz-Funktion) — belegt, dass
+    der leere String tatsächlich als »nicht gesetzt« gewertet wird.
+    """
+    from onboarding_store import OnboardingStore
+
+    from tools.zugangsdaten import Zugangsdaten
+
+    zd_path = str(tmp_path / "zd.json")
+    store = OnboardingStore(zd=Zugangsdaten(zd_path))
+    # Simuliert den abgeräumten Probe-Rest: Slot existiert, ist aber leer.
+    store.litellm_probe_write("claude", "kaputt-und-abgeraeumt")
+    store.litellm_probe_delete("claude")
+    monkeypatch.setattr("tools.zugangsdaten.resolve_store_path", lambda: zd_path)
+
+    with caplog.at_level(logging.CRITICAL), pytest.raises(SystemExit) as exc_info:
+        main_mod._secret_preflight(_cfg(provider="claude"))
+
+    assert exc_info.value.code != 0
+    assert "FEHLT" in caplog.text
+
+
+# ============================================================
 #  KI-Modus + Slot präsent → kein Exit
 # ============================================================
 

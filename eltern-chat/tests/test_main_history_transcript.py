@@ -4,8 +4,9 @@ Geprüft wird:
 - AC2: ein Tool-Turn wird VOLLSTÄNDIG in die History persistiert (user →
   assistant tool_use → user tool_result → assistant text), in Loop-Reihenfolge.
 - AC3-Vorbedingung: die reloadete History ist paarig (tool_use vor tool_result),
-  sodass `providers.claude` sie auf gültige Anthropic-Messages mappt — geprüft
-  in test_providers.py.
+  sodass der Motor-Adapter (`LibAgentAdapter._to_wire_message`) sie auf gültige,
+  Anthropic-shaped Wire-Messages mappt (#1510: der Hand-Vendor `providers.claude`
+  ist entfernt; der Mapping-Vertrag wandert eine Schicht tiefer).
 - R7 (#268): der Telemetrie-Suffix hängt NIE an den persistierten Messages,
   auch nicht über einen Tool-Turn.
 - proposal-Pfad: das Tool-Transkript landet in der History, plus der reine
@@ -191,7 +192,7 @@ def test_issue_310_proposal_reload_maps_paired_to_anthropic(tmp_path):
     KEIN unpaariges tool_use/tool_result an den Provider gehen — jede tool_use
     `id` hat ein tool_result `tool_use_id` und umgekehrt. Das ist der
     eigentliche Bruch-Pfad (T310-S2-W): das mittige tool_use des Vorschlags."""
-    from providers.claude import ClaudeProvider
+    from providers.lib_adapter import LibAgentAdapter
 
     write = FakeWriteTask(name="termin", summary="Termin eintragen",
                           result="erledigt")
@@ -210,7 +211,7 @@ def test_issue_310_proposal_reload_maps_paired_to_anthropic(tmp_path):
 
     # Reload + Mapping auf Anthropic-Messages (wie im Folge-Turn).
     loaded = history.load(42, 20)
-    mapped = [ClaudeProvider._to_anthropic_message(m) for m in loaded]
+    mapped = [LibAgentAdapter._to_wire_message(m) for m in loaded]
     history.close()
 
     use_ids, result_ids = set(), set()

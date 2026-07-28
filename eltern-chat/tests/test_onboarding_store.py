@@ -174,7 +174,8 @@ def test_vendor_slug_for_adapter_mistral_passthrough():
 def test_vendor_slug_for_adapter_unknown_passthrough():
     """Unbekannter Adapter wird 1:1 zurückgegeben (Pragmatik für künftige
     Adapter, deren Adapter-Name = Brand-Vendor). Der Passthrough erfolgt,
-    wenn get_provider_class keinen Treffer findet (ECP-1, T1022)."""
+    wenn der Adapter nicht in der `_ADAPTER_BRAND_VENDOR`-Map enthalten ist
+    (#1510, T1022)."""
     assert vendor_slug_for_adapter("openai") == "openai"
     assert vendor_slug_for_adapter("azure-openai") == "azure-openai"
 

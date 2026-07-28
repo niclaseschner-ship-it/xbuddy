@@ -410,8 +410,13 @@ def test_themen_alter_nicht_gepflegt_422(runtime_cfg_with_mistral, data_root_min
 # ============================================================
 
 def test_mistral_available_models_konstante():
-    """HSP-27b: AVAILABLE_MODELS enthält die 3 V1-Modelle."""
-    from hoerspiel.providers.mistral import AVAILABLE_MODELS
+    """HSP-27b: AVAILABLE_MODELS enthält die 3 V1-Modelle.
+
+    #1510: die Konstante ist von `hoerspiel/providers/mistral.py` nach
+    `hoerspiel/main.py` (`_MISTRAL_AVAILABLE_MODELS`) re-homed — das Provider-
+    Modul ist gelöscht.
+    """
+    from hoerspiel.main import _MISTRAL_AVAILABLE_MODELS as AVAILABLE_MODELS
     model_ids = [m[0] for m in AVAILABLE_MODELS]
     assert "mistral-large-2411" in model_ids
     assert "mistral-medium-2508" in model_ids
