@@ -19,7 +19,7 @@ Andere Komponenten importieren **ausschließlich** aus diesem Paket, nie aus
 internen Pfaden (LLMP-4 Re-Export-Form analog ZD-5/MOD-5).
 """
 
-from ._resolver import slot_present
+from ._resolver import litellm_slot_for_provider, slot_present
 from ._types import (
     LLMCapabilityError,
     LLMProvider,
@@ -46,5 +46,6 @@ __all__ = [
     "get_singleshot",
     "get_speech",
     "get_transcription",
+    "litellm_slot_for_provider",
     "slot_present",
 ]

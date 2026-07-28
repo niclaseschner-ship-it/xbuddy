@@ -15,9 +15,9 @@ from types import SimpleNamespace
 
 import main as main_mod
 import pytest
-from providers.lib_adapter import _LIB_SLOT_FOR_PROVIDER
 
 import tools.llm as tools_llm
+from tools.llm import litellm_slot_for_provider
 
 
 def _cfg(provider="claude", provider_api_key="present"):
@@ -36,7 +36,7 @@ def test_preflight_fails_when_agent_slot_missing(monkeypatch, caplog):
     'FEHLT: <slot>' — statt LLMCapabilityError im Boot.
     """
     monkeypatch.setattr(tools_llm, "slot_present", lambda slot: False)
-    expected_slot = _LIB_SLOT_FOR_PROVIDER["claude"]
+    expected_slot = litellm_slot_for_provider("eltern-chat", "claude")
 
     with caplog.at_level(logging.CRITICAL), pytest.raises(SystemExit) as exc_info:
         main_mod._secret_preflight(_cfg(provider="claude"))

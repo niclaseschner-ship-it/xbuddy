@@ -469,9 +469,11 @@ def test_build_llm_claude_uses_litellm_slot_and_anthropic_agent_slot(monkeypatch
 
 
 def test_build_llm_mistral_slot_purpose_has_no_vendor_slug():
-    """T1454: der Mistral-Backend-Slot trägt `eu` (nicht `mistral`) im purpose,
-    sonst matcht parse_slot ZWEI Vendoren (litellm + mistral) → Boot-fatal."""
-    slot = main_mod._LIB_SLOT_FOR_PROVIDER["mistral"]
+    """T1492/T1454: der Mistral-Backend-Slot trägt `eu` (nicht `mistral`) im purpose,
+    sonst matcht parse_slot ZWEI Vendoren (litellm + mistral) → Boot-fatal.
+    Slot wird jetzt über litellm_slot_for_provider gebildet (n=2-Naht, T1492)."""
+    from tools.llm import litellm_slot_for_provider
+    slot = litellm_slot_for_provider("hoerspiel", "mistral")
     assert slot == "hoerspiel-litellm-eu-api-key"
     # parse_slot muss GENAU litellm auflösen (nicht mehrdeutig).
     from tools.llm._resolver import parse_slot

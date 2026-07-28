@@ -305,7 +305,7 @@ Folge-Punkte; Convention-Delta-Runde noch ausstehend).
 Bau-Ticket: #1316. Ratifiziertes Paket:
 `brainstorm/berater-runde/20260705-2223-RATIFIZIERT-1316-litellm-rat26.md`.
 
-### LLMP-S13 — `mistral/`-Modell-Präfix zentral normalisieren; Store-Slots anbieter-benannt
+### LLMP-S13 — `mistral/`-Modell-Präfix zentral normalisieren; Store-Slots im LLMP-5-Format
 
 **Anlass:** Deploy-Regression #1452 — LiteLLM erwartet für Mistral-Modelle den
 Modellnamen mit dem Präfix `mistral/`; ohne diese Normalisierung schlug ein
@@ -318,18 +318,36 @@ für alle Anbieter, **nicht** pro Vendor-File. So gibt es genau einen Ort, an de
 Modellnamen anbieter-korrekt normalisiert werden, und der Aufrufer muss das
 Präfix nicht kennen.
 
-**Store-Slot-Benennung — nach Anbieter (Nic-Setzung 2026-07-27, #1463).**
-Die Zugangsdaten-Store-Slots für Anbieter-Keys werden **nach dem Anbieter**
-benannt (`Mistral`, `Claude`, …) — kein kompliziertes Pro-App-Pro-Backend-Slug.
-**Welchen Anbieter-Zugang eine App nutzt, ist ein app-lokaler Parameter**
-(App-Config): jede App entscheidet selbst, welchen Zugang sie sich aus dem
-zentralen Speicher holt. Dies gilt als Interim, **bis der begonnene zentrale
-Routing-/Zugangs-Service** diese Wahl übernimmt; danach kann die Zuordnung dorthin
-wandern. Löst die parse_slot-Vendor-Slug-Mehrdeutigkeit, die #1463 aufwarf.
+**Store-Slot-Benennung — LLMP-5-Form mit litellm-Motor-Segment (Nic-Setzung
+2026-07-27, #1463; Realitäts-Nachzug T1492).**
+Die Zugangsdaten-Store-Slots für die litellm-Motor-Pfade folgen der LLMP-5-
+Konvention `<konsument>-<vendor>-<purpose>`, wobei `<vendor>` = `litellm`
+(der sanktionierte Motor-Slug, LLMP-4/RAT-26) und `<purpose>` einen
+**vendor-slug-freien** Marker trägt — kein zweiter Anbieter-Slug im Purpose,
+sonst matcht `parse_slot` zwei Vendoren (litellm UND den Anbieter) und bricht
+boot-fatal (LLMP-5-Falle). Konkrete Purpose-Marker:
+
+- `claude-api-key` — Claude-Anbieter-Zugang via litellm-Motor
+- `eu-api-key` — EU-Rechenzentrum-Zugang (Mistral) via litellm-Motor
+
+Beispiele: `eltern-chat-litellm-claude-api-key`, `hoerspiel-litellm-eu-api-key`.
+Die Slot-Namen werden über `tools.llm.litellm_slot_for_provider(caller, provider)`
+gebildet (T1492, n=2-Naht); jede App entscheidet app-lokal, welchen Zugang sie
+nutzt — dieser Parameter ist App-Config (App-Config-Prinzip: Welcher Anbieter-
+Zugang genutzt wird, ist Buddy-Sache, nicht Lib-Sache, LLMP-5). Dies gilt als
+Interim, **bis der begonnene zentrale Routing-/Zugangs-Service** diese Wahl
+übernimmt; danach kann die Zuordnung dorthin wandern.
+
+> **Nic-Confirm ausstehend:** Die Setzung 2026-07-27 formulierte „nach dem
+> Anbieter benannt (`Mistral`, `Claude`)" als Ziel-Richtung. Der real gebaute
+> Code (#1463) folgt zwingend LLMP-5 (`<app>-litellm-<purpose>`) — ein
+> Bare-Slug `Mistral` hat <3 Segmente und ist parse_slot-boot-fatal. Dieser
+> Abschnitt zieht die Realität nach; er enакт keine neue Mechanik-Entscheidung,
+> sondern beschreibt den fertig gebauten Stand (T1492).
 
 **Setzt RAT-26/LLMP-S12 um** (keine Re-Litigation) — konkretisiert nur die
 mistral-Präfix-Verortung und die Slot-Namen für die Slot-2-Migration
-(`eltern-chat` dual-provider). Bau: #1463.
+(`eltern-chat` dual-provider). Bau: #1463. Slot-Konsolidierung: T1492.
 
 ## 5. Migrationspfad (Buddy-Abfolge)
 
