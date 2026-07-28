@@ -33,8 +33,34 @@ SREG-12-Anker:
 """
 
 import logging
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+#  SHELL-4 (RAT-31 E2) — Panel-URL-Konvention same-origin in seiten/
+# ============================================================
+#
+# Verpflanzt aus router/main.py::build_panel_url (ROU-24). Reine Funktion
+# (Test-Naht), byte-gleiche Query-Reihenfolge zum Router — sonst Render-Drift
+# zwischen dem alten Router-Pfad und dem neuen seiten/-Ingest. Hardcode-frei:
+# funktioniert fuer jedes app/view-Tupel ohne Code-Aenderung.
+
+def build_panel_url(app_val, view_val, query):
+    """SHELL-4: /display/<app>/<view>[?<urlencoded query>].
+
+    Identische Ableitung wie router/main.py::build_panel_url (ROU-24): der
+    Descriptor (app/view [+ flaches query]) wird per Konvention in die
+    Inhalts-URL uebersetzt, die das rechte Pane als iframe.src laedt. Die
+    Query-Schluessel werden stabil (sortiert) serialisiert — deterministisch
+    und testbar, byte-gleich zum Router (kein Render-Drift beim Verpflanzen).
+    """
+    base = "/display/%s/%s" % (app_val, view_val)
+    if query:
+        items = [(k, query[k]) for k in sorted(query.keys())]
+        return base + "?" + urlencode(items)
+    return base
 
 # SREG-4 Sorten-typen (Spiegel zu seiten.aggregator) — der Renderer haengt
 # nicht am Aggregator-Modul, damit Render-Tests den Aggregator nicht importieren

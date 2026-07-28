@@ -71,37 +71,79 @@ Test-Anker: seiten/tests/test_heim_shell.py::test_shell9_keine_hardcode_ids
 ## 2. Layout & Einbettung
 
 ### SHELL-3 — Split-Layout mit zwei Iframes, Rail 280px
+> **RAT-31 E2 (2026-07-27, #1495):** Die linke Rail bleibt der Panel-Nav-Iframe
+> auf `/controller/app-panel/<panel_id>` (re-home same-origin, Panel `tiles`+
+> Editor bleiben). Das **rechte Buddy-Pane** ist jetzt ein Content-Iframe **ohne
+> statischen `src`** — sein Inhalt kommt per SSE-getriebenem `iframe.src`-Swap
+> aus dem seiten-seitigen Stream (SHELL-4). Der frühere statische Iframe auf
+> `/display/<display_id>` (Router-ausgeliefert) und der ROU-32-`display_id`-Lookup
+> (SHELL-2) sind damit überholt — ein Gerät = ein Ziel, kein `display_id`-Match.
+
 Die Shell rendert ein zweispaltiges Layout: links eine **Nav-Rail** mit einem
-Iframe auf `/controller/app-panel/<panel_id>` (`router/main.py:1368`), rechts
-ein **Buddy-Pane** mit einem Iframe auf `/display/<display_id>`
-(`router/main.py:880`). Beide Iframes füllen ihre Spalte (`width:100%;
-height:100%`). Die linke Rail hat eine **feste Breite von 280px** (Gate B
-2026-06-30); das Buddy-Pane füllt den Rest (auf 1920×1200 → 1637px).
-Bei dieser Rail-Breite legt das Panel seine Kacheln **selbst einspaltig**
-aus — das Panel berechnet die Grid-Geometrie adaptiv aus seiner eigenen
-Iframe-Breite (PANEL-12 / `app.js::computeGridGeometry`, 1 Spalte ab ≤ ~360px).
-Die Shell setzt nur die Rail-Breite; das Panel bleibt **unverändert** (kein
-1-Spalten-Modus nachzurüsten, Leitplanke „Panel unangetastet" gewahrt).
-Test-Anker: seiten/tests/test_heim_shell.py::test_shell3_zwei_iframes_src
+Iframe auf `/controller/app-panel/<panel_id>`, rechts ein **Buddy-Pane** mit
+einem Content-Iframe (`id="buddy-pane"`, `src` per SHELL-4-Swap gesetzt). Beide
+Iframes füllen ihre Spalte (`width:100%; height:100%`). Die linke Rail hat eine
+**feste Breite von 280px** (Gate B 2026-06-30); das Buddy-Pane füllt den Rest
+(auf 1920×1200 → 1637px). Bei dieser Rail-Breite legt das Panel seine Kacheln
+**selbst einspaltig** aus — das Panel berechnet die Grid-Geometrie adaptiv aus
+seiner eigenen Iframe-Breite (PANEL-12 / `app.js::computeGridGeometry`, 1 Spalte
+ab ≤ ~360px). Die Shell setzt nur die Rail-Breite; das Panel bleibt
+**unverändert** (kein 1-Spalten-Modus nachzurüsten, Leitplanke „Panel
+unangetastet" gewahrt).
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell3_zwei_iframes
 
-### SHELL-4 — Keine Stream-Fusion, kein Shell-Zustand
-Die Shell hält **keine** eigene `EventSource` und **keinen** Display-Zustand.
-Die beiden eingebetteten Views behalten je ihre **unabhängige** EventSource
-(Panel `app.js:757`, Display-Client `displib.js:62`); der zustandslose
-Router-Stream (ROU-22) bleibt gewahrt. Es gibt **keine** Cross-Iframe-Nachricht
-und keine Stream-Fusion: ein Tile-Tap läuft unverändert über den Router, der
-neue Display-Zustand erreicht das rechte Pane allein über dessen eigene
-EventSource.
-nicht_automatisiert: Live-SSE-Verhalten zweier Browser-EventSources hinter
-nginx-Proxy · manuelle_probe: Shell öffnen, 50 Tile-Taps + Display-iframe-Reload
-+ Netz-Cut/-Wiederkehr; Active-Tile bleibt konsistent, keine Doppel-Reloads,
-EventSource-Zahl wächst nach Reconnects nicht (Kill-Kriterium).
+### SHELL-4 — Same-device Live-Refresh: seiten-seitiger SSE-Stream + Ingest
+> **RAT-31 E2 (2026-07-27, #1495) — enacted den E0-Banner:** Der Live-Refresh
+> läuft jetzt **same-origin über `seiten/`**, nicht mehr über den Router-Fanout.
+> Der frühere Satz „die Shell hält keine eigene EventSource / ein Tile-Tap läuft
+> über den Router" ist damit **abgelöst**. `router/` und `display-client/`
+> bleiben bis E5/E6 (#1498) am Leben und werden hier **nicht** gelöscht — E2
+> verpflanzt nur.
 
-### SHELL-5 — Rechtes Pane ist reiner Iframe, keine Codekopie
-Das Buddy-Pane bettet den bestehenden Display-Client per Iframe ein. Es wird
-**keine** Display-Client-Logik (displib.js, DC-Render, DC-7-Reconnect) in die
-Shell kopiert oder nachgebaut.
-Test-Anker: seiten/tests/test_heim_shell.py::test_shell5_kein_displib_import
+Das `seiten/`-Backend hält den Live-Refresh selbst: **ein prozess-weiter
+Shell-Zustand** (kein `display_id`-Dict — ein Gerät = ein Ziel) und **eine**
+Subscriber-Menge. Zwei Nähte:
+
+- **SSE-Zustands-Stream** `GET /shell/<panel_id>/events` (`text/event-stream`,
+  `Cache-Control: no-cache`, dual-gated wie `/shell/<panel_id>`): liefert den
+  aktuellen Zustand beim Verbinden, danach jede Änderung. Heartbeats sind
+  data-Events `{"type":"heartbeat"}` (Mobile-EventSource-Lebenszeichen, R6). Der
+  Stream hängt an **keinem** `routing.json`-Lookup (Analog ROU-22, ohne den
+  `display_id`-Key).
+- **Ingest** `POST /shell/<panel_id>/events` (dual-gated): nimmt `tile_selected`
+  (Pflicht `app`, `view`; optional flaches `query`, PANEL-7) und `panel_cleared`
+  (Ruhe-Zustand). Validierung analog `router adapt_app_panel`. Die `payload.url`
+  wird per Konvention `render.build_panel_url` gebaut (`/display/<app>/<view>
+  [?<sortiertes query>]`, byte-gleich zum Router — kein Render-Drift) und an den
+  SSE-Stream publiziert. **Kein** `source_id`/`display_id`-Match, **kein**
+  router-Hop. Die linke Panel-Nav postet bei leerem `router_url` an die Origin
+  der Seite (`app.js:985`, #128) → die Nav bleibt **unverändert**.
+
+Das rechte Pane hat eine **eigene** `EventSource` auf `/shell/<panel_id>/events`
+(`withCredentials` für den same-origin `xbuddy_session`-Cookie, vgl.
+`displib.js:62` #1423) und swappt `iframe.src` aus `payload.url` (Heartbeat-Skip,
+unverändert-kein-Reload-Guard DC-2). Mehrere offene Shell-Tabs teilen sich per
+Ein-Gerät-Setzung denselben Stream.
+Test-Anker: seiten/tests/test_shell_sse.py::test_ac1_sse_liefert_initialen_state,
+seiten/tests/test_shell_sse.py::test_ac2_ingest_publiziert_an_offenen_stream,
+seiten/tests/test_shell_sse.py::test_ac3_smoke_tap_links_refresh_rechts_ohne_router
+nicht_automatisiert: Live-SSE-Verhalten hinter nginx-Proxy · manuelle_probe:
+Shell öffnen, 50 Tile-Taps + Netz-Cut/-Wiederkehr; Active-Tile bleibt konsistent,
+keine Doppel-Reloads, EventSource-Zahl wächst nach Reconnects nicht (Kill-Kriterium).
+
+### SHELL-5 — Rechtes Pane swappt nur `iframe.src`, keine Codekopie
+> **RAT-31 E2 (2026-07-27, #1495):** Das rechte Pane bettet keinen fremden
+> Display-Client-Iframe mehr ein — es swappt den `src` seines eigenen
+> Content-Iframe (same-origin). Der Empfänger im Shell-Template zeichnet nur den
+> ~30-Zeilen-SSE→`iframe.src`-Swap nach (SHELL-4).
+
+Es wird **keine** Display-Client-Datei (`displib.js`) importiert und **keine**
+DC-Render-/DC-7-Reconnect-Logik nachgebaut. Der Empfänger beschränkt sich auf:
+`EventSource` öffnen, Heartbeats überspringen, bei geändertem `payload.url` den
+`iframe.src` setzen (DC-2 unverändert-kein-Reload). Der native Browser-Reconnect
+der `EventSource` (SSE-Standard) trägt die Wiederverbindung.
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell5_kein_displib_import,
+seiten/tests/test_heim_shell.py::test_shell4_pane_ohne_statischen_src
 
 ### SHELL-8 — Render auf 1920×1200
 Bei Rail 280px rendert die Shell auf 1920×1200 ohne Overflow, ohne
