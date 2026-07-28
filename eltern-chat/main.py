@@ -1225,6 +1225,54 @@ def build_context(cfg, db_path, zd_cli_path=None):
     return ctx
 
 
+def _secret_preflight(cfg):
+    """SVC-7 — Startup-Secret-Preflight für die LLM-Pflicht-Slots (#1493).
+
+    Prüft VOR `build_context` (das den Chat-Agent-Adapter eager baut), ob die
+    beim Boot boot-kritischen Slots im Zugangsdaten-Speicher PRÄSENT sind. Fehlt
+    ein Pflicht-Slot: Log-Zeile 'FEHLT: <slot>' + `sys.exit(1)` — statt eines
+    rohen `LLMCapabilityError` mitten im Boot (die #1509-Crash-Klasse:
+    `LibAgentAdapter.__init__` → `get_agent(slot=…)` → `_build_vendor` →
+    `resolve_api_key` None → Raise).
+
+    Nur PRÄSENZ (SVC-7) — kein Anbieter-Call, keine Capability-Prüfung.
+
+    Config-gated: geprüft wird ausschließlich der Slot, den `build_context` beim
+    aktuellen Boot auch wirklich eager braucht:
+      - Der Chat-Agent-Slot (`_LIB_SLOT_FOR_PROVIDER[cfg.provider]`) NUR im
+        KI-Modus (`cfg.provider_api_key` gesetzt). Im Onboarding-Modus baut
+        `build_context` KEINEN Adapter → kein Slot nötig.
+    Der Foto-Analyse-Slot (`FOTO_ANALYSE_SLOT`) ist bewusst NICHT boot-kritisch:
+    `build_catalog` fängt seinen `LLMCapabilityError` bereits ab und schaltet nur
+    »Termine aus Bild« ab (tasks.py:604) — ein fehlender Foto-Slot bootet weiter
+    (graceful degradation), darum darf der Preflight ihn nicht boot-fatal machen.
+
+    Das Bot-Token ist bereits in `config.resolve` Pflicht (ConfigError EC-15,
+    config.py:322) — hier nicht doppelt geprüft; der Boot kommt ohne Token gar
+    nicht bis zum Preflight.
+    """
+    from providers.lib_adapter import _LIB_SLOT_FOR_PROVIDER
+
+    from tools.llm import slot_present
+
+    if cfg.provider_api_key:
+        # KI-Modus: build_context baut den LibAgentAdapter eager (main:1217) —
+        # der Slot MUSS präsent sein, sonst Boot-Crash. Unbekannter Provider ist
+        # ein Konfig-Fehler (spiegelt den KeyError im Adapter, aber sichtbar hier).
+        slot = _LIB_SLOT_FOR_PROVIDER.get(cfg.provider)
+        if slot is None:
+            logging.critical(
+                "FEHLT: gültiger Anbieter — provider=%r hat keinen LLM-Slot "
+                "(bekannt: %s) (SVC-7/#1493)",
+                cfg.provider, ", ".join(sorted(_LIB_SLOT_FOR_PROVIDER)))
+            sys.exit(1)
+        if not slot_present(slot):
+            logging.critical(
+                "FEHLT: %s — Chat-Agent-Slot fehlt im Zugangsdaten-Speicher "
+                "(provider=%s, KI-Modus) (SVC-7/#1493)", slot, cfg.provider)
+            sys.exit(1)
+
+
 def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
     # LOG-4 (#166): zentraler Setup statt eigenem basicConfig. Bootstrap-Level
@@ -1235,6 +1283,10 @@ def main(argv=None):
     logsetup.setup(args.log_level or "INFO")
     try:
         cfg = config_mod.resolve(args.config)
+        # SVC-7 (#1493): LLM-Pflicht-Slots auf Präsenz prüfen, BEVOR build_context
+        # den Chat-Agent-Adapter eager baut — fehlender Slot bricht hier sichtbar
+        # (FEHLT: <slot> + exit) statt als roher LLMCapabilityError im Boot.
+        _secret_preflight(cfg)
         ctx = build_context(cfg, args.db,
                             zd_cli_path=args.zugangsdaten_file)
     except config_mod.ConfigError as e:
