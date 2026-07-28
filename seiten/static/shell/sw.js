@@ -66,16 +66,19 @@ self.addEventListener('activate', (event) => {
 // ── Strategien ───────────────────────────────────────────────────────────────
 
 function isShellHtml(url) {
-  // Shell-HTML-Navigations-Requests (/shell/<panel_id> ohne Trailing-Slash
-  // und ohne Asset-Suffix). network-first fuer frische Auslieferung nach Deploy.
-  if (!url.pathname.startsWith('/shell/')) return false;
-  // SW-Assets und Icons sind KEIN HTML-Request — die gehen network/cache-first
-  // fuer statische Assets (MANTEL_STATIC_ASSETS unten), nicht network-first.
-  const last = url.pathname.split('/').pop() || '';
-  if (last.endsWith('.js') || last.endsWith('.png') || last.endsWith('.json')) {
-    return false;
-  }
-  return true;
+  // Shell-HTML-Navigations-Requests: NUR /shell/<panel_id> (optional Trailing-Slash).
+  // network-first fuer frische Auslieferung nach Deploy (T1448).
+  //
+  // WICHTIG: Sub-Pfade wie /shell/<pid>/events (SSE-Stream), /shell/<pid>/sw.js
+  // und /shell/<pid>/<asset> duerfen NICHT als HTML gelten — sie erhalten
+  // pass-through (network-only, letzter fetch-Zweig). Der SSE-EventSource-Stream
+  // wuerde durch res.clone()+cache.put in networkFirst durch Klon-Backpressure
+  // erwuergt (T1538). Die fruehre Suffix-Blacklist (.js/.png/.json) reichte nicht:
+  // /shell/<pid>/events hat keinen Datei-Suffix und wurde faelschlich abgefangen.
+  //
+  // Korrekte Pruefung: exakt zwei Segmente nach dem fuehrenden Slash —
+  // /shell/<panel_id> oder /shell/<panel_id>/ — via Regex.
+  return /^\/shell\/[^/]+\/?$/.test(url.pathname);
 }
 
 function isMantelStaticAsset(url) {
