@@ -141,6 +141,90 @@
       document.addEventListener('click', tryFullscreen);
     })();
   </script>
+  {# SHELL-PWA Auto-Heal (T1543 Baustein 1): klebende/stale Service-Worker OHNE
+     Nutzer-Eingriff ersetzen. Der Fix MUSS in der SEITE liegen (nicht im SW):
+     ein kaputter SW darf den Selbstheil-Pfad nicht erwürgen. Vergleich läuft
+     gegen die server-gerenderte build_id — der SW selbst wird nicht befragt.
+
+     Mechanik: die Seite merkt sich in localStorage die build_id, unter der sie
+     zuletzt gesund geladen wurde (= die build_id des aktiven SW/gecachten Assets).
+     Weicht sie beim Laden von der aktuellen Server-build_id ab, klebt ein alter
+     SW → ALLE Registrierungen deregistrieren + ALLE Caches löschen + EINMAL neu
+     laden. getRegistrations()/caches.keys() erfassen bewusst ALLE Scopes (auch
+     die app-panel-SW im Iframe, anderer Scope).
+
+     Reload-Loop-Schutz (PFLICHT, zwei unabhängige Riegel):
+       (1) sessionStorage-Flag 'shell_heal_done' wird VOR der Heilung gesetzt —
+           selbst wenn der Reload mit noch-stale localStorage re-eintritt, blockt
+           das Flag eine zweite Heilung in derselben Tab-Session.
+       (2) NACH abgeschlossenem unregister+clear wird localStorage auf die
+           aktuelle Server-build_id gesetzt — der Mismatch ist danach weg, der
+           Post-Reload-Load heilt nicht erneut.
+     Der Reload feuert erst, NACHDEM unregister+clear wirklich durch sind. #}
+  <script>
+    (function () {
+      'use strict';
+      var SERVER_BUILD_ID = '{{ build_id }}';
+      var LS_KEY = 'shell_build_id';
+      var HEAL_FLAG = 'shell_heal_done';
+      var ls, ss;
+      // localStorage/sessionStorage können im Kiosk gesperrt sein — best-effort.
+      try { ls = window.localStorage; } catch (e) { ls = null; }
+      try { ss = window.sessionStorage; } catch (e) { ss = null; }
+      if (!ls) return;  // ohne Persistenz kein deterministischer Mismatch-Vergleich
+
+      function markHealthy() {
+        try { ls.setItem(LS_KEY, SERVER_BUILD_ID); } catch (e) { /* best-effort */ }
+      }
+
+      var stored = null;
+      try { stored = ls.getItem(LS_KEY); } catch (e) { stored = null; }
+
+      // Riegel (1): schon in dieser Session geheilt → nie erneut heilen.
+      var healedThisSession = false;
+      try { healedThisSession = ss && ss.getItem(HEAL_FLAG) === '1'; } catch (e) {}
+
+      // Kein gespeicherter Wert (Erstbesuch) oder Wert stimmt → gesund, nur merken.
+      if (stored === null || stored === SERVER_BUILD_ID || healedThisSession) {
+        markHealthy();
+        return;
+      }
+
+      // Mismatch → alter SW klebt. Riegel (1) sofort setzen, BEVOR async-Arbeit
+      // beginnt, damit ein früher Re-Entry (Reload) keine zweite Heilung startet.
+      try { if (ss) ss.setItem(HEAL_FLAG, '1'); } catch (e) {}
+
+      function healAndReload() {
+        var jobs = [];
+        try {
+          if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+            jobs.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(regs.map(function (r) {
+                  try { return r.unregister(); } catch (e) { return null; }
+                }));
+              }).catch(function () {})
+            );
+          }
+          if (window.caches && caches.keys) {
+            jobs.push(
+              caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) {
+                  try { return caches.delete(k); } catch (e) { return null; }
+                }));
+              }).catch(function () {})
+            );
+          }
+        } catch (e) { /* best-effort */ }
+        // Erst NACHDEM unregister+clear durch sind: Riegel (2) setzen + EIN Reload.
+        Promise.all(jobs).then(function () {
+          markHealthy();               // Riegel (2): Mismatch nach Reload beseitigt
+          window.location.reload();
+        });
+      }
+      healAndReload();
+    })();
+  </script>
   {# SHELL-PWA: Service-Worker registrieren (analog ESSEN-33/35).
      Scope /shell/ deckt alle Shell-Instanzen. Service-Worker-Allowed-Header
      erlaubt den erweiterten Scope (shell_asset_view, seiten/main.py). #}
