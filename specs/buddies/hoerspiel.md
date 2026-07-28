@@ -1568,11 +1568,15 @@ und der Panel-Push (`POST /play-extern`, HSP-42) entfallen ersatzlos; Audio läu
 immer **lokal am App-Gerät**. `/play-extern` ist aus `main.py` entfernt (kein
 Nicht-Test-Caller).
 
-**`/audio-stream` (SSE) bleibt als aktive PANEL-13-Naht.**
+**`/audio-stream` (SSE) bleibt als PANEL-13-Infrastruktur erhalten — Producer ruht.**
 `controller/app-panel/app.js:819-966` öffnet pro HSP-Instanz eine EventSource auf
-`/api/v1/hoerspiel/<kind_id>/audio-stream` (audio_play-Events für Silent-Audio-Prime).
+`/api/v1/hoerspiel/<kind_id>/audio-stream` (Infrastruktur für Silent-Audio-Prime).
 Dieser Endpoint ist nicht Teil der aufgehobenen `audio_ziel`-Weiche und wird daher
-durch Option B nicht berührt.
+durch Option B nicht berührt. **Jedoch ist der einzige `audio_play`-Producer
+(`/play-extern`) mit HSP-42 entfernt worden. `_audio_broadcast` ist aktuell
+aufruferlos — der Stream sendet nur Heartbeats, keine `audio_play`-Events.**
+Ein künftiger Trigger (#1471-Rückbau / HSP-44) klärt, ob und welcher neue Producer
+`_audio_broadcast` speist.
 
 Damit entfallen auch die zwei Folge-Klauseln zu HSP-41 (Audio-Ziel-Weiche in
 `alben.js` und der Audio-Ziel-Schalter im Einstellungen-Reiter) — beide sind an
@@ -1630,7 +1634,7 @@ Definition-of-Done für „Instanz X existiert":
    PORT-2-Block).
 2. **Origin-Routing / nginx** — URL-14-Registrierung inkl. der
    **Audio-SSE-Exact-Location** mit `proxy_buffering off` für
-   `/api/v1/hoerspiel/<kind_id>/audio-stream` (PANEL-13; Endpoint aktiv — audio_ziel-Routing §13 SUPERSEDED, /audio-stream nicht).
+   `/api/v1/hoerspiel/<kind_id>/audio-stream` (PANEL-13; Endpoint + Consumer-Infrastruktur erhalten — audio_ziel-Routing §13 SUPERSEDED, /audio-stream nicht; `audio_play`-Producer ruht bis #1471/HSP-44).
 3. **systemd-Service** — eigene Unit `xbuddy-hoerspiel-<kind_id>.service`
    (SVC-1..4), Service-Vorlage neben dem Code (BUD-1a), inkl.
    ZD-Store-Pfad-Drop-In pro Service.
