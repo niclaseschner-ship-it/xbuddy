@@ -665,6 +665,15 @@
     ? document.body.dataset.panelId
     : null;
 
+  // SHELL-4 / E2-Sender (T1519): ingest_url-Query-Param — wenn das Panel als
+  // Iframe in der Heim-Shell läuft, setzt das Template
+  // `?ingest_url=/shell/<panel_id>/events` in den Iframe-src. sendEvent postet
+  // dann direkt an den seiten-Ingest statt an den Router (/api/v1/events).
+  // Standalone-Panel (kein Param) verhält sich unverändert (AC2 Kein-Regress).
+  var _ingestUrlFromParam = (typeof window !== 'undefined' && window.location && window.location.search)
+    ? new URLSearchParams(window.location.search).get('ingest_url')
+    : null;
+
   function showError(msg) {
     var el = document.getElementById('error');
     if (!el) { console.error(msg); return; }
@@ -978,12 +987,22 @@
   // ============================================================
 
   function sendEvent(cfg, body) {
-    // Leerer router_url → same-origin (Browser nimmt die Origin der Seite).
-    // Funktioniert für jeden Host (hub.local, IP, beliebiger DNS-Name) und
-    // verhindert CORS-Blocks, wenn die Seite unter einem anderen Host
-    // geladen wird als der hartkodierte Router-URL. Refs #128.
-    var base = cfg.router_url ? cfg.router_url.replace(/\/+$/, '') : '';
-    var url = base + '/api/v1/events';
+    // SHELL-4 / E2-Sender (T1519): wenn das Panel in der Heim-Shell-Iframe
+    // läuft, steht _ingestUrlFromParam auf dem seiten-Ingest
+    // (/shell/<panel_id>/events). Dann postet sendEvent dorthin direkt.
+    // Standalone-Panel (kein ingest_url-Param): unverändertes Verhalten —
+    // base + '/api/v1/events' → Router (AC2 Kein-Regress, Refs #128).
+    var url;
+    if (_ingestUrlFromParam) {
+      url = _ingestUrlFromParam;
+    } else {
+      // Leerer router_url → same-origin (Browser nimmt die Origin der Seite).
+      // Funktioniert für jeden Host (hub.local, IP, beliebiger DNS-Name) und
+      // verhindert CORS-Blocks, wenn die Seite unter einem anderen Host
+      // geladen wird als der hartkodierte Router-URL. Refs #128.
+      var base = cfg.router_url ? cfg.router_url.replace(/\/+$/, '') : '';
+      url = base + '/api/v1/events';
+    }
     panelLib.postWithRetry({
       fetchImpl: function (u, init) { return fetch(u, init); },
       setTimeoutImpl: function (fn, ms) { setTimeout(fn, ms); },
