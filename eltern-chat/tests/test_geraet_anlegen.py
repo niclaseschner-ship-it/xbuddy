@@ -17,7 +17,6 @@ import re
 from fakes import FakeTelegram
 from skills.geraet_anlegen import (
     CANCELLED,
-    CAV_FAILED,
     NOT_AUTHORIZED,
     REJECT_AUFLOESUNG,
     REJECT_OS,
@@ -337,78 +336,19 @@ def test_GAA_4_loop_question_appears_after_successful_anlage():
 
 
 # ============================================================
-#  GAA-6 — CA-Verteilung optional nach erfolgreicher Anlage
+#  RAT-31 E1 (#1470) — CA-Verteilung (früher GAA-6) entfallen
 # ============================================================
 
-def test_GAA_6_cav_called_on_confirmation():
-    """GAA-6: nach erfolgreicher Anlage bietet die Funktion CAV an, und bei
-    Bestätigung wird der Hook mit (os, private_chat_id, user_id) aufgerufen."""
-    client = FakeGeraeteClient()
-    tg = _member_tg()
-    calls = []
-
-    def cav_hook(os_wert, private_chat_id, user_id):
-        calls.append((os_wert, private_chat_id, user_id))
-
-    next_msg = stream(
-        *_vollanlage_eines_tablets(),
-        "ja",      # GAA-6: Zertifikat schicken? → ja
-        "nein",    # noch ein Gerät? → nein
-    )
-    geraet_anlegen(tg, 42, 7, -100, client, next_msg,
-                   cav_call_hook=cav_hook)
-    assert calls == [("android", 42, 7)]
-
-
-def test_GAA_6_cav_not_called_on_rejection():
-    """GAA-6: lehnt der Aufrufer die CAV ab, wird der Hook NICHT aufgerufen
-    und das Gerät bleibt trotzdem angelegt."""
-    client = FakeGeraeteClient()
-    tg = _member_tg()
-    calls = []
-
-    def cav_hook(os_wert, private_chat_id, user_id):
-        calls.append((os_wert, private_chat_id, user_id))
-
-    next_msg = stream(
-        *_vollanlage_eines_tablets(),
-        "nein, lieber später",   # GAA-6: ablehnen
-        "nein",                  # noch ein Gerät? → nein
-    )
-    res = geraet_anlegen(tg, 42, 7, -100, client, next_msg,
-                         cav_call_hook=cav_hook)
-    assert calls == []
-    assert res.vergebene_display_ids == ["tablet-elias-01"]
-
-
-def test_GAA_6_cav_failure_does_not_revert_geraet():
-    """GAA-6: schlägt der CAV-Hook fehl, bleibt das Gerät angelegt und die
-    Schleife (GAA-4) wird trotzdem fortgesetzt."""
-    client = FakeGeraeteClient()
-    tg = _member_tg()
-
-    def boom_cav(*_args):
-        raise RuntimeError("CAV simuliert kaputt")
-
-    next_msg = stream(
-        *_vollanlage_eines_tablets(),
-        "ja",     # CAV → Hook wirft
-        "nein",   # noch ein Gerät? → nein
-    )
-    res = geraet_anlegen(tg, 42, 7, -100, client, next_msg,
-                         cav_call_hook=boom_cav)
-    assert res.vergebene_display_ids == ["tablet-elias-01"]
-    assert any(CAV_FAILED in s["text"] for s in tg.sent)
-
-
-def test_GAA_6_no_hook_skips_cav_step_silently():
-    """GAA-6: ohne CAV-Hook (z. B. Tests ohne CAV-Setup) wird der Schritt
-    übersprungen — keine Frage nach Zertifikat im Privatchat."""
+def test_RAT31_E1_no_ca_step_after_anlage():
+    """RAT-31 E1: nach erfolgreicher Anlage fragt die Funktion NICHT mehr nach
+    dem Zertifikat — der CA-Verteilungs-Schritt (früher GAA-6) ist unter
+    Cookie-only-hart (RAT-32) entfallen."""
     client = FakeGeraeteClient()
     tg = _member_tg()
     next_msg = stream(*_vollanlage_eines_tablets(), "nein")
-    geraet_anlegen(tg, 42, 7, -100, client, next_msg)
-    # Keine CA-Frage gesendet.
+    res = geraet_anlegen(tg, 42, 7, -100, client, next_msg)
+    assert res.vergebene_display_ids == ["tablet-elias-01"]
+    # Keine CA-/Zertifikat-Frage gesendet.
     assert not any("Zertifikat" in s["text"] for s in tg.sent)
 
 
@@ -467,8 +407,9 @@ def test_GAA_8_every_requirement_has_a_test():
     GAA-5 (Catalog-Aufgabe) lebt in `test_geraet_anlegen_task.py` — wir
     spiegeln das hier nicht, sondern delegieren auf das Schwester-Modul."""
     quelle = open(os.path.abspath(__file__), encoding="utf-8").read()
-    # GAA-1, GAA-2, GAA-3, GAA-4, GAA-6, GAA-7 in dieser Datei.
-    for gaa in (1, 2, 3, 4, 6, 7):
+    # GAA-1, GAA-2, GAA-3, GAA-4, GAA-7 in dieser Datei. GAA-6 (CA-Verteilung)
+    # ist mit RAT-31 E1 (#1470) entfallen — kein Verhalten mehr zu testen.
+    for gaa in (1, 2, 3, 4, 7):
         assert "def test_GAA_%d_" % gaa in quelle, "GAA-%d ungetestet" % gaa
     # GAA-5 wird im Task-Test-Modul abgedeckt.
     nachbar = open(

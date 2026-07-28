@@ -85,7 +85,7 @@ class GeraetAnlegenTask(WriteTask):
     is_async = True
 
     def __init__(self, tg, geraete_origin_url, sessions,
-                 family_group_chat_id_getter, cav_call_hook=None,
+                 family_group_chat_id_getter,
                  display_url_origin=None, client=None,
                  pairing_bot_token=None, pairing_origin=None):
         """`geraete_origin_url` ist die Origin der Geraete-Komponente (z. B.
@@ -117,7 +117,6 @@ class GeraetAnlegenTask(WriteTask):
             geraete_origin_url)
         self._sessions = sessions   # dict chat_id -> GaaSession (in-memory)
         self._family_group_chat_id_getter = family_group_chat_id_getter
-        self._cav_call_hook = cav_call_hook
         self._display_url_origin = display_url_origin
         self._pairing_bot_token = pairing_bot_token
         self._pairing_origin = pairing_origin
@@ -154,7 +153,6 @@ class GeraetAnlegenTask(WriteTask):
         client = self._client
         tg = self._tg
         sessions = self._sessions
-        cav_call_hook = self._cav_call_hook
         display_url_origin = self._display_url_origin
         pairing_bot_token = self._pairing_bot_token
         pairing_origin = self._pairing_origin
@@ -169,7 +167,6 @@ class GeraetAnlegenTask(WriteTask):
                 result = geraet_anlegen.geraet_anlegen(
                     tg, private_chat_id, user_id, family_group_chat_id,
                     client, session.next_message,
-                    cav_call_hook=cav_call_hook,
                     display_url_origin=display_url_origin,
                     typing_fn=typing_fn,
                     # GAA-3.8 / AUTH-2.a: Pairing-Link-Zustellung durchreichen.

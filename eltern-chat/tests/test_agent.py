@@ -397,8 +397,8 @@ def test_issue_331_proposal_pending_contains_task_name():
     """AC1/AC3(i) #331: der erzeugte synthetische tool_result-Text enthält
     den konkreten Task-Namen — das Modell erkennt in Folge-Turns, WELCHES
     Werkzeug erneut aufzurufen ist."""
-    text = agent._proposal_pending("panel_anlegen")
-    assert "panel_anlegen" in text
+    text = agent._proposal_pending("geraet_anlegen")
+    assert "geraet_anlegen" in text
 
 
 def test_issue_331_proposal_pending_directs_to_call_tool():

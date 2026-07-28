@@ -74,17 +74,14 @@ def test_GAA_5_task_is_registered_in_catalog():
     defs = {d.name: d for d in catalog.task_defs()}
     assert "geraet_anlegen" in defs
     assert defs["geraet_anlegen"].kind == WRITE
-    # Die bestehenden Aufgaben bleiben additiv erhalten (EC-8 „bestehende
-    # Katalog bleibt unberührt").
-    assert "ca_verteilen" in defs
 
 
 def test_GAA_5_legacy_build_catalog_signature_still_works():
-    """Rückwärts-kompatibel: `build_catalog(tg, ca_path)` ohne GAA-/FAA-
-    Abhängigkeiten funktioniert weiter — sonst brechen CAV- und FAA-Tests."""
+    """Rückwärts-kompatibel: `build_catalog(tg, ca_pem_path)` ohne GAA-/FAA-
+    Abhängigkeiten bleibt aufrufbar (AC4). `ca_pem_path` ist seit RAT-31 E1
+    (#1470) vestigial — der Aufruf darf trotzdem nicht brechen."""
     catalog = build_catalog(FakeTelegram(), "/instanz/rootCA.pem")
     defs = {d.name: d for d in catalog.task_defs()}
-    assert "ca_verteilen" in defs
     assert "geraet_anlegen" not in defs
     assert "familie_anlegen" not in defs
 
@@ -99,7 +96,9 @@ def test_GAA_5_catalog_keeps_faa_and_gaa_side_by_side():
         geraete_origin_url="http://127.0.0.1:5040",
         gaa_sessions={})
     defs = {d.name: d for d in catalog.task_defs()}
-    assert {"ca_verteilen", "familie_anlegen", "geraet_anlegen"} <= set(defs)
+    # ca_verteilen ist mit RAT-31 E1 (#1470) entfallen.
+    assert {"familie_anlegen", "geraet_anlegen"} <= set(defs)
+    assert "ca_verteilen" not in defs
 
 
 # ============================================================

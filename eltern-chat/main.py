@@ -141,7 +141,6 @@ class Context:
     gaa_sessions: dict = None  # GAA-5: laufende »Gerät anlegen«-Sessions (chat_id → GaaSession)
     kav_sessions: dict = None  # KAV-3: laufende »Kalender verbinden«-Sessions (chat_id → KavSession)
     tes_sessions: dict = None  # TES-3: laufende »Termin eintragen«-Sessions (chat_id → TesSession)
-    paa_sessions: dict = None  # PAA-6: laufende »Panel anlegen«-Sessions (chat_id → PaaSession)
     tab_sessions: dict = None  # TAB-12: laufende »Termine aus Bild«-Sessions (chat_id → TabSession)
     avb_sessions: dict = None  # AVB/ONB-11: laufende »Anbieter wechseln«-Sessions (chat_id → AvbSession)
     # EC-36 Korrektur-Hook (#844): der Vor-Agent-Hook liest unversiegelte
@@ -159,7 +158,7 @@ class Context:
 # handle_update iteriert darüber, statt pro Sorte einen eigenen if-Block
 # zu tragen. Reihenfolge entspricht der früheren if-Kette und darf nicht
 # ohne Routing-Check geändert werden (alle in _SESSION_SORTS registrierten
-# Sorten — aktuell FAA→GAA→KAV→TES→PAA→TAB→AVB).
+# Sorten — aktuell FAA→GAA→KAV→TES→TAB→AVB).
 #
 # Die make_input-Callables werden einmal beim Modul-Load gebunden —
 # die skills-Module liegen zu diesem Zeitpunkt bereits auf sys.path
@@ -172,7 +171,6 @@ def _build_session_sorts():
     from skills.familie_anlegen_task import make_faa_input
     from skills.geraet_anlegen_task import make_gaa_input
     from skills.kalender_verbinden_task import make_kav_input
-    from skills.panel_anlegen_task import make_paa_input
     from skills.termin_eintragen_task import make_tes_input
     from skills.termine_aus_bild_task import make_tab_input
     return (
@@ -180,7 +178,6 @@ def _build_session_sorts():
         SessionSortEntry("gaa_sessions", make_gaa_input),   # GAA-5
         SessionSortEntry("kav_sessions", make_kav_input),   # KAV-3
         SessionSortEntry("tes_sessions", make_tes_input),   # TES-3
-        SessionSortEntry("paa_sessions", make_paa_input),   # PAA-6
         SessionSortEntry("tab_sessions", make_tab_input),   # TAB-12
         SessionSortEntry("avb_sessions", make_avb_input),   # AVB/ONB-11
     )
@@ -1053,8 +1050,6 @@ def build_context(cfg, db_path, zd_cli_path=None):
     kav_sessions = {}
     # TES-3: analog FAA/GAA/KAV, eigene Session-Map für »Termin eintragen«.
     tes_sessions = {}
-    # PAA-6: analog FAA/GAA/KAV/TES, eigene Session-Map für »Panel anlegen«.
-    paa_sessions = {}
     # TAB-12: analog TES, eigene Session-Map für »Termine aus Bild«.
     tab_sessions = {}
     # AVB/ONB-11: analog den anderen Sorten, eigene Session-Map für »Anbieter wechseln«.
@@ -1096,7 +1091,6 @@ def build_context(cfg, db_path, zd_cli_path=None):
         gaa_sessions=gaa_sessions,
         kav_sessions=kav_sessions,
         tes_sessions=tes_sessions,
-        paa_sessions=paa_sessions,
         tab_sessions=tab_sessions,
         avb_sessions=avb_sessions,
         # EC-36 Korrektur-Hook (#844): der Vor-Agent-Hook braucht denselben
@@ -1112,19 +1106,9 @@ def build_context(cfg, db_path, zd_cli_path=None):
     # FAA-12 / GAA-5 / KAV-3: Familien-Gruppen-ID darf nach einer Migration
     # (EC-18) wechseln — der Getter liest sie zur Laufzeit aus dem Context,
     # statt sie einmal beim Bootstrap zu kopieren.
-    # GAA-6: CAV-Hook — bindet die CA-Verteilung an den Privatchat des
-    # Aufrufers. GAA bleibt CAV-agnostisch (E-GAA-5), die Orchestrierung
-    # verdrahtet die beiden Funktionen.
-    import skills.ca_verteilung as _cav
-
-    def _cav_hook(os_wert, private_chat_id, _user_id):
-        # GAA-6/CAV-5 (#95): das von der GAA erfragte Betriebssystem reicht
-        # die Orchestrierung an die CA-Verteilung weiter — sie liefert dann
-        # nur den passenden Anleitungs-Abschnitt aus. Wirft die CAV bei einem
-        # unbekannten Wert (z. B. `linux`, das die CA-Anleitung in V1 nicht
-        # abdeckt), fängt sie der GAA-Hook-Wrapper auf (geraet_anlegen.py).
-        _cav.verteile_ca(tg, private_chat_id, cfg.ca_pem_path, geraet=os_wert)
-
+    # RAT-31 E1 (#1470): der frühere GAA-6-CAV-Hook (skills.ca_verteilung) ist
+    # unter Cookie-only-hart (RAT-32) entfallen — das Onboarding stellt keine
+    # CA mehr zu.
     ctx.catalog = build_catalog(
         tg, cfg.ca_pem_path,
         familie_origin_url=cfg.familie_origin_url,
@@ -1132,7 +1116,6 @@ def build_context(cfg, db_path, zd_cli_path=None):
         family_group_chat_id_getter=lambda: ctx.family_group_chat_id,
         geraete_origin_url=cfg.geraete_origin_url,
         gaa_sessions=gaa_sessions,
-        cav_call_hook=_cav_hook,
         display_url_origin=cfg.display_url_origin,
         # GAA-3.8 / auth.md AUTH-2.a (T948): Pairing-Link-Zustellweg live.
         # pairing_bot_token = per-Instanz-Bot-Token (HMAC-Sign-Key, cfg.bot_token).
@@ -1145,8 +1128,9 @@ def build_context(cfg, db_path, zd_cli_path=None):
         kav_sessions=kav_sessions,
         plan_origin_url=cfg.plan_origin_url,
         tes_sessions=tes_sessions,
+        # RAT-31 E1 (#1470): panel_origin_url bleibt vestigial in der Signatur
+        # (PanelAnlegenTask entfallen); paa_sessions wird nicht mehr gereicht.
         panel_origin_url=cfg.panel_origin_url,
-        paa_sessions=paa_sessions,
         # PAA-3.5: Controller-URL nutzt dieselbe Hub-Origin wie die Display-URL
         # (GAA-3.7) — beide werden auf demselben Origin ausgeliefert.
         controller_url_origin=cfg.display_url_origin,

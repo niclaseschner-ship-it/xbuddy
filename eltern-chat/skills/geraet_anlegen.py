@@ -2,12 +2,11 @@
 Refs #106).
 
 »Gerät anlegen« ist eine aufrufbare, **trigger-agnostische** Funktion
-(E-GAA-1) — analog `familie_anlegen.familie_anlegen` (E-FAA-1) und
-`ca_verteilung.verteile_ca` (E-CAV-1). Aufgerufen, führt sie ein
-Familienmitglied im Privatchat durch die Anlage **eines oder mehrerer**
-Geräte und ergänzt sie nach Bestätigungswort (GAA-3.6, `eltern-chat.md`
-E-EC-7) atomar über die HTTP-Schreib-Schnittstelle der Geraete-Komponente
-(GAA-3.7, `geraete.md` GER-15).
+(E-GAA-1) — analog `familie_anlegen.familie_anlegen` (E-FAA-1). Aufgerufen,
+führt sie ein Familienmitglied im Privatchat durch die Anlage **eines oder
+mehrerer** Geräte und ergänzt sie nach Bestätigungswort (GAA-3.6,
+`eltern-chat.md` E-EC-7) atomar über die HTTP-Schreib-Schnittstelle der
+Geraete-Komponente (GAA-3.7, `geraete.md` GER-15).
 
 Die Funktion kennt ihren Aufrufer NICHT. Wer sie aufruft — eine
 EC-8-Aufgabe (GAA-5), ein späterer Geräte-Onboarding-Flow (OPEN-GAA-C)
@@ -17,11 +16,12 @@ Privatchat (Chat-ID + User-ID), die ID der gebundenen Familien-Gruppe
 (für die Live-Prüfung der Mitgliedschaft, GAA-2 analog EC-2), den
 `GeraeteClient` (HTTP-Naht zur Geraete-Komponente, Auftrag #215) und eine
 `next_message()`-Funktion, über die sie die nächste eingehende
-Privatchat-Nachricht des Aufrufers abholt. Optional ein `cav_call_hook`
-(GAA-6, E-GAA-5) — wenn gesetzt, ruft die Funktion ihn nach jeder
-erfolgreich angelegten Geräte-Anlage auf (bei Bestätigung durch den
-Aufrufer); ohne Hook entfällt der CA-Verteilungs-Schritt stillschweigend,
-damit die Funktion auch ohne CAV-Setup testbar bleibt.
+Privatchat-Nachricht des Aufrufers abholt.
+
+RAT-31 E1 (#1470): Unter Cookie-only-hart (RAT-32) ist der CA-Verteilungs-
+Schritt (GAA-6, `cav_call_hook`) entfallen — das Onboarding stellt keine
+CA mehr zu. Die Pairing-Link-Zustellung (GAA-3.8) bleibt der einzige
+Nach-Anlage-Schritt.
 
 Seit Auftrag #215 (`geraete_client.GeraeteClient`) spricht die Skill nur
 noch über HTTP (DCOMP-1): IDENT-1-`display_id` und Validierung leistet
@@ -75,8 +75,6 @@ ASK_VERWENDUNG = ("Wofür wird das Gerät genutzt? "
                   "V1 legt nur Display-Geräte an — schreib »display« zum "
                   "Bestätigen.")
 ASK_NOCH_EIN = "Noch ein Gerät anlegen? Schreib »ja« oder »nein«."
-ASK_CA = ("Soll ich dir das XBuddy-Zertifikat fürs neue Gerät jetzt schicken? "
-          "Schreib »ja« zum Bestätigen oder »nein«, um es später nachzuholen.")
 
 REJECT_TYP = ("Diesen Typ kenne ich nicht. Bitte einer aus: "
               "tablet / handy / monitor / pi-display.")
@@ -91,9 +89,6 @@ NOT_AUTHORIZED = ("Geräte anlegen geht nur für Mitglieder der Familien-Gruppe.
                   "Wende dich bitte an jemanden aus der Gruppe.")
 WRITE_FAILED = ("Konnte das Gerät nicht speichern — bitte später noch einmal. "
                 "Es wurde nichts in der Registry verändert.")
-CAV_FAILED = ("Das Gerät ist angelegt, aber das Zertifikat konnte ich gerade "
-              "nicht schicken — du kannst es jederzeit über die "
-              "Eltern-Chat-Aufgabe nachholen.")
 CANCELLED = "Ok, abgebrochen — das Gerät wurde nicht gespeichert."
 DONE_SINGLE_FMT = ("Geschafft, %s ist angelegt. Display-URL: %s")
 DONE_MULTI_FMT = ("Geschafft — angelegt: %s.")
@@ -164,7 +159,7 @@ class GeraetAnlegenResult:
 
 def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
                    client, next_message,
-                   cav_call_hook=None, display_url_origin=None,
+                   display_url_origin=None,
                    typing_fn: Callable[[], None] | None = None,
                    pairing_bot_token=None, pairing_origin=None):
     """Legt ein oder mehrere Geräte an (GAA-1).
@@ -180,13 +175,6 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
                               Privatchat-Nachricht des Aufrufers liefert
                               (GaaInput). Liefert `None`, gilt die Anlage als
                               abgebrochen.
-    `cav_call_hook`         — optional, Callable für GAA-6. Wird nach jeder
-                              erfolgreich angelegten Geräte-Anlage und einer
-                              Bestätigung durch den Aufrufer aufgerufen mit
-                              `cav_call_hook(os, private_chat_id, user_id)`.
-                              Ohne Hook entfällt der CA-Schritt stillschweigend
-                              (z. B. in Tests ohne CAV-Setup) — die Funktion
-                              bleibt trigger- und CAV-agnostisch (E-GAA-5).
     `display_url_origin`    — optional, Origin-URL (z. B. „https://hub.local")
                               für die Display-URL-Rückgabe (GAA-3.7). Ohne
                               Wert liefert die Funktion nur den Pfad
@@ -232,11 +220,8 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
             # fehlt) entfällt der Schritt stillschweigend.
             _poste_pairing_link(tg, chat_id, outcome.display_id,
                                 pairing_bot_token, pairing_origin, typing_fn)
-            # GAA-6: optional CA-Verteilung anstoßen — erst nach erfolgreicher
-            # Anlage, vor der Schleifen-Frage. Ablehnung oder CAV-Fehler bricht
-            # die Schleife nicht ab.
-            _frage_und_rufe_cav(tg, chat_id, user_id, outcome.os_wert,
-                                next_message, cav_call_hook, typing_fn)
+            # RAT-31 E1 (#1470): der frühere GAA-6-CA-Verteilungs-Schritt ist
+            # unter Cookie-only-hart (RAT-32) entfallen — kein cav_call_hook mehr.
         elif not outcome.should_loop:
             # Konversations-Abbruch (GAA-3.6 ohne Bestätigung) oder
             # Eingabe-Strom zu Ende — die Funktion endet ohne Schleifen-Frage.
@@ -266,7 +251,7 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
 class _Outcome:
     """Ausgang eines Einzel-Geräte-Versuchs.
 
-    `display_id`/`os_wert` gesetzt → Erfolg (GAA-3.7).
+    `display_id` gesetzt → Erfolg (GAA-3.7).
     `display_id` None und `should_loop` True → Server-Schreibfehler (GAA-7
       letzter Punkt) — Schleife (GAA-4) fragt trotzdem „noch ein Gerät?".
     `display_id` None und `should_loop` False → Konversations-Abbruch
@@ -274,7 +259,6 @@ class _Outcome:
       endet ohne Schleifen-Frage.
     """
     display_id: object = None
-    os_wert: object = None
     should_loop: bool = False
 
 
@@ -340,7 +324,7 @@ def _ein_geraet_anlegen(tg, chat_id, client, next_message, typing_fn=None):
         _send(tg, chat_id, WRITE_FAILED)
         return _Outcome(should_loop=True)
 
-    return _Outcome(display_id=display_id, os_wert=os_wert, should_loop=True)
+    return _Outcome(display_id=display_id, should_loop=True)
 
 
 # ============================================================
@@ -432,36 +416,6 @@ def _frage_verwendung(tg, chat_id, next_message, typing_fn=None):
             return _VERWENDUNG_V1
         fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_VERWENDUNG)
-
-
-# ============================================================
-#  GAA-6 — CA-Verteilung optional anstoßen
-# ============================================================
-
-def _frage_und_rufe_cav(tg, chat_id, user_id, os_wert,
-                        next_message, cav_call_hook, typing_fn=None):
-    """GAA-6: bietet die CA-Verteilung an und ruft den Hook bei Bestätigung.
-
-    Ohne Hook (Tests ohne CAV-Setup) entfällt der ganze Schritt stillschweigend
-    — keine Frage, keine Aktion. Die Funktion bleibt CAV-agnostisch (E-GAA-5).
-
-    Lehnt der Aufrufer ab oder wirft der Hook, schreibt die Funktion das in
-    den Privatchat und kehrt zurück; das angelegte Gerät bleibt unberührt
-    (GAA-6 letzter Absatz / GAA-7: CAV-Fehler bricht die Schleife nicht ab).
-    """
-    if cav_call_hook is None:
-        return
-    fire_typing(typing_fn)
-    _send(tg, chat_id, ASK_CA)
-    msg = next_message()
-    if msg is None or not confirm.is_confirmation((msg.text or "").strip()):
-        return
-    try:
-        cav_call_hook(os_wert, chat_id, user_id)
-    except Exception as e:  # CAV-Fehler isoliert melden
-        logging.warning("geraet_anlegen: CAV-Aufruf fehlgeschlagen: %s", e)
-        fire_typing(typing_fn)
-        _send(tg, chat_id, CAV_FAILED)
 
 
 # ============================================================

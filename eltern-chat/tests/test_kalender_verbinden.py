@@ -261,9 +261,8 @@ def test_KAV_1_task_is_registered_in_catalog_as_write_task():
     defs = {d.name: d for d in catalog.task_defs()}
     assert "kalender_verbinden" in defs
     assert defs["kalender_verbinden"].kind == WRITE
-    # Die CA-Aufgabe bleibt additiv (EC-8 „der bestehende Katalog bleibt
-    # unberührt").
-    assert "ca_verteilen" in defs
+    # Die neue Aufgabe (Subjekt des Tests) bleibt registriert.
+    assert "kalender_verbinden" in defs
 
 
 def test_KAV_1_legacy_build_catalog_signature_still_works():

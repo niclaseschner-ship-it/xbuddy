@@ -3,22 +3,22 @@
 Prüft, dass die aktuellen Implementierungen zu den Profil-Angaben in der
 Capability-Karte (conventions/eltern-chat-skills.md ab Z. 29) passen:
 
-  1. panel_anlegen  — zweistufig (WriteTask propose+execute) + Worker-Identität
-                      (is_async=True, startet Privatchat-Session).
-  2. termin_eintragen — gemischt-heute: WriteTask + is_async=True,
+  1. termin_eintragen — gemischt-heute: WriteTask + is_async=True,
                         kein A2-Receipt (kein post_execute_hooks-Eintrag
                         der ein A2-Receipt trägt). Plan-Buddy hat kein
                         DELETE für /api/v1/plan/termine (PLAN-22-Nachweis).
-  3. termine_aus_bild — Sammler-Worker: is_async=True, Mehrfach-Ressourcen
+  2. termine_aus_bild — Sammler-Worker: is_async=True, Mehrfach-Ressourcen
                         (Bulk-POST, nicht Single-PUT), kein DELETE-Pfad
                         im Task-Modul.
+
+RAT-31 E1 (#1470): das frühere Profil 1 (panel_anlegen) ist unter
+Cookie-only-hart (RAT-32) entfallen — der Skill wurde entfernt.
 
 Kein Verhalten wird hier verändert — reine Profil-Konsistenz-Assertions.
 """
 
 import inspect
 
-from skills.panel_anlegen_task import PanelAnlegenTask
 from skills.termin_eintragen_task import TermineEintragenTask
 from skills.termine_aus_bild_task import TermineAusBildTask
 from tasks import WriteTask
@@ -26,17 +26,6 @@ from tasks import WriteTask
 # ============================================================
 #  Hilfs-Bausteine
 # ============================================================
-
-def _make_panel_task():
-    """Minimale PanelAnlegenTask — keine echten Clients nötig."""
-    return PanelAnlegenTask(
-        tg=None,
-        panel_origin_url="http://127.0.0.1:5041",
-        geraete_origin_url="http://127.0.0.1:5050",
-        sessions={},
-        family_group_chat_id_getter=lambda: 100,
-    )
-
 
 def _make_tes_task():
     """Minimale TermineEintragenTask — FakePlanClient nicht nötig (kein Aufruf)."""
@@ -63,34 +52,6 @@ def _make_tab_task():
         family_group_chat_id_getter=lambda: 100,
         is_member_fn=lambda uid: True,
     )
-
-
-# ============================================================
-#  Profil 1 — panel_anlegen
-#  Capability-Karte: zweistufig + Worker-Identität (Cluster C + E)
-# ============================================================
-
-def test_PAA_is_write_task():
-    """panel_anlegen ist ein WriteTask (zweistufig, EC-10 Confirm-Gate)."""
-    task = _make_panel_task()
-    assert isinstance(task, WriteTask)
-
-
-def test_PAA_hat_propose_und_execute():
-    """panel_anlegen hat propose()- und execute()-Methoden (zweistufig per Capability-Karte)."""
-    task = _make_panel_task()
-    assert callable(getattr(task, "propose", None)), "propose() fehlt"
-    assert callable(getattr(task, "execute", None)), "execute() fehlt"
-
-
-def test_PAA_is_async_worker_identitaet():
-    """panel_anlegen ist is_async=True — Worker-Identität per Capability-Karte (TASK-5).
-
-    execute() startet einen Worker-Thread statt synchron zu schreiben; das
-    entspricht dem Profil-Achse-2-Eintrag 'zweistufig + Worker-Identität'.
-    """
-    task = _make_panel_task()
-    assert task.is_async is True
 
 
 # ============================================================
