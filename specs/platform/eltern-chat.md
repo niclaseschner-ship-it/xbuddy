@@ -954,7 +954,7 @@ nicht — ONB-6) sind Komponenten-spezifisch und liegen daneben.
 | Plan-Origin (EC-21, #215)  | `http://127.0.0.1:5020`                     | `plan_origin_url`       | n/a (Default reicht beim Standard-Layout)      |
 | Routine-Origin (RZS, #343) | `http://127.0.0.1:5050`                     | `routine_origin_url`    | n/a (Default reicht beim Standard-Layout)      |
 | Photo-Origin (FSE, #393)   | `http://127.0.0.1:5051`                     | `photo_origin_url`      | n/a (Default reicht beim Standard-Layout)      |
-| Icon-Such-Origin (RPS/ICONS-7, #354) | `http://127.0.0.1:5000` (Router)  | `icon_origin_url`       | n/a (Default reicht beim Standard-Layout)      |
+| Icon-Such-Origin (RPS/ICONS-7, #354) | `http://127.0.0.1:5042` (Seiten-Registry, seit RAT-31/#1568) | `icon_origin_url`       | n/a (Default reicht beim Standard-Layout)      |
 | Seiten-Registry-Origin (SREG, #347) | `http://127.0.0.1:5042`            | `seiten_origin_url`     | n/a (Default reicht beim Standard-Layout)      |
 | Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin; **Vorbedingung für SREG-5**) |
 | Log-Level (LOG-1/LOG-4)    | `INFO`                                      | `log_level`             | n/a (Default reicht; Dev-Override per ENV/CLI) |

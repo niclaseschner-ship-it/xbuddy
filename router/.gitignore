@@ -1,8 +1,0 @@
-# ROU-18/ROU-19 — Per-Instanz-Dateien des Router-Buddys, je Instanz separat
-# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
-# dokumentiert.
-#
-# Routing-Tabelle + Runtime-Konfig (ROU-18/19) — pro Deployment separat.
-# Format: router/*.example.json
-routing.json
-config.json

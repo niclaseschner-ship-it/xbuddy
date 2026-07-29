@@ -1,10 +1,12 @@
 """AUTH-7b — Dual-Gate-Verhalten (T1389, auth.md AUTH-7 / AUTH-3.a / AUTH-8).
 
-Prüft den geteilten Dual-Gate über beide Service-Seiten:
+Prüft den geteilten Dual-Gate auf der Seiten-Service-Seite:
 
-  seiten  — /shell/<panel_id> (HTML-Shell)
-  router  — /display/<id>/, /controller/app-panel/<id>/,
-            /api/v1/displays/<id>/events (SSE)
+  seiten  — /shell/<panel_id> (HTML-Shell), /shell/<id>/<asset>
+
+(Die Router-Seite — /display/<id>/, /controller/app-panel/<id>/, SSE
+/api/v1/displays/<id>/events — ist mit RAT-31/#1568 abgerissen; der Gate
+lebt jetzt allein in seiten/main.py + tools/initdata/auth_gate.)
 
 Achsen (auth.md AUTH-7 7b Cookie-only-hart + AUTH-3.a Observe-Leiter, RAT-32):
   - valider xbuddy_session-Cookie  → 200 + Rolling-Refresh (AUTH-2:78).
@@ -23,7 +25,6 @@ Lauf: python3 -m pytest tests/test_dual_gate_7b.py -q
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
@@ -34,7 +35,6 @@ if _REPO_ROOT not in sys.path:
 
 import pytest  # noqa: E402
 
-from router import main as router_main  # noqa: E402
 from seiten import main as seiten_main  # noqa: E402
 from tools.initdata import auth_gate  # noqa: E402
 from tools.initdata import session_cookie as sc  # noqa: E402
@@ -76,109 +76,17 @@ def test_hat_gueltigen_cookie_wrappt_verify_session():
 
 
 # ---------------------------------------------------------------------------
-# Router-Seite: /display/<id>/ + Controller + SSE
+# ENV-Naht: XBUDDY_AUTH_MODE (RAT-31/#1568: Gate lebt jetzt in seiten)
 # ---------------------------------------------------------------------------
-
-_DEMO_ROUTING = {
-    "displays": {DISPLAY_ID: {"app": "kalender"}},
-    "panels": {"app-panel:" + PANEL_ID: {"display_id": DISPLAY_ID}},
-}
-
-
-@pytest.fixture
-def router_client(tmp_path):
-    routing_path = tmp_path / "routing.json"
-    routing_path.write_text(json.dumps(_DEMO_ROUTING))
-    router_main.state = {}
-    router_main._subscribers.clear()
-    router_main.load_routing(str(routing_path))
-    router_main.runtime_config["bot_token"] = BOT_TOKEN
-    router_main.app.testing = True
-    yield router_main.app.test_client()
-    router_main.runtime_config["bot_token"] = ""
-
-
-def test_controller_app_panel_operator_gibt_200(router_client):
-    resp = router_client.get("/controller/app-panel/%s/" % PANEL_ID, headers=_OPERATOR)
-    assert resp.status_code == 200
-
-
-def test_display_shared_bleibt_public_ohne_quelle(router_client):
-    # AUTH-7:512 — /display/_shared/* trägt keinen Gate. 404 (Asset fehlt im
-    # Test) beweist: die Route lief, wurde NICHT auf 401 gegated.
-    resp = router_client.get("/display/_shared/icons/arasaac/1.png", headers=_EXTERN)
-    assert resp.status_code != 401
-
-
-def test_sse_pass_bleibt_streaming_response(router_client):
-    # Operator-Pfad läuft unverpackt → die Streaming-Response bleibt erhalten
-    # (der Decorator puffert den Generator nicht). Wir prüfen den Stream-Flag
-    # und den ersten Event-Chunk, ohne den unendlichen Stream auszulesen.
-    resp = router_client.get("/api/v1/displays/%s/events" % DISPLAY_ID,
-                             headers=_OPERATOR, buffered=False)
-    assert resp.status_code == 200
-    assert resp.mimetype == "text/event-stream"
-    assert resp.is_streamed  # nicht in einen len()-baren Body gepuffert
-    erster = next(resp.response)
-    assert b"data:" in (erster if isinstance(erster, bytes) else erster.encode())
-    resp.close()
-
-
-def test_hard_mode_ohne_quelle_gibt_401_mit_auth8(router_client):
-    # require_dual_gate(mode="hard") liefert 401 + AUTH-8-HTML, wenn keine
-    # Quelle vorliegt. Wir wenden den Decorator direkt auf eine Dummy-View an,
-    # ohne eine Produktiv-Route hart zu schalten (ESC-1: initial alle Observe).
-    @router_main.require_dual_gate(mode="hard")
-    def _dummy():
-        return "ok"
-
-    with router_main.app.test_request_context("/x", headers=_EXTERN):
-        resp = router_main.app.make_response(_dummy())
-    assert resp.status_code == 401
-    assert "neu verbunden" in resp.get_data(as_text=True)
-    assert resp.headers["Content-Type"].startswith("text/html")
-
-
-def test_hard_mode_operator_ip_ohne_cookie_gibt_401_rat32():
-    """RAT-32: im hard-Modus grantet Operator-IP KEINEN Zugang mehr — nur der
-    Cookie. Operator-CIDR ohne Cookie → 401 (AUTH-7a gestrichen)."""
-    @router_main.require_dual_gate(mode="hard")
-    def _dummy():
-        return "ok"
-
-    with router_main.app.test_request_context("/x", headers=_OPERATOR):
-        resp = router_main.app.make_response(_dummy())
-    assert resp.status_code == 401, (
-        "hard + Operator-IP ohne Cookie muss 401 sein (RAT-32), got %d"
-        % resp.status_code
-    )
-    assert "neu verbunden" in resp.get_data(as_text=True)
-
-
-def test_hard_mode_cookie_gibt_200_rat32():
-    """RAT-32: im hard-Modus reicht der valide Cookie (einziger Zugangspfad)."""
-    @router_main.require_dual_gate(mode="hard")
-    def _dummy():
-        return "ok"
-
-    router_main.runtime_config["bot_token"] = BOT_TOKEN
-    try:
-        cookie = sc.sign_session(DISPLAY_ID, BOT_TOKEN)
-        with router_main.app.test_request_context(
-            "/x", headers={**_EXTERN, "Cookie": "%s=%s" % (sc.COOKIE_NAME, cookie)}
-        ):
-            resp = router_main.app.make_response(_dummy())
-        assert resp.status_code == 200
-    finally:
-        router_main.runtime_config["bot_token"] = ""
 
 
 def test_auth_mode_env_seam_default_observe():
     """RAT-32: der Flip läuft über die ENV-Naht XBUDDY_AUTH_MODE (Default
     'observe' → verhaltensneutraler Deploy), damit Flip/Rückroll ENV+restart
-    sind statt Code-Revert (#1430-Lehre). Die 7b-READ-Routen sind ENV-getoggelt."""
-    assert os.environ.get("XBUDDY_AUTH_MODE", "observe") == router_main._AUTH_MODE
-    assert router_main._AUTH_MODE in ("observe", "hard")
+    sind statt Code-Revert (#1430-Lehre). Die 7b-READ-Routen sind ENV-getoggelt.
+    Seit RAT-31 (#1568) trägt seiten/main.py diese Naht (Router abgerissen)."""
+    assert os.environ.get("XBUDDY_AUTH_MODE", "observe") == seiten_main._AUTH_MODE
+    assert seiten_main._AUTH_MODE in ("observe", "hard")
 
 
 # ---------------------------------------------------------------------------
@@ -279,22 +187,6 @@ def test_shell_asset_cookie_gibt_200(seiten_client):
         "Shell-Asset-Route (sw.js) mit Cookie muss 200 liefern, got %d"
         % resp.status_code
     )
-
-
-def test_asset_hard_mode_ohne_quelle_gibt_401(router_client):
-    """hard-Mode-Probe für Asset-Route: require_dual_gate(mode='hard') liefert
-    401 + AUTH-8-HTML, wenn keine Quelle vorliegt (analog test_hard_mode_ohne_quelle).
-    Belegt, dass der Decorator auf Asset-Routen funktional aktiv ist."""
-    @router_main.require_dual_gate(mode="hard")
-    def _asset_dummy():
-        return "asset-content"
-
-    with router_main.app.test_request_context(
-        "/display/%s/sw.js" % DISPLAY_ID, headers=_EXTERN
-    ):
-        resp = router_main.app.make_response(_asset_dummy())
-    assert resp.status_code == 401
-    assert "neu verbunden" in resp.get_data(as_text=True)
 
 
 # ---------------------------------------------------------------------------

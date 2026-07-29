@@ -61,23 +61,19 @@ def test_URL_14_familie_location_proxypassed_an_familie_upstream():
     )
 
 
-def test_URL_14_familie_location_steht_vor_allgemeinem_api_v1():
-    """URL-14: spezifisch vor allgemein — /api/v1/familie/ steht VOR /api/v1/.
+def test_URL_14_familie_location_vorhanden_ohne_api_v1_fallback():
+    """RAT-31 (#1568): der allgemeine /api/v1/-Router-Block ist abgerissen;
+    /api/v1/familie/ bleibt als spezifischer Buddy-Block bestehen.
 
-    nginx wählt bei Prefix-`location` zwar den längsten Treffer unabhängig
-    von der Datei-Reihenfolge, aber URL-14 fordert die Reihenfolge als
-    Vertrag (nicht nur als nginx-Marotte), damit die Conf-Datei die
-    Routing-Tabelle eins zu eins spiegelt und Konsumenten (Onboarding-Agent,
-    neue Komponenten, Code-Review) die Tabelle visuell wiederfinden.
+    nginx wählt bei Prefix-`location` den längsten Treffer; ohne den allgemeinen
+    Fallback landet alles Nicht-Buddy-Spezifische im 404 (URL-1).
     """
     text = _conf_text()
-    pos_familie = text.find("location /api/v1/familie/")
-    pos_api_v1 = text.find("location /api/v1/ ")
-    assert pos_familie != -1, "location /api/v1/familie/ nicht gefunden"
-    assert pos_api_v1 != -1, "location /api/v1/ nicht gefunden"
-    assert pos_familie < pos_api_v1, (
-        "URL-14-Verstoß: /api/v1/familie/ muss VOR /api/v1/ stehen "
-        f"(Positionen: familie={pos_familie}, api/v1={pos_api_v1})"
+    assert text.find("location /api/v1/familie/") != -1, (
+        "location /api/v1/familie/ nicht gefunden"
+    )
+    assert "location /api/v1/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /api/v1/-Router-Block muss entfernt sein"
     )
 
 
@@ -126,16 +122,15 @@ def test_URL_14_wetter_location_proxypassed_an_wetter_upstream():
     )
 
 
-def test_URL_14_wetter_location_steht_vor_allgemeinem_display():
-    """URL-14: spezifisch vor allgemein — /display/wetter/ steht VOR /display/."""
+def test_URL_14_wetter_display_location_vorhanden():
+    """RAT-31 (#1568): der allgemeine /display/-Router-Block ist abgerissen;
+    /display/wetter/ bleibt als spezifischer Buddy-Block bestehen."""
     text = _conf_text()
-    pos_wetter = text.find("location /display/wetter/")
-    pos_display = text.find("location /display/ ")
-    assert pos_wetter != -1, "location /display/wetter/ nicht gefunden"
-    assert pos_display != -1, "location /display/ nicht gefunden"
-    assert pos_wetter < pos_display, (
-        "URL-14-Verstoß: /display/wetter/ muss VOR /display/ stehen "
-        f"(Positionen: wetter={pos_wetter}, display={pos_display})"
+    assert text.find("location /display/wetter/") != -1, (
+        "location /display/wetter/ nicht gefunden"
+    )
+    assert "location /display/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /display/-Router-Block muss entfernt sein"
     )
 
 
@@ -194,16 +189,15 @@ def test_URL_14_routine_location_proxypassed_an_routine_upstream():
     )
 
 
-def test_URL_14_routine_location_steht_vor_allgemeinem_display():
-    """URL-14: spezifisch vor allgemein — /display/routine/ steht VOR /display/."""
+def test_URL_14_routine_display_location_vorhanden():
+    """RAT-31 (#1568): der allgemeine /display/-Router-Block ist abgerissen;
+    /display/routine/ bleibt als spezifischer Buddy-Block bestehen."""
     text = _conf_text()
-    pos_routine = text.find("location /display/routine/")
-    pos_display = text.find("location /display/ ")
-    assert pos_routine != -1, "location /display/routine/ nicht gefunden"
-    assert pos_display != -1, "location /display/ nicht gefunden"
-    assert pos_routine < pos_display, (
-        "URL-14-Verstoß: /display/routine/ muss VOR /display/ stehen "
-        f"(Positionen: routine={pos_routine}, display={pos_display})"
+    assert text.find("location /display/routine/") != -1, (
+        "location /display/routine/ nicht gefunden"
+    )
+    assert "location /display/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /display/-Router-Block muss entfernt sein"
     )
 
 
@@ -236,16 +230,15 @@ def test_URL_14_routine_api_location_proxypassed():
     )
 
 
-def test_URL_14_routine_api_steht_vor_allgemeinem_api_v1():
-    """URL-14: /api/v1/routine/ steht VOR dem allgemeinen /api/v1/-Block (spezifisch vor allgemein)."""
+def test_URL_14_routine_api_location_vorhanden():
+    """RAT-31 (#1568): der allgemeine /api/v1/-Router-Block ist abgerissen;
+    /api/v1/routine/ bleibt als spezifischer Buddy-Block bestehen."""
     text = _conf_text()
-    pos_routine_api = text.find("location /api/v1/routine/")
-    pos_api_v1 = text.find("location /api/v1/ ")
-    assert pos_routine_api != -1, "location /api/v1/routine/ nicht gefunden"
-    assert pos_api_v1 != -1, "location /api/v1/ nicht gefunden"
-    assert pos_routine_api < pos_api_v1, (
-        "URL-14-Verstoß: /api/v1/routine/ muss VOR /api/v1/ stehen "
-        f"(Positionen: routine_api={pos_routine_api}, api_v1={pos_api_v1})"
+    assert text.find("location /api/v1/routine/") != -1, (
+        "location /api/v1/routine/ nicht gefunden"
+    )
+    assert "location /api/v1/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /api/v1/-Router-Block muss entfernt sein"
     )
 
 
@@ -306,15 +299,21 @@ def test_URL_14_photo_api_location_proxypassed():
     )
 
 
-def test_URL_14_photo_locations_stehen_vor_allgemeinem():
-    """URL-14: spezifisch vor allgemein — /display/photo/ vor /display/,
-    /api/v1/photo/ vor /api/v1/."""
+def test_URL_14_photo_locations_vorhanden():
+    """RAT-31 (#1568): die allgemeinen /display/- und /api/v1/-Router-Bloecke
+    sind abgerissen; die Photo-Buddy-Bloecke bleiben spezifisch bestehen."""
     text = _conf_text()
-    assert text.find("location /display/photo/") < text.find("location /display/ "), (
-        "URL-14-Verstoß: /display/photo/ muss VOR /display/ stehen"
+    assert text.find("location /display/photo/") != -1, (
+        "location /display/photo/ nicht gefunden"
     )
-    assert text.find("location /api/v1/photo/") < text.find("location /api/v1/ "), (
-        "URL-14-Verstoß: /api/v1/photo/ muss VOR /api/v1/ stehen"
+    assert text.find("location /api/v1/photo/") != -1, (
+        "location /api/v1/photo/ nicht gefunden"
+    )
+    assert "location /display/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /display/-Router-Block muss entfernt sein"
+    )
+    assert "location /api/v1/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /api/v1/-Router-Block muss entfernt sein"
     )
 
 
@@ -332,14 +331,14 @@ def test_URL_14_photo_in_routing_tabelle_dokumentiert():
 
 # ============================================================
 #  Icon-Bibliothek: seit RAT-31 E6f-B vom seiten-Service serviert
-#  (ROU-26 verlagert, #1586; vorher Router ueber allgemeinen /display/-Block)
+#  (ROU-26 verlagert, #1586)
 # ============================================================
 #
-# RAT-31 E6f-B (#1586): /display/_shared/icons/ wird jetzt vom seiten-Service
-# (Port 5042) serviert — nicht mehr per allgemeinem /display/->Router-Fallback.
-# Eigener spezifischer Block VOR dem allgemeinen /display/-Block (URL-14).
-# Kein nginx-alias (scheiterte an 0700-Home-Permission, #135 — unveraendert);
-# seiten laeuft als User buddy. Router-Code ist toter Zwilling bis #1568.
+# RAT-31 E6f-B (#1586): /display/_shared/icons/ wird vom seiten-Service
+# (Port 5042) serviert. Der allgemeine /display/->Router-Fallback ist mit
+# RAT-31 (#1568) abgerissen; /display/_shared/icons/ ist ein eigener
+# spezifischer Block. Kein nginx-alias (scheiterte an 0700-Home-Permission,
+# #135 — unveraendert); seiten laeuft als User buddy.
 
 
 def test_ROU_26_icons_location_existiert_und_zeigt_auf_seiten():
@@ -357,17 +356,15 @@ def test_ROU_26_icons_location_existiert_und_zeigt_auf_seiten():
     )
 
 
-def test_ROU_26_icons_steht_vor_allgemeinem_display():
-    """URL-14: /display/_shared/icons/ muss VOR dem allgemeinen /display/-Block stehen
-    (spezifisch vor allgemein — laengster Prefix gewinnt)."""
+def test_ROU_26_icons_location_vorhanden_ohne_display_fallback():
+    """RAT-31 (#1568): /display/_shared/icons/ bleibt als spezifischer
+    seiten-Block bestehen; der allgemeine /display/-Router-Fallback ist weg."""
     text = _conf_text()
-    pos_icons = text.find("location /display/_shared/icons/")
-    pos_display = text.find("location /display/ {")
-    assert pos_icons != -1, "location /display/_shared/icons/ nicht gefunden"
-    assert pos_display != -1, "location /display/ nicht gefunden"
-    assert pos_icons < pos_display, (
-        "URL-14-Verstoss: /display/_shared/icons/ muss VOR dem allgemeinen /display/-Block stehen "
-        f"(Positionen: icons={pos_icons}, /display/={pos_display})"
+    assert text.find("location /display/_shared/icons/") != -1, (
+        "location /display/_shared/icons/ nicht gefunden"
+    )
+    assert "location /display/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /display/-Router-Block muss entfernt sein"
     )
 
 
@@ -413,16 +410,14 @@ def test_ROU_31_icons_suche_location_existiert_und_zeigt_auf_seiten():
     )
 
 
-def test_ROU_31_icons_suche_steht_vor_allgemeinem_api_v1():
-    """URL-14: /api/v1/icons/suche (exakt) muss VOR dem allgemeinen /api/v1/-Block stehen."""
+def test_ROU_31_icons_suche_vorhanden_ohne_api_v1_fallback():
+    """RAT-31 (#1568): /api/v1/icons/suche (exakt) bleibt als seiten-Block
+    bestehen; der allgemeine /api/v1/-Router-Fallback ist weg."""
     text = _conf_text()
     m_suche = re.search(r"location\s+=\s+/api/v1/icons/suche", text)
-    pos_api_v1 = text.find("location /api/v1/ ")
     assert m_suche is not None, "location = /api/v1/icons/suche nicht gefunden"
-    assert pos_api_v1 != -1, "location /api/v1/ nicht gefunden"
-    assert m_suche.start() < pos_api_v1, (
-        "URL-14-Verstoss: /api/v1/icons/suche muss VOR /api/v1/ stehen "
-        f"(Positionen: suche={m_suche.start()}, api_v1={pos_api_v1})"
+    assert "location /api/v1/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /api/v1/-Router-Block muss entfernt sein"
     )
 
 
@@ -443,11 +438,11 @@ def test_ROU_26_ROU_31_im_conf_header_dokumentiert():
 #  Admin-Endpoints sind nicht vom Netz erreichbar (#140, EC-21)
 # ============================================================
 #
-# Der Router-Reload-Endpoint hat einen Loopback-Guard in der App; nginx ist
-# die zweite Verteidigungslinie und blockiert /api/v1/<komp>/admin/* bereits
-# an der Origin. Diese Tests fixieren die textuellen Eigenschaften der Conf:
-# Regex-Block existiert, gibt 404 zurück, steht VOR den durchreichenden
-# /api/v1/-Locations (Regex hat in nginx Vorrang, aber wir wollen die
+# Die Reload-Endpoints der Komponenten haben einen Loopback-Guard in der App;
+# nginx ist die zweite Verteidigungslinie und blockiert /api/v1/<komp>/admin/*
+# bereits an der Origin. Diese Tests fixieren die textuellen Eigenschaften der
+# Conf: Regex-Block existiert, gibt 404 zurück, steht VOR den durchreichenden
+# /api/v1/<buddy>/-Locations (Regex hat in nginx Vorrang, aber wir wollen die
 # Tabellenreihenfolge auch visuell — siehe Routing-Tabelle im Conf-Header).
 
 
@@ -465,19 +460,20 @@ def test_140_admin_block_existiert():
     )
 
 
-def test_140_admin_block_steht_vor_router_api_v1():
-    """Der Admin-Block muss VOR dem durchreichenden /api/v1/-Block stehen,
-    damit die Routing-Tabelle im Conf-Header die Datei-Reihenfolge eins zu
-    eins spiegelt — Reviewer und neue Komponenten finden den Schutz da, wo
-    URL-14 ihn anlegt (spezifisch vor allgemein)."""
+def test_140_admin_block_steht_vor_buddy_api_v1_prefixen():
+    """Der Admin-Block muss VOR den durchreichenden /api/v1/<buddy>/-Blöcken
+    stehen, damit die Routing-Tabelle im Conf-Header die Datei-Reihenfolge eins
+    zu eins spiegelt (spezifisch vor allgemein). RAT-31 (#1568): der allgemeine
+    /api/v1/-Router-Block ist weg; als Anker dient jetzt der erste durchreichende
+    Buddy-API-Block (/api/v1/plan/)."""
     text = _conf_text()
     pos_admin = text.find("location ~ ^/api/v1/[^/]+/admin/")
-    pos_api_v1 = text.find("location /api/v1/ ")
+    pos_api_plan = text.find("location /api/v1/plan/")
     assert pos_admin != -1, "Admin-Block (Regex-location) nicht gefunden"
-    assert pos_api_v1 != -1, "location /api/v1/ nicht gefunden"
-    assert pos_admin < pos_api_v1, (
-        "Admin-Block muss VOR /api/v1/ stehen — die Routing-Tabelle im "
-        "Conf-Header schreibt diese Reihenfolge fest."
+    assert pos_api_plan != -1, "location /api/v1/plan/ nicht gefunden"
+    assert pos_admin < pos_api_plan, (
+        "Admin-Block muss VOR den durchreichenden /api/v1/<buddy>/-Blöcken stehen — "
+        "die Routing-Tabelle im Conf-Header schreibt diese Reihenfolge fest."
     )
 
 
@@ -613,8 +609,8 @@ def test_T1126_plan_location_steht_nach_seiten_routine_location():
 # ============================================================
 #
 # Beide Pfade werden seit RAT-31 E6f-A (#1582) vom seiten-Service serviert.
-# Spezifische Prefixe müssen VOR den allgemeinen /controller/- bzw. /display/-
-# Blöcken stehen (längster Prefix gewinnt — URL-14).
+# Die allgemeinen /controller/- bzw. /display/-Router-Blöcke sind mit RAT-31
+# (#1568) abgerissen; diese Pfade bleiben eigene spezifische Blöcke (URL-14).
 
 
 def test_ROU_23_controller_shared_location_existiert():
@@ -632,17 +628,15 @@ def test_ROU_23_controller_shared_location_existiert():
     )
 
 
-def test_ROU_23_controller_shared_steht_vor_controller_allgemein():
-    """URL-14: /controller/_shared/ muss VOR dem allgemeinen /controller/-Block stehen
-    (spezifisch vor allgemein — längster Prefix gewinnt)."""
+def test_ROU_23_controller_shared_vorhanden_ohne_controller_fallback():
+    """RAT-31 (#1568): /controller/_shared/ bleibt als spezifischer seiten-Block
+    bestehen; der allgemeine /controller/-Router-Fallback ist weg."""
     text = _conf_text()
-    pos_shared = text.find("location /controller/_shared/")
-    pos_controller = text.find("location /controller/ {")
-    assert pos_shared != -1, "location /controller/_shared/ nicht gefunden"
-    assert pos_controller != -1, "location /controller/ nicht gefunden"
-    assert pos_shared < pos_controller, (
-        "URL-14-Verstoß: /controller/_shared/ muss VOR dem allgemeinen /controller/-Block stehen "
-        f"(Positionen: _shared={pos_shared}, /controller/={pos_controller})"
+    assert text.find("location /controller/_shared/") != -1, (
+        "location /controller/_shared/ nicht gefunden"
+    )
+    assert "location /controller/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /controller/-Router-Block muss entfernt sein"
     )
 
 
@@ -678,17 +672,15 @@ def test_ROU_30_display_shared_design_location_existiert():
     )
 
 
-def test_ROU_30_display_shared_design_steht_vor_display_allgemein():
-    """URL-14: /display/_shared/design/ muss VOR dem allgemeinen /display/-Block stehen
-    (spezifisch vor allgemein — längster Prefix gewinnt)."""
+def test_ROU_30_display_shared_design_vorhanden_ohne_display_fallback():
+    """RAT-31 (#1568): /display/_shared/design/ bleibt als spezifischer
+    seiten-Block bestehen; der allgemeine /display/-Router-Fallback ist weg."""
     text = _conf_text()
-    pos_design = text.find("location /display/_shared/design/")
-    pos_display = text.find("location /display/ {")
-    assert pos_design != -1, "location /display/_shared/design/ nicht gefunden"
-    assert pos_display != -1, "location /display/ nicht gefunden"
-    assert pos_design < pos_display, (
-        "URL-14-Verstoß: /display/_shared/design/ muss VOR dem allgemeinen /display/-Block stehen "
-        f"(Positionen: design={pos_design}, /display/={pos_display})"
+    assert text.find("location /display/_shared/design/") != -1, (
+        "location /display/_shared/design/ nicht gefunden"
+    )
+    assert "location /display/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /display/-Router-Block muss entfernt sein"
     )
 
 
