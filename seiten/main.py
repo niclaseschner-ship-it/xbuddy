@@ -35,7 +35,7 @@ import time
 import urllib.error
 import urllib.request
 
-from flask import Flask, jsonify, make_response, redirect, render_template, request
+from flask import Flask, abort, jsonify, make_response, redirect, render_template, request
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1),
 # `tools.logsetup` (LOG-4) und `seiten.aggregator` auch beim Direktstart
@@ -87,6 +87,9 @@ runtime = {
     # (PORT-2, panel-Loopback). Serving von /controller/app-panel/ ist seit
     # #1564 seiten-owned (vorher Router, ROU-24/ROU-27 — Code stirbt #1568).
     "panel_service_url": "http://127.0.0.1:5041",
+    # ROU-26 / RAT-31 E6f-B (#1586): konfigurierbare icon-root.
+    # Leer = Default aus DEFAULT_ICON_ROOT (/home/buddy/apps/icons/).
+    "icon_root":         "",
     "ttl":               30,
     "inventar":          None,
     "gebaut_um":         0.0,
@@ -119,7 +122,7 @@ def configure(root=None, inventar_path=None, ttl=None,
               funnel_origin=None,
               bot_token=None, init_data_config=None,
               familie_client=None, router_url=None,
-              panel_service_url=None):
+              panel_service_url=None, icon_root=None):
     """Setzt Aufbau-Wurzel, Inventar-Pfad, TTL und Display-URL-Origins
     (SREG-3, SREG-7).
 
@@ -144,6 +147,9 @@ def configure(root=None, inventar_path=None, ttl=None,
     ``get_telegram_ids()``-Methode oder eine ``tools.familie_client.FamilieClient``-
     Instanz. None → Produktiv-Pfad via ENV ``SEITEN_FAMILIE_ORIGIN``.
     Ersetzt den frueheren ``familie_json_path``-Direkt-Read (DCOMP-1 / FAM-7).
+
+    `icon_root` (ROU-26 / RAT-31 E6f-B, #1586): Pfad zur icon-root fuer
+    /display/_shared/icons/ + /api/v1/icons/suche. Leer = DEFAULT_ICON_ROOT.
     """
     if root is not None:
         runtime["root"] = root
@@ -166,6 +172,8 @@ def configure(root=None, inventar_path=None, ttl=None,
         runtime["router_url"] = router_url
     if panel_service_url is not None:
         runtime["panel_service_url"] = panel_service_url
+    if icon_root is not None:
+        runtime["icon_root"] = icon_root
     runtime["inventar"] = None
     runtime["gebaut_um"] = 0.0
 
@@ -2087,6 +2095,197 @@ def display_shared_design_asset(asset):
 
 
 # ============================================================
+#  display/_shared/icons — Icon-Bibliothek (ROU-26, RAT-31 E6f-B, #1586)
+# ============================================================
+#
+# Spec-Anker: specs/platform/router.md ROU-26, specs/platform/icons.md ICONS-5.
+# Verlagert vom Router (router/main.py:1188-1236) nach seiten, damit der seiten-
+# Service die Icon-Bibliothek + die Stichwort-Suche (ROU-31) unter demselben
+# Origin serviert. Der Router-seitige Code lebt bis #1568 als toter Zwilling.
+#
+# Die icon-root ist ein Per-Instanz-Wert (ICONS-2, Default /home/buddy/apps/icons/);
+# seiten laeuft als User buddy und liest die icon-root problemlos — analog Router.
+# Kein nginx-alias (scheiterte an 0700-Home-Permission, #135).
+#
+# ROU-31 / ICONS-7: Lazy-Cache fuer pictogram_cache.json (Wort→ID).
+# Wird beim ersten Zugriff oder bei Wechsel der icon-root befuellt.
+# Zugriff aus Flask-Threads → Lock (analog Router).
+
+# ROU-26 / ICONS-2: Default-icon-root (Per-Instanz, ausserhalb des Repos).
+DEFAULT_ICON_ROOT = "/home/buddy/apps/icons/"
+
+_pictogram_cache: dict = {}
+_pictogram_cache_root: str = ""
+_pictogram_cache_lock = threading.Lock()
+
+_ICONS_SUCHE_MAX_CAP = 50  # obere Klemme fuer den max-Parameter (ICONS-7)
+
+# Content-Type-Mapping fuer icon-Assets (PNG + Fallback).
+_ICON_MIME = {
+    ".png": "image/png",
+    ".json": "application/json",
+}
+
+
+def _icon_root():
+    """ROU-26 / RAT-31 E6f-B: konfigurierbare icon-root (ICONS-2).
+
+    Leer = DEFAULT_ICON_ROOT. Wert kommt aus runtime['icon_root'] (via configure()
+    oder Test-Naht). 1:1 analog icon_root() in router/main.py:1140-1142.
+    """
+    return runtime.get("icon_root") or DEFAULT_ICON_ROOT
+
+
+def _send_icon_asset(rel_path):
+    """ROU-26: Statik-Auslieferung aus der icon-root mit realpath-Traversal-Schutz.
+
+    Defense in Depth: werkzeug safe_join (via send_from_directory) +
+    expliziter realpath-Check gegen Path-Traversal. 1:1 vom Router
+    (router/main.py:1188-1200).
+    """
+    from flask import abort, send_from_directory
+
+    root = os.path.realpath(_icon_root())
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _ICON_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route("/display/_shared/icons/<path:asset>", methods=["GET"])
+# ROU-26 / ICONS-5: ungegated statischer Asset-Pfad, analog zum Router
+# (router/main.py:1230-1236 — kein require_dual_gate). Icons werden von
+# Display-Views credential-los geladen; ein Gate wuerde Kinder-Displays brechen.
+def display_shared_icon(asset):
+    """ROU-26 / URL-16 / ICONS-5 / RAT-31 E6f-B (#1586):
+    /display/_shared/icons/<asset> aus der icon-root.
+
+    1:1 vom Router nach seiten verlagert. Die icon-root ist konfigurierbar
+    via runtime['icon_root'] / ENV ICON_ROOT / CLI --icon-root."""
+    return _send_icon_asset(asset)
+
+
+def _load_pictogram_cache():
+    """ROU-31 / ICONS-7: Liefert den Wort→ID-Cache aus pictogram_cache.json.
+
+    Lazy: wird beim ersten Aufruf oder bei geaenderter icon-root geladen.
+    Gibt ein leeres Dict zurueck, wenn die Datei fehlt (Icon-root noch nicht
+    geseedet — kein Fehler, Suche liefert dann []). Thread-sicher via Lock.
+    1:1 vom Router (router/main.py:1239-1259).
+    """
+    global _pictogram_cache, _pictogram_cache_root
+    current_root = _icon_root()
+    with _pictogram_cache_lock:
+        if _pictogram_cache_root == current_root and _pictogram_cache:
+            return _pictogram_cache
+        cache_path = os.path.join(current_root, "pictogram_cache.json")
+        try:
+            with open(cache_path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            data = {}
+        _pictogram_cache = data
+        _pictogram_cache_root = current_root
+        return _pictogram_cache
+
+
+def _score_match(needle: str, word: str) -> float:
+    """Match-Score: exact > prefix > word-boundary > substring.
+
+    1:1 vom Router (router/main.py:1262-1282).
+    """
+    needle = needle.lower()
+    w = word.lower()
+    if needle not in w:
+        return 0.0
+    if w == needle:
+        return 1000.0
+    if w.startswith(needle):
+        return 400.0 + 100.0 / max(len(w), 1)
+    if (" " + needle) in w or ("-" + needle) in w:
+        return 100.0 + 50.0 / max(len(w), 1)
+    return 1.0 + 1.0 / max(len(w), 1)
+
+
+@app.route("/api/v1/icons/suche", methods=["GET"])
+def icons_suche():
+    """ROU-31 / ICONS-7 / URL-4 / RAT-31 E6f-B (#1586):
+    Stichwort-Suche ueber den lokalen Icon-Cache.
+
+    GET /api/v1/icons/suche?q=<stichwort>&max=<n>
+    → 200, JSON [{id: int, url: str}], nur IDs mit lokalem PNG.
+    400 ohne q. Leere Treffer → 200 [].
+
+    1:1 vom Router (router/main.py:1285-1370) nach seiten verlagert.
+    Ungated: Suche wird von Display-Views (keine Cookie-Auth) genutzt.
+    """
+    q = request.args.get("q")
+    if q is None:
+        abort(400)
+
+    try:
+        max_results = int(request.args.get("max", 3))
+    except (ValueError, TypeError):
+        max_results = 3
+    max_results = max(1, min(max_results, _ICONS_SUCHE_MAX_CAP))
+
+    try:
+        min_score = float(request.args.get("min_score", 100))
+    except (ValueError, TypeError):
+        min_score = 100.0
+
+    tokens = q.split()
+    if not tokens:
+        return jsonify([])
+
+    cache = _load_pictogram_cache()
+
+    score: dict = {}
+    token_hits: dict = {}
+    first_seen: dict = {}
+    for _ti, token in enumerate(tokens):
+        matched_this_token: set = set()
+        for idx, (word, icon_id) in enumerate(cache.items()):
+            if icon_id in matched_this_token:
+                continue
+            match_score = _score_match(token, word)
+            if match_score > 0:
+                matched_this_token.add(icon_id)
+                if icon_id not in first_seen:
+                    first_seen[icon_id] = idx
+                score[icon_id] = score.get(icon_id, 0.0) + match_score
+                token_hits[icon_id] = token_hits.get(icon_id, 0) + 1
+
+    qualified_ids = [i for i in score if score[i] >= min_score]
+
+    sorted_ids = sorted(
+        qualified_ids,
+        key=lambda i: (-token_hits[i], -score[i], first_seen[i]),
+    )
+
+    root = os.path.realpath(_icon_root())
+    results = []
+    for icon_id in sorted_ids:
+        if len(results) >= max_results:
+            break
+        rel = os.path.join("arasaac", f"{icon_id}.png")
+        target = os.path.realpath(os.path.join(root, rel))
+        if not (target == root or target.startswith(root + os.sep)):
+            continue
+        if os.path.isfile(target):
+            results.append({
+                "id": icon_id,
+                "url": f"/display/_shared/icons/arasaac/{icon_id}.png",
+            })
+
+    return jsonify(results)
+
+
+# ============================================================
 #  Entrypoint
 # ============================================================
 
@@ -2134,6 +2333,11 @@ def parse_args(argv):
     p.add_argument("--panel-service-url", dest="panel_service_url",
                    help="Origin des panel-Service fuer das App-Panel-Serving-Proxy "
                         "(SREG-17, Default http://127.0.0.1:5041)")
+    # ROU-26 / RAT-31 E6f-B (#1586): icon-root fuer /display/_shared/icons/ +
+    # /api/v1/icons/suche. ENV ICON_ROOT ueberschreibt Default; CLI-Flag schlaegt ENV.
+    p.add_argument("--icon-root", dest="icon_root",
+                   help="Pfad zur Icon-Bibliothek (ROU-26, ICONS-2, "
+                        "Default /home/buddy/apps/icons/)")
     return p.parse_args(argv)
 
 
@@ -2182,6 +2386,11 @@ def resolved_config(args):
     cfg["panel_service_url"] = (
         args.panel_service_url
         or os.environ.get("PANEL_SERVICE_URL", "http://127.0.0.1:5041"))
+    # ROU-26 / RAT-31 E6f-B (#1586): icon-root fuer Icons + Suche.
+    # CLI schlaegt ENV schlaegt Default (leer = DEFAULT_ICON_ROOT).
+    cfg["icon_root"] = (
+        args.icon_root
+        or os.environ.get("ICON_ROOT", ""))
     return cfg
 
 
@@ -2196,7 +2405,8 @@ def main(argv=None):
               tailscale_origin=cfg["tailscale_origin"],
               funnel_origin=cfg["funnel_origin"],
               router_url=cfg["router_url"],
-              panel_service_url=cfg["panel_service_url"])
+              panel_service_url=cfg["panel_service_url"],
+              icon_root=cfg["icon_root"])
     # SREG-7 / #1458: SEITEN_TAILSCALE_ORIGIN ist aufgegeben — kein Warning mehr.
     if not cfg["funnel_origin"]:
         # SREG-7 dritte Origin: Funnel leer → externer User-Geraete-Zugang (AUTH-7b)
@@ -2219,6 +2429,7 @@ def main(argv=None):
         "Seiten-Registry hört auf %s://%s:%s (inventar=%s, ttl=%ss, RAT-31-E3-manifest-only)",
         scheme, cfg["listen_host"], cfg["listen_port"],
         cfg["inventar"], cfg["ttl"])
+    logging.info("Icon-Bibliothek (ROU-26 / RAT-31 E6f-B): %s", _icon_root())
     app.run(host=cfg["listen_host"], port=cfg["listen_port"],
             debug=False, threaded=True, ssl_context=ssl_context)
 
