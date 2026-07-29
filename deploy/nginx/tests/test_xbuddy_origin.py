@@ -331,51 +331,111 @@ def test_URL_14_photo_in_routing_tabelle_dokumentiert():
 
 
 # ============================================================
-#  Icon-Bibliothek: vom Router serviert, KEIN nginx-alias (#135, ROU-26)
+#  Icon-Bibliothek: seit RAT-31 E6f-B vom seiten-Service serviert
+#  (ROU-26 verlagert, #1586; vorher Router ueber allgemeinen /display/-Block)
 # ============================================================
 #
-# Korrektur zu #135: /display/_shared/icons/ wird NICHT mehr per nginx-
-# `alias` ausgeliefert (scheiterte an der 0700-Home-Permission, nginx =
-# www-data). Stattdessen serviert der Router die icon-root (ROU-26,
-# Zwilling zu ROU-23). In der Conf heißt das: KEIN eigener icons-Block,
-# und /display/_shared/icons/ fällt an den allgemeinen /display/->Router-
-# Block (URL-14, ROU-26).
+# RAT-31 E6f-B (#1586): /display/_shared/icons/ wird jetzt vom seiten-Service
+# (Port 5042) serviert — nicht mehr per allgemeinem /display/->Router-Fallback.
+# Eigener spezifischer Block VOR dem allgemeinen /display/-Block (URL-14).
+# Kein nginx-alias (scheiterte an 0700-Home-Permission, #135 — unpetraendert);
+# seiten laeuft als User buddy. Router-Code ist toter Zwilling bis #1568.
 
 
-def test_ROU_26_kein_eigener_icons_location_block():
-    """Korrektur #135: es darf KEINE eigene location /display/_shared/icons/
-    mehr geben — die Icons serviert der Router über /display/ (ROU-26)."""
-    text = _conf_text()
-    assert "location /display/_shared/icons/" not in text, (
-        "location /display/_shared/icons/ darf nicht mehr existieren — der "
-        "Router serviert die Icon-Bibliothek (ROU-26, #135). Der alte "
-        "nginx-alias scheiterte an der 0700-Home-Permission."
-    )
-
-
-def test_ROU_26_kein_alias_fuer_icon_root():
-    """Es darf keine `alias`-Direktive auf die icon-root mehr geben — das war
-    der gescheiterte Serving-Weg (ROU-26, #135)."""
-    text = _conf_text()
-    match = re.search(r"alias\s+[^\s;]+;", text)
-    assert match is None, (
-        "Eine `alias`-Direktive ist übrig — die Icon-Bibliothek wird vom "
-        f"Router serviert (ROU-26), kein nginx-alias mehr. Gefunden: {match.group(0) if match else ''}"
-    )
-
-
-def test_ROU_26_icons_faellt_an_display_router_block():
-    """`/display/_shared/icons/` muss vom allgemeinen /display/->Router-Block
-    abgedeckt sein: dieser proxy_pass an den Router existiert (ROU-26)."""
+def test_ROU_26_icons_location_existiert_und_zeigt_auf_seiten():
+    """RAT-31 E6f-B (#1586): location /display/_shared/icons/ muss existieren
+    und auf xbuddy_seiten zeigen."""
     text = _conf_text()
     match = re.search(
-        r"location\s+/display/\s*\{[^}]*proxy_pass\s+http://xbuddy_router\s*;[^}]*\}",
+        r"location\s+/display/_shared/icons/\s*\{[^}]*proxy_pass\s+http://xbuddy_seiten\s*;[^}]*\}",
         text,
         re.DOTALL,
     )
     assert match is not None, (
-        "location /display/ fehlt oder proxypasst nicht an xbuddy_router — "
-        "der Router serviert /display/_shared/icons/ über diesen Block (ROU-26, #135)"
+        "location /display/_shared/icons/ fehlt oder proxypasst nicht an xbuddy_seiten "
+        "(ROU-26, RAT-31 E6f-B, #1586)"
+    )
+
+
+def test_ROU_26_icons_steht_vor_allgemeinem_display():
+    """URL-14: /display/_shared/icons/ muss VOR dem allgemeinen /display/-Block stehen
+    (spezifisch vor allgemein — laengster Prefix gewinnt)."""
+    text = _conf_text()
+    pos_icons = text.find("location /display/_shared/icons/")
+    pos_display = text.find("location /display/ {")
+    assert pos_icons != -1, "location /display/_shared/icons/ nicht gefunden"
+    assert pos_display != -1, "location /display/ nicht gefunden"
+    assert pos_icons < pos_display, (
+        "URL-14-Verstoss: /display/_shared/icons/ muss VOR dem allgemeinen /display/-Block stehen "
+        f"(Positionen: icons={pos_icons}, /display/={pos_display})"
+    )
+
+
+def test_ROU_26_kein_alias_fuer_icon_root():
+    """Es darf keine `alias`-Direktive auf die icon-root geben (ROU-26, #135 unpetraendert)."""
+    text = _conf_text()
+    match = re.search(r"alias\s+[^\s;]+;", text)
+    assert match is None, (
+        "Eine `alias`-Direktive ist uebrig — die Icon-Bibliothek wird vom "
+        f"seiten-Service serviert (ROU-26), kein nginx-alias. Gefunden: {match.group(0) if match else ''}"
+    )
+
+
+def test_ROU_26_icons_location_steht_nach_design_block():
+    """Tabellenreihenfolge: /display/_shared/design/ steht vor /display/_shared/icons/.
+
+    design ist laengerer Prefix als icons (beide unter _shared), aber
+    die Konf listet sie beide spezifisch — design zuerst (RAT-31 E6f-A vor E6f-B).
+    """
+    text = _conf_text()
+    pos_design = text.find("location /display/_shared/design/")
+    pos_icons = text.find("location /display/_shared/icons/")
+    assert pos_design != -1, "location /display/_shared/design/ nicht gefunden"
+    assert pos_icons != -1, "location /display/_shared/icons/ nicht gefunden"
+    assert pos_design < pos_icons, (
+        "Tabellenreihenfolge: /display/_shared/design/ soll vor /display/_shared/icons/ stehen "
+        f"(Positionen: design={pos_design}, icons={pos_icons})"
+    )
+
+
+def test_ROU_31_icons_suche_location_existiert_und_zeigt_auf_seiten():
+    """RAT-31 E6f-B (#1586): location = /api/v1/icons/suche muss existieren
+    und auf xbuddy_seiten zeigen (exakter Match, ROU-31)."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+=\s+/api/v1/icons/suche\s*\{[^}]*proxy_pass\s+http://xbuddy_seiten\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location = /api/v1/icons/suche fehlt oder proxypasst nicht an xbuddy_seiten "
+        "(ROU-31, RAT-31 E6f-B, #1586)"
+    )
+
+
+def test_ROU_31_icons_suche_steht_vor_allgemeinem_api_v1():
+    """URL-14: /api/v1/icons/suche (exakt) muss VOR dem allgemeinen /api/v1/-Block stehen."""
+    text = _conf_text()
+    m_suche = re.search(r"location\s+=\s+/api/v1/icons/suche", text)
+    pos_api_v1 = text.find("location /api/v1/ ")
+    assert m_suche is not None, "location = /api/v1/icons/suche nicht gefunden"
+    assert pos_api_v1 != -1, "location /api/v1/ nicht gefunden"
+    assert m_suche.start() < pos_api_v1, (
+        "URL-14-Verstoss: /api/v1/icons/suche muss VOR /api/v1/ stehen "
+        f"(Positionen: suche={m_suche.start()}, api_v1={pos_api_v1})"
+    )
+
+
+def test_ROU_26_ROU_31_im_conf_header_dokumentiert():
+    """Der Conf-Header muss /display/_shared/icons/ + /api/v1/icons/suche erwaehnen
+    (RAT-31 E6f-B, analog ROU-23/ROU-30 in #1582)."""
+    text = _conf_text()
+    header = text.split("server {", 1)[0]
+    assert "/display/_shared/icons/" in header, (
+        "Conf-Header erwaehnt /display/_shared/icons/ nicht (ROU-26, RAT-31 E6f-B, #1586)."
+    )
+    assert "/api/v1/icons/suche" in header, (
+        "Conf-Header erwaehnt /api/v1/icons/suche nicht (ROU-31, RAT-31 E6f-B, #1586)."
     )
 
 

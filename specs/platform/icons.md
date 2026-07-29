@@ -42,7 +42,7 @@ oder die `config.json` einer Komponente (`conventions/config.md` CONFIG-1).
 
 | Wert | Default | Override | gesetzt durch |
 |---|---|---|---|
-| `icon-root` | `/home/buddy/apps/icons/` | Arg `$1` oder ENV `ICON_ROOT` beim Seed (ICONS-4); Router-Config `icon_root` beim Serving (ICONS-5, `router.md` ROU-26) | Instanz-Betreiber (Ops) beim Ausrollen |
+| `icon-root` | `/home/buddy/apps/icons/` | Arg `$1` oder ENV `ICON_ROOT` beim Seed (ICONS-4); seiten-Config `--icon-root` / ENV `ICON_ROOT` beim Serving (ICONS-5, `router.md` ROU-26, `seiten-registry.md` SREG-18, RAT-31 E6f-B #1586) | Instanz-Betreiber (Ops) beim Ausrollen |
 
 ## ICONS-3 — Wort→ID-Mapping wandert mit
 
@@ -90,20 +90,23 @@ Begründung der URL-Wahl:
   einzelnen Buddy gehören, liegen unter `/display/_shared/<sache>/`.
   Die Icon-Bibliothek gehört keiner einzelnen App, daher `_shared` statt
   eines Buddy-Slugs (für buddy-eigene Assets gilt URL-13).
-- Die Auslieferung übernimmt der **Router** als read-only-Asset-Pfad
-  (`router.md` ROU-26) — ein Zwilling zu `/controller/_shared/` (ROU-23).
+- Die Auslieferung übernimmt seit **RAT-31 E6f-B (#1586)** der
+  **seiten-Service** als read-only-Asset-Pfad (`router.md` ROU-26,
+  `seiten-registry.md` SREG-18) — ein Zwilling zu `/controller/_shared/`
+  (ROU-23). Vorher war der Router der Host; Router-Code ist toter Zwilling
+  bis #1568.
 
 Anders als `controller/_shared/` (Helper-**Code** im Repo) zeigt dieser
 Pfad auf die Per-Instanz-Icon-Wurzel (ICONS-2) außerhalb des Repos. Der
-**Router** liefert diesen Prefix aus dem `icon-root` aus (`router.md`
-ROU-26) — read-only, mit demselben Path-Traversal-Schutz wie ROU-23. Er
-läuft als User `buddy` und liest die icon-root problemlos; ein erster
-Versuch, die Wurzel per statischem nginx-`alias` auszuliefern, scheiterte
-an der `0700`-Home-Permission (nginx = `www-data` ≠ `buddy`) und lieferte
-404 (#135). In der Origin-Routing-Tabelle (URL-14) fällt
-`/display/_shared/icons/` an den allgemeinen `/display/`→Router-Eintrag —
-kein eigener statischer nginx-Block. Die konkrete Origin-Konfiguration
-liegt in `deploy/nginx/xbuddy-origin.conf`.
+**seiten-Service** liefert diesen Prefix aus dem `icon-root` aus (`router.md`
+ROU-26, `seiten-registry.md` SREG-18) — read-only, mit demselben
+Path-Traversal-Schutz wie ROU-23. Er läuft als User `buddy` und liest die
+icon-root problemlos; ein erster Versuch, die Wurzel per statischem nginx-`alias`
+auszuliefern, scheiterte an der `0700`-Home-Permission (nginx = `www-data` ≠
+`buddy`) und lieferte 404 (#135). In der Origin-Routing-Tabelle (URL-14) hat
+`/display/_shared/icons/` einen **eigenen** spezifischen nginx-Block VOR dem
+allgemeinen `/display/`→Router-Eintrag — Reihenfolge dokumentiert in
+`deploy/nginx/xbuddy-origin.conf`.
 
 `<id>` ist eine numerische ARASAAC-ID (ICONS-1). Andere `<source>` als
 `arasaac` gibt es heute nicht; weitere Quellen kämen als
@@ -181,8 +184,9 @@ gewinnt immer — ein 2-Token-Substring-Treffer (token_hits=2) rankt vor einem
 sortiert der additive Match-Score (Qualität: exact/prefix/word-boundary/substring).
 Tiebreaker: erste Vorkommen-Reihenfolge im Cache (first_seen).
 
-Read-only, keine Schreibwirkung, kein externer Call. Ausgeliefert vom Router
-(ROU-31), der die icon-root ohnehin besitzt — **kein** eigener Dienst.
+Read-only, keine Schreibwirkung, kein externer Call. Ausgeliefert vom
+**seiten-Service** seit RAT-31 E6f-B (#1586) — der die icon-root ohnehin
+besitzt (ROU-31 / SREG-18) — **kein** eigener Dienst.
 
 **Konsumenten-Konsequenz (Mehrwort).** Frontend-Konsumenten, die heute einen
 JS-Wort-Split-Workaround tragen (z. B. `seiten/static/routine-anpassen.js`
