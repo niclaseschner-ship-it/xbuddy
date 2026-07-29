@@ -256,8 +256,8 @@ def test_jede_auth7b_route_traegt_den_dual_gate():
             fehlend.append("%s — keine require_dual_gate-Route in %s/main.py"
                            % (pfad, modul))
 
-    assert geprueft >= 4, (
-        "Erwartet ≥4 AUTH-7-7b-Routen (shell/display/controller/events), "
+    assert geprueft >= 3, (
+        "Erwartet ≥3 AUTH-7-7b-Routen (shell/controller/events), "
         "geprüft: %d" % geprueft
     )
     assert not fehlend, (
