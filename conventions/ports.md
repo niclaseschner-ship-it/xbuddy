@@ -12,7 +12,7 @@ in einer Service-Datei oder im Code als wahre Quelle.
 ### PORT-2 — Port-Katalog steht in dieser Konvention
 | Port | Komponente | Service-Name (SVC-1) |
 |---|---|---|
-| 5000 | Router | xbuddy-router |
+| 5000 | Router (ENTFALLEN, RAT-31 E6f #1568 — Service-Teardown im Deploy) | xbuddy-router |
 | 5010 | Familien-Registry | xbuddy-familie |
 | 5020 | Plan-Buddy | xbuddy-plan |
 | 5030 | Wetter-Buddy | xbuddy-wetter |

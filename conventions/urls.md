@@ -65,10 +65,10 @@ weichen aber bewusst von der Action-/Asset-Form (URL-2 bzw. URL-3) ab,
 weil ihr zweites Segment eine **Instanz-Identität** ist und kein Verb
 und kein Asset:
 
-- **ROU-20** — `GET /display/<id>` liefert den Display-Client; `<id>` ist
-  die Display-Identität (DC-1). Abweichung von URL-2
-  (`/display/<buddy>/<view>`). Quelle:
-  [`../specs/platform/router.md`](../specs/platform/router.md), ROU-20.
+- **ROU-20** — ENTFALLEN (RAT-31 E6d #1566 / E6f #1568): `GET /display/<id>`
+  lieferte den Display-Client; mit dem Ein-Gerät-Heim-Display (`heim-shell.md`)
+  und dem Router-Abriss gibt es diese Route nicht mehr. Historischer Anker:
+  [`../specs/platform/router.md`](../specs/platform/router.md) (ENTFALLEN), ROU-20.
 - **PANEL-2** — `/controller/app-panel/<id>` liefert die Panel-Seite;
   `<id>` ist die Panel-Instanz-Identität (PANEL-8). Abweichung von URL-3
   (`/controller/<source>/<X>`). Quelle:
@@ -220,13 +220,14 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 19 | `/api/v1/hoerspiel/niclas/`    | Hörspiel-Buddy (Niclas)  | Hörspiel-Backend Niclas-Instanz (HSP-28a, RAT-17, URL-3a, T1347): gleiche API-Surface wie Paula und Neko. Upstream: xbuddy-hoerspiel-niclas (:5056, PORT-2). |
 | 20 | `/api/v1/hoerspiel/`           | Hörspiel-Buddy (Paula, Fallback) | Fallback ohne `<kind_id>`-Segment (z.B. `/api/v1/hoerspiel/themen` vor T4 #910). Übergangs-Provisorium — T4 #910 hebt diese Route auf kind_id-tragende Form. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
 | 21 | `/api/v1/kibuddy/`             | KI-Buddy            | KI-Buddy-Backend (KIBUDDY-24): Frage-Verarbeitung (`POST /api/v1/kibuddy/frage`), Audio-Cache-Replay (`GET /api/v1/kibuddy/audio/<id>.mp3`), TTS-Replay (`POST /api/v1/kibuddy/vorlesen`), Session-Reset (`POST /api/v1/kibuddy/reset`), Prompt (`GET\|PUT /api/v1/kibuddy/prompt`, KIBUDDY-15), Config (`GET\|PUT /api/v1/kibuddy/config`). Upstream: xbuddy-kibuddy (:5054, PORT-2). |
-| 22 | `/api/v1/displays/<id>/events` | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
-| 23 | `/display/`                    | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets unter `/display/_shared/` ein (URL-16): Per-Instanz-Assets wie `/display/_shared/icons/` (ARASAAC-Piktogramme, ROU-26, #135) und repo-servierte Assets wie `/display/_shared/design/` (Design-Tokens, ROU-30, #323) — kein eigener nginx-Block. |
-| 24 | `/controller/`                 | Router              | Controller-Aktionen (URL-3).                                              |
-| 25 | `/api/v1/panels/`              | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
-| 26 | `/api/v1/seiten`               | Seiten-Registry     | Seiten-/Adress-Registry (SREG): `GET /api/v1/seiten` = Inventar aller aufrufbaren Views. Upstream: xbuddy-seiten (:5042, PORT-2). |
-| 27 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
-| 28 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
+| 22 | `/display/_shared/icons/`      | Seiten-Registry     | ARASAAC-Piktogramme (ROU-26, RAT-31 E6f-B, #1586). Upstream: xbuddy-seiten (:5042, PORT-2). |
+| 23 | `/display/_shared/design/`     | Seiten-Registry     | Design-Tokens (ROU-30, RAT-31 E6f-A, #1582). Upstream: xbuddy-seiten (:5042, PORT-2). |
+| 24 | `/controller/app-panel/`       | Seiten-Registry     | App-Panel-Instanz-Views (SREG-17, RAT-31 E6b, #1564). Upstream: xbuddy-seiten (:5042, PORT-2). |
+| 25 | `/controller/_shared/`         | Seiten-Registry     | PWA-übergreifende Helper (ROU-23, RAT-31 E6f-A, #1582). Upstream: xbuddy-seiten (:5042, PORT-2). |
+| 26 | `/api/v1/panels/`              | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
+| 27 | `/api/v1/seiten`               | Seiten-Registry     | Seiten-/Adress-Registry (SREG): `GET /api/v1/seiten` = Inventar aller aufrufbaren Views. Upstream: xbuddy-seiten (:5042, PORT-2). |
+| 28 | `/api/v1/icons/suche`          | Seiten-Registry     | Stichwort-Suche über den Icon-Cache (ROU-31, RAT-31 E6f-B, #1586). Upstream: xbuddy-seiten (:5042, PORT-2). |
+| 29 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt). RAT-31 (#1568): die allgemeinen `/display/`-, `/controller/`-, `/api/v1/`-Router-Prefixe und der SSE-Stream `/api/v1/displays/<id>/events` (ROU-22) sind mit dem Router-Abriss entfallen. |
 
 Diese Tabelle ist die Quelle für (a) die nginx-Origin-Konfiguration in
 `deploy/nginx/xbuddy-origin.conf` und (b) Onboarding-Schritte, die Origin-Routing
@@ -235,7 +236,7 @@ laufen). Konsumenten dieser Tabelle: #85 (nginx-Origin-Conf: Familie-Upstream
 ergänzen), #60 (Familie anlegen agentisch — schreibt Familie in den Routing-Plan
 einer Instanz), #82 (Geräte-Profil im Onboarding — wählt aus dieser Tabelle die
 Prefixe, die auf der Instanz aktiv sind), #135 (Icon-Bibliothek: geteilte
-Display-Assets vom Router serviert, URL-16, ROU-26), #909 (zweite Hörspiel-Instanz Paula+Neko), #1347 (dritte Hörspiel-Instanz Niclas).
+Display-Assets von der Seiten-Registry serviert seit RAT-31 E6f-B/#1586, URL-16, ROU-26), #909 (zweite Hörspiel-Instanz Paula+Neko), #1347 (dritte Hörspiel-Instanz Niclas).
 
 Eine neue Komponente, die einen eigenen Prozess hinter der Origin betreibt,
 muss zuerst hier eine Zeile bekommen — dann nginx, dann Code. Reihenfolge
@@ -277,27 +278,29 @@ Bauregeln:
 - **read-only**: der Namensraum liefert Assets aus; er nimmt keine
   Schreib-Anfragen entgegen. HTTP-Methoden außer `GET`/`HEAD` werden
   abgelehnt.
-- **Zwei legitime Quell-Typen, vom Router serviert**: der **Router**
-  liefert die Assets aus — analog zur Controller-Helper-Auslieferung
-  `/controller/_shared/` (`router.md` ROU-23). Er läuft als User `buddy`
+- **Zwei legitime Quell-Typen, von der Seiten-Registry serviert**: seit
+  RAT-31 (E6f-A/B, #1582/#1586; Router abgerissen #1568) liefert der
+  **Seiten-Registry-Dienst** die Assets aus — analog zur Controller-Helper-
+  Auslieferung `/controller/_shared/` (ROU-23). Er läuft als User `buddy`
   und liest sowohl Per-Instanz-Pfade als auch In-Repo-Verzeichnisse,
   während ein statischer nginx-`alias` (nginx = `www-data`) an
   `0700`-Home-Permissions scheitern kann (#135). Für die Assets selbst
   sind zwei Quell-Typen erlaubt:
-  - **Per-Instanz** (außerhalb des Repos, instanzspezifisch): der Router
+  - **Per-Instanz** (außerhalb des Repos, instanzspezifisch): der Dienst
     liefert aus einem konfigurierbaren Per-Instanz-Verzeichnis aus.
     Beispiel: `/display/_shared/icons/` → ARASAAC-Piktogramme
     (ICONS-5, ROU-26, #135).
   - **Repo-serviert** (im Repo versioniert, bei allen Instanzen identisch):
-    der Router liefert direkt aus dem In-Repo-Verzeichnis aus — kein
+    der Dienst liefert direkt aus dem In-Repo-Verzeichnis aus — kein
     manueller Pro-Pi-Schritt, keine Divergenz. Beispiel:
     `/display/_shared/design/` → Design-Tokens (DTOK-1, ROU-30, #323).
 - **nicht buddy-gebunden**: ein Asset unter `/display/_shared/` gehört
   keinem einzelnen Buddy (für buddy-eigene Assets gilt URL-13).
-- **Routing über `/display/`**: weil der Router die Assets serviert,
-  fällt `/display/_shared/<sache>/` in der URL-14-Tabelle an den
-  allgemeinen `/display/`→Router-Eintrag — kein eigener statischer
-  nginx-Block, keine Reihenfolge-Sonderregel nötig.
+- **Routing über eigene spezifische Blöcke**: seit RAT-31 (#1568) gibt es
+  keinen allgemeinen `/display/`→Router-Fallback mehr; jeder `_shared`-Pfad
+  (`/display/_shared/icons/`, `/display/_shared/design/`) hat einen eigenen
+  nginx-`location`-Block auf die Seiten-Registry, VOR den Buddy-Prefixen
+  (URL-14, längster Prefix gewinnt).
 
 Instanzen: `/display/_shared/icons/` (ARASAAC-Piktogramme, Per-Instanz,
 ROU-26, #135) und `/display/_shared/design/` (Design-Tokens, repo-serviert,
@@ -359,9 +362,9 @@ Bauregeln:
   reserviert die Form, ohne sie vorzuschreiben.
 
 Spec-Heimat der Verhaltens-Begründung pro Endpunkt: die Komponenten-
-Spec (z. B. ROU-18 für Router-Admin-Reload, ROU-28 für panel-bezogene
-Admin-Kanten, ROU-29 für die `panels`-Schreib-Kante, PBE-10 für die
-`tiles-changed`-Naht, PLAN-34 für die Plan-Admin-Aktivitäten).
+Spec (z. B. PLAN-34 für die Plan-Admin-Aktivitäten, EC-21 für den
+eltern-chat-Reload). Die früheren Router-Admin-Kanten (ROU-18/28/29,
+PBE-10) sind mit RAT-31 (#1568) entfallen.
 `urls.md` trägt nur die Pfadform und den Origin-Vertrag.
 
 *Tickets:* —

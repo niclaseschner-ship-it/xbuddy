@@ -27,17 +27,21 @@ hinter dem Proxy — same-origin nach außen, getrennt nach innen.
 | `/display/_shared/icons/*` | statisch aus icon-root (`alias`, ICONS-5, #135) | — (Dateisystem) |
 | `/display/plan/*` | Plan-Buddy (`plan/main.py`) | `127.0.0.1:5020` |
 | `/api/v1/plan/*` | Plan-Buddy (`plan/main.py`) | `127.0.0.1:5020` |
-| `/display/*` | Router (`router/main.py`) | `127.0.0.1:5000` |
-| `/controller/*` | Router (`router/main.py`) | `127.0.0.1:5000` |
-| `/api/v1/*` | Router (`router/main.py`) | `127.0.0.1:5000` |
-| `/health` | Router (`router/main.py`) | `127.0.0.1:5000` |
-| `/version` | Router (`router/main.py`) | `127.0.0.1:5000` |
-| alles andere | — | `404` (URL-1: nur die vier Prefixe) |
+| `/display/_shared/design/*`, `/display/_shared/icons/*` | Seiten-Registry (`seiten/main.py`) | `127.0.0.1:5042` |
+| `/controller/app-panel/*`, `/controller/_shared/*` | Seiten-Registry (`seiten/main.py`) | `127.0.0.1:5042` |
+| `/api/v1/icons/suche`, `/api/v1/seiten*` | Seiten-Registry (`seiten/main.py`) | `127.0.0.1:5042` |
+| alles andere | — | `404` (URL-1) |
 
-Die spezifischen Plan-Prefixe stehen vor den allgemeinen Router-Prefixen;
+> **RAT-31 (#1568):** Der Router-Prozess (`router/main.py`, `127.0.0.1:5000`)
+> ist abgerissen. Es gibt keine allgemeinen `/display/`-, `/controller/`-,
+> `/api/v1/`-Fallbacks und keinen SSE-Stream `/api/v1/displays/<id>/events`
+> mehr — die verbleibenden Sub-Pfade sind alle spezifisch an Buddies bzw. die
+> Seiten-Registry geroutet. Die maßgebliche Routing-Tabelle steht in
+> `specs/../conventions/urls.md` (URL-14) und im Header von `xbuddy-origin.conf`.
+
+Die spezifischen Buddy-/Seiten-Prefixe stehen vor allgemeineren Prefixen;
 nginx wählt bei Prefix-`location` den längsten Treffer, sodass z. B.
-`/display/plan/woche` an den Plan-Buddy und `/display/wohnzimmer` an den
-Router geht.
+`/display/plan/woche` an den Plan-Buddy geht.
 
 `/display/_shared/icons/*` ist kein Upstream-Proxy, sondern wird per
 nginx-`alias` direkt aus der **icon-root** ausgeliefert (zentrale
@@ -125,9 +129,10 @@ des Repos.
 
    Das Skript braucht `sudo` (für `cp`, `nginx -t`, `systemctl reload`).
 
-4. **Komponenten-Prozesse** laufen lassen — Router auf `127.0.0.1:5000`,
-   Plan-Buddy auf `127.0.0.1:5020` (die Default-Ports; bei abweichender
-   Konfiguration die `upstream`-Blöcke der Config anpassen). Beide binden
+4. **Komponenten-Prozesse** laufen lassen — z. B. Seiten-Registry auf
+   `127.0.0.1:5042`, Plan-Buddy auf `127.0.0.1:5020` (die Default-Ports; bei
+   abweichender Konfiguration die `upstream`-Blöcke der Config anpassen). Der
+   frühere Router (`:5000`) ist mit RAT-31 (#1568) entfallen. Alle binden
    nur auf `127.0.0.1` — von außen ist allein die Origin auf `:8443`
    erreichbar.
 

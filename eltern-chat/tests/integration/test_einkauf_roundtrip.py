@@ -1,9 +1,11 @@
 """T712: Einkauf-Roundtrip-Test — EIN-1 … EIN-8, ESSEN-30, ICONS-7.
 
-Roundtrip gegen ECHTE essen.app und router.app via Flask-test_client.
+Roundtrip gegen ECHTE essen.app und seiten.app via Flask-test_client.
 Kein FakeEssenClient, kein FakeIconClient — die Skill-Funktion
 einkauf_hinzufuegen() spricht über EssenClient + IconClient mit den
-echten Flask-Instanzen.
+echten Flask-Instanzen. Die ICONS-7-Stichwort-Suche wird seit RAT-31
+(Router-Abriss, #1568) von der Seiten-Registry serviert (seiten/main.py
+`/api/v1/icons/suche`, RAT-31 E6f-B/#1586) — vormals router.app.
 
 Fünf Akzeptanz-Pfade (AC1 … AC5 des T712-Contracts):
   AC1 — frei-Item „Brot" → kein Katalog-Match → POST klasse=einkauf,
@@ -18,7 +20,7 @@ Fünf Akzeptanz-Pfade (AC1 … AC5 des T712-Contracts):
 Transport-Naht (CLIENT-1): Callable `(method, path, *, body, content_type)
 → (status, bytes)` leitet alle HTTP-Aufrufe an den Flask-test_client.
 
-AC6 — Zwei Flask-test_clients (essen.app + router.app); EssenClient /
+AC6 — Zwei Flask-test_clients (essen.app + seiten.app); EssenClient /
        IconClient erhalten jeweils ihre eigene Transport-Naht.
 AC7 — ruff + lint-imports clean; alle Tests grün.
 """
@@ -37,7 +39,7 @@ from skills.icon_client import IconClient
 # Pfad, und unser integration/conftest.py legt zusätzlich Repo-Root drauf.
 # Hier ist alles schon verfügbar.
 import essen.main as essen_main
-import router.main as router_main
+import seiten.main as seiten_main
 
 # ============================================================
 #  Hilfs-Konstanten
@@ -48,7 +50,7 @@ _APFEL_ITEM_ID  = "apfel"
 _APFEL_KATEGORIE = "obst_gemuese"
 
 # Eine beliebige bild_ref, die wir als ICONS-7-Ergebnis injizieren.
-_BROT_ICON_ID = 9990        # int (wie router liefert)
+_BROT_ICON_ID = 9990        # int (wie seiten/icons-suche liefert)
 
 # Pfad zur katalog.default.json im Repo.
 _REPO_ROOT = os.path.dirname(
@@ -96,11 +98,13 @@ def essen_app_fixture(tmp_path):
 
 
 @pytest.fixture
-def router_app_fixture(tmp_path):
-    """Baut die router.app mit einer temporären Icon-Root und gibt
+def seiten_app_fixture(tmp_path):
+    """Baut die seiten.app mit einer temporären Icon-Root und gibt
     (app, icon_root_path) zurück.
 
-    Damit ICONS-7 Treffer liefert, braucht der Router:
+    Seit RAT-31 E6f-B (#1586) serviert die Seiten-Registry die
+    ICONS-7-Stichwort-Suche (`/api/v1/icons/suche`, vormals Router).
+    Damit sie Treffer liefert, braucht sie:
       1. Eine `pictogram_cache.json` in icon_root_path.
       2. PNGs unter icon_root_path/arasaac/<id>.png.
 
@@ -110,23 +114,23 @@ def router_app_fixture(tmp_path):
     arasaac_dir = os.path.join(icon_root, "arasaac")
     os.makedirs(arasaac_dir, exist_ok=True)
 
-    # pictogram_cache.json: "brot" → _BROT_ICON_ID (int, wie der Router es erwartet)
+    # pictogram_cache.json: "brot" → _BROT_ICON_ID (int, wie seiten es erwartet)
     cache_data = {"brot": _BROT_ICON_ID}
     with open(os.path.join(icon_root, "pictogram_cache.json"), "w", encoding="utf-8") as f:
         json.dump(cache_data, f)
 
-    # PNG muss existieren, damit der Router es ausliefert.
+    # PNG muss existieren, damit seiten es ausliefert.
     png_path = os.path.join(arasaac_dir, "%d.png" % _BROT_ICON_ID)
     with open(png_path, "wb") as f:
         f.write(b"\x89PNG\r\n\x1a\n")  # minimal PNG-Header
 
-    # Router runtime_config auf icon_root setzen + Cache flushen.
-    router_main.runtime_config["icon_root"] = icon_root
-    router_main._pictogram_cache = {}
-    router_main._pictogram_cache_root = ""
+    # seiten runtime auf icon_root setzen + Pictogram-Cache flushen.
+    seiten_main.runtime["icon_root"] = icon_root
+    seiten_main._pictogram_cache = {}
+    seiten_main._pictogram_cache_root = ""
 
-    router_main.app.testing = True
-    return router_main.app, icon_root
+    seiten_main.app.testing = True
+    return seiten_main.app, icon_root
 
 
 # ============================================================
@@ -188,7 +192,7 @@ def _lade_katalog_default():
 #  AC1 — frei-Item „Brot": kein Katalog-Match, ICONS-7-Fallback
 # ============================================================
 
-def test_freitext_brot_routet_zu_einkauf(essen_app_fixture, router_app_fixture):
+def test_freitext_brot_routet_zu_einkauf(essen_app_fixture, seiten_app_fixture):
     """AC1 + AC3: frei-Item 'Brot' → keine Katalog-Übereinstimmung →
     ICONS-7-Fallback liefert bild_ref aus Router; POST hat klasse=einkauf,
     kategorie=sonstiges.
@@ -198,13 +202,13 @@ def test_freitext_brot_routet_zu_einkauf(essen_app_fixture, router_app_fixture):
     den reinen ICONS-7-Fallback-Pfad zu testen.
     """
     essen_app, _paths = essen_app_fixture
-    router_app, _icon_root = router_app_fixture
+    seiten_app, _icon_root = seiten_app_fixture
 
     essen_tc = essen_app.test_client()
-    router_tc = router_app.test_client()
+    seiten_tc = seiten_app.test_client()
 
     essen_transport = make_flask_transport(essen_tc)
-    icons_transport  = make_flask_transport(router_tc)
+    icons_transport  = make_flask_transport(seiten_tc)
 
     essen_client = EssenClient(origin_url="http://essen.test", transport=essen_transport)
     icon_client  = IconClient(origin_url="http://icons.test",  transport=icons_transport)
@@ -246,15 +250,15 @@ def test_freitext_brot_routet_zu_einkauf(essen_app_fixture, router_app_fixture):
 #  AC2 — Katalog-Item „Apfel": item_id + bild_ref aus Katalog
 # ============================================================
 
-def test_katalog_apfel_findet_item_id(essen_app_fixture, router_app_fixture):
+def test_katalog_apfel_findet_item_id(essen_app_fixture, seiten_app_fixture):
     """AC2: 'Apfel' → Katalog-Match → POST mit kategorie=obst_gemuese,
     item_id=apfel, bild_ref=2462 (aus katalog.default.json).
     """
     essen_app, _paths = essen_app_fixture
-    router_app, _icon_root = router_app_fixture
+    seiten_app, _icon_root = seiten_app_fixture
 
     essen_tc = essen_app.test_client()
-    router_tc = router_app.test_client()
+    seiten_tc = seiten_app.test_client()
 
     essen_client = EssenClient(
         origin_url="http://essen.test",
@@ -262,7 +266,7 @@ def test_katalog_apfel_findet_item_id(essen_app_fixture, router_app_fixture):
     )
     icon_client = IconClient(
         origin_url="http://icons.test",
-        transport=make_flask_transport(router_tc),
+        transport=make_flask_transport(seiten_tc),
     )
 
     katalog = _lade_katalog_default()
@@ -298,7 +302,7 @@ def test_katalog_apfel_findet_item_id(essen_app_fixture, router_app_fixture):
 #  AC3 — ICONS-7-Fallback: bild_ref aus ICONS-7-Antwort
 # ============================================================
 
-def test_icons7_fallback_brot_pikto(essen_app_fixture, router_app_fixture):
+def test_icons7_fallback_brot_pikto(essen_app_fixture, seiten_app_fixture):
     """AC3: ICONS-7-Fallback — 'Brot' ohne Katalog → bild_ref kommt aus dem
     Router-Cache (pictogram_cache.json: brot → _BROT_ICON_ID).
 
@@ -306,10 +310,10 @@ def test_icons7_fallback_brot_pikto(essen_app_fixture, router_app_fixture):
     damit der Skill direkt zu ICONS-7 springt.
     """
     essen_app, _paths = essen_app_fixture
-    router_app, _icon_root = router_app_fixture
+    seiten_app, _icon_root = seiten_app_fixture
 
     essen_tc = essen_app.test_client()
-    router_tc = router_app.test_client()
+    seiten_tc = seiten_app.test_client()
 
     essen_client = EssenClient(
         origin_url="http://essen.test",
@@ -317,7 +321,7 @@ def test_icons7_fallback_brot_pikto(essen_app_fixture, router_app_fixture):
     )
     icon_client = IconClient(
         origin_url="http://icons.test",
-        transport=make_flask_transport(router_tc),
+        transport=make_flask_transport(seiten_tc),
     )
 
     # Leerer Katalog → ICONS-7-Fallback
@@ -352,7 +356,7 @@ def test_icons7_fallback_brot_pikto(essen_app_fixture, router_app_fixture):
 #  AC4 — 413 Liste voll: Klartext, kein zweiter Write
 # ============================================================
 
-def test_liste_voll_413_klartext_quittung(essen_app_fixture, router_app_fixture):
+def test_liste_voll_413_klartext_quittung(essen_app_fixture, seiten_app_fixture):
     """AC4: Listen-Grenze (413) → Skill-Klartext mit Aufräumen-Hinweis;
     zweites Item wird nicht geschrieben.
 
@@ -360,7 +364,7 @@ def test_liste_voll_413_klartext_quittung(essen_app_fixture, router_app_fixture)
     (Grenze erreicht). Skill darf danach kein weiteres POST senden.
     """
     essen_app, _paths = essen_app_fixture
-    router_app, _icon_root = router_app_fixture
+    seiten_app, _icon_root = seiten_app_fixture
 
     # Grenze auf 1 setzen — ein offenes Item füllt die Liste.
     essen_main.configure(_paths, listen_grenze_einkauf=1)
@@ -368,7 +372,7 @@ def test_liste_voll_413_klartext_quittung(essen_app_fixture, router_app_fixture)
     essen_main.runtime["einkauf_snapshot"] = None
 
     essen_tc = essen_app.test_client()
-    router_tc = router_app.test_client()
+    seiten_tc = seiten_app.test_client()
 
     essen_client = EssenClient(
         origin_url="http://essen.test",
@@ -376,7 +380,7 @@ def test_liste_voll_413_klartext_quittung(essen_app_fixture, router_app_fixture)
     )
     icon_client = IconClient(
         origin_url="http://icons.test",
-        transport=make_flask_transport(router_tc),
+        transport=make_flask_transport(seiten_tc),
     )
 
     # Erstes Item: füllt die Liste (grenze=1)
@@ -425,7 +429,7 @@ def test_liste_voll_413_klartext_quittung(essen_app_fixture, router_app_fixture)
 #  AC5 — ESSEN-30 PATCH aus_gericht → 200
 # ============================================================
 
-def test_aus_gericht_patch(essen_app_fixture, router_app_fixture):
+def test_aus_gericht_patch(essen_app_fixture, seiten_app_fixture):
     """AC5 / ESSEN-30: PATCH wuensche/<id> mit aus_gericht → HTTP 200;
     Eintrag hat aus_gericht-Feld gesetzt.
 
@@ -436,13 +440,13 @@ def test_aus_gericht_patch(essen_app_fixture, router_app_fixture):
     4. Assert: 200, Eintrag in GET hat aus_gericht='Kartoffelsuppe'.
     """
     essen_app, _paths = essen_app_fixture
-    router_app, _icon_root = router_app_fixture
+    seiten_app, _icon_root = seiten_app_fixture
 
     essen_tc = essen_app.test_client()
-    router_tc = router_app.test_client()
+    seiten_tc = seiten_app.test_client()
 
     essen_transport = make_flask_transport(essen_tc)
-    icons_transport  = make_flask_transport(router_tc)
+    icons_transport  = make_flask_transport(seiten_tc)
 
     essen_client = EssenClient(
         origin_url="http://essen.test",

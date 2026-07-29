@@ -21,7 +21,6 @@ root_packages =
     panel
     photo
     plan
-    router
     routine
     seiten
     tools
@@ -33,7 +32,7 @@ name = MOD-1 Layer-Modell (eltern-chat -> Services -> tools)
 type = layers
 layers =
     eltern-chat
-    essen | familie | hoerspiel | kibuddy | photo | plan | router | routine | seiten | wetter
+    essen | familie | hoerspiel | kibuddy | photo | plan | routine | seiten | wetter
     tools
 containers =
 
@@ -47,7 +46,6 @@ modules =
     kibuddy
     photo
     plan
-    router
     routine
     seiten
     wetter
@@ -65,7 +63,6 @@ forbidden_modules =
     kibuddy
     photo
     plan
-    router
     routine
     seiten
     wetter
@@ -80,7 +77,6 @@ source_modules =
     kibuddy
     photo
     plan
-    router
     routine
     seiten
     tools
@@ -99,7 +95,6 @@ source_modules =
     kibuddy
     photo
     plan
-    router
     routine
     seiten
     wetter
