@@ -31,12 +31,13 @@ MODULE_MAP = {
     "plan": REPO_ROOT / "plan" / "main.py",
 }
 
-# T1389 / AUTH-7b: die Renderer-Routen (Shell/Display) leben nicht unter
-# /api/v1/<buddy>/, sondern in seiten (Shell) und router (Display/Controller/SSE).
+# T1389 / AUTH-7b: die Renderer-Routen (Shell/Controller/SSE) leben nicht unter
+# /api/v1/<buddy>/, sondern in seiten. RAT-31-Nachzug (E6f, #1568): der frühere
+# Display-Router (router/main.py) ist gelöscht — alle 7b-Fence-Routen werden jetzt
+# von seiten ausgeliefert und tragen dort den Dual-Gate (auth.md AUTH-7-Fence).
 # Eigener Resolver + eigene Modul-Map, damit der _buddy_of-Pfad unberührt bleibt.
 MODULE_MAP_7B = {
     "seiten": REPO_ROOT / "seiten" / "main.py",
-    "router": REPO_ROOT / "router" / "main.py",
 }
 
 # Der Auth-Decorator-Name (essen/main.py `require_init_data`; auth.md AUTH-9
@@ -198,14 +199,13 @@ def _auth7b_routes() -> list[str]:
     return pfade
 
 
-# Route→Modul-Resolver für 7b (auth.md AUTH-7 Bau-Notiz): /shell/* → seiten,
-# /display/<id> + /controller/* + /api/v1/displays/*/events → router.
+# Route→Modul-Resolver für 7b (RAT-31 E6f #1568, Router-Tod): ALLE 7b-Fence-Routen
+# (/shell/*, /controller/*) werden von seiten ausgeliefert. Der frühere
+# router/main.py (/display/<id> + SSE-Fanout) ist gelöscht; der SSE-Stream läuft
+# jetzt same-origin als /shell/<panel_id>/events auf seiten.
 def _module_of_7b(pfad: str) -> str | None:
-    if pfad.startswith("/shell/"):
+    if pfad.startswith(("/shell/", "/controller/")):
         return "seiten"
-    if pfad.startswith(("/display/", "/controller/")) \
-            or (pfad.startswith("/api/v1/displays/") and pfad.endswith("/events")):
-        return "router"
     return None
 
 
@@ -239,7 +239,8 @@ def _hat_dekorierte_route(dekoriert: list[dict], spec_pfad: str) -> bool:
 
 def test_jede_auth7b_route_traegt_den_dual_gate():
     """AUTH-9 (7b): jede AUTH-7-7b-Renderer-Route trägt require_dual_gate im
-    Source ihres Moduls (seiten Shell / router Display+Controller+SSE)."""
+    Source ihres Moduls (alle 7b-Routen auf seiten: Shell + Controller + SSE;
+    RAT-31 E6f #1568, Router-Tod)."""
     pfade = _auth7b_routes()
     assert pfade, "AUTH-7-7b-Fence leer geparst — auth.md-Format prüfen"
 
@@ -267,11 +268,12 @@ def test_jede_auth7b_route_traegt_den_dual_gate():
 
 
 def test_display_shared_bleibt_public_ungegatet():
-    """auth.md AUTH-7:512 — /display/_shared/* bleibt public (kein Dual-Gate),
-    sonst brechen die 7b-Views (Icons/Design-Tokens als Asset geladen)."""
-    dekoriert = _decorated_routes(MODULE_MAP_7B["router"])
+    """auth.md AUTH-7 7b-Public-Ausnahme — /display/_shared/* bleibt public (kein
+    Dual-Gate), sonst brechen die 7b-Views (Icons/Design-Tokens als Asset geladen).
+    RAT-31 E6f (#1568): seit dem Router-Tod von seiten ausgeliefert (seiten/main.py)."""
+    dekoriert = _decorated_routes(MODULE_MAP_7B["seiten"])
     shared = [r for r in dekoriert if r["path"].startswith("/display/_shared/")]
-    assert shared, "/display/_shared/*-Routen im Router nicht gefunden — Test stale?"
+    assert shared, "/display/_shared/*-Routen in seiten nicht gefunden — Test stale?"
     verletzer = [r["path"] for r in shared if r["auth"]]
     assert not verletzer, (
         "AUTH-7:512-Verletzung — /display/_shared/* trägt den Dual-Gate "
@@ -287,15 +289,16 @@ def test_display_shared_bleibt_public_ungegatet():
 # den Dual-Gate trägt — Asset-Unterrouten eingeschlossen.
 # auth.md AUTH-9 + AUTH-7 Bau-Notiz (7b-Coverage-Schärfung).
 
-_7B_ROUTER_PREFIXES = ("/display/", "/controller/")
+# RAT-31 E6f (#1568): der Display-Router ist tot; die 7b-Renderer-Präfixe
+# /controller/* und /shell/* leben auf seiten. /display/* trägt auf seiten nur
+# noch die public _shared-Assets (kein gegateter Content mehr).
+_7B_CONTROLLER_PREFIXES = ("/controller/",)
 _7B_SEITEN_PREFIXES = ("/shell/",)
 # 301-Redirect-Routen und _shared-Pfade sind explizit ausgenommen:
-#   /display/<id> ohne Slash → 301 (kein Gate, kein Content — AUTH-7:461 Anmerkung)
-#   /display/_shared/* → public (AUTH-4, AUTH-7:512)
+#   /display/_shared/* → public (AUTH-4, AUTH-7 7b-Public-Ausnahme)
 #   /controller/_shared/* → public (AUTH-4, ROU-23)
 _SHARED_EXEMPT = ("/_shared/",)
 _REDIRECT_EXEMPT = frozenset({
-    "/display/<display_id>",           # 301 → /display/<id>/
     "/controller/app-panel/<panel_id>",  # 301 → /controller/app-panel/<id>/
 })
 
@@ -328,19 +331,20 @@ def _is_7b_candidate(route: dict, prefixes: tuple) -> bool:
     return not any(exempt in path for exempt in _SHARED_EXEMPT)
 
 
-def test_alle_nichtshared_7b_router_routen_tragen_dual_gate():
-    """AUTH-9-Schärfung: ALLE GET-Routen unter /display/* und /controller/*
-    (außer _shared und 301-Redirect) müssen require_dual_gate tragen.
-    Asset-Unterrouten (/display/<id>/<asset>, /controller/<app>/<asset>,
-    /controller/app-panel/<id>/<asset>) sind eingeschlossen."""
-    dekoriert = _decorated_routes(MODULE_MAP_7B["router"])
-    kandidaten = [r for r in dekoriert if _is_7b_candidate(r, _7B_ROUTER_PREFIXES)]
+def test_alle_nichtshared_7b_controller_routen_tragen_dual_gate():
+    """AUTH-9-Schärfung: ALLE GET-Routen unter /controller/* (außer _shared)
+    müssen require_dual_gate tragen. Asset-Unterrouten
+    (/controller/app-panel/<id>/<asset>) sind eingeschlossen.
+    RAT-31 E6f (#1568): seit dem Router-Tod von seiten ausgeliefert; es gibt
+    keine eigenständigen Router-Routen mehr — die 7b-Fläche lebt auf seiten."""
+    dekoriert = _decorated_routes(MODULE_MAP_7B["seiten"])
+    kandidaten = [r for r in dekoriert if _is_7b_candidate(r, _7B_CONTROLLER_PREFIXES)]
     assert kandidaten, (
-        "Keine 7b-Router-Kandidaten gefunden — Präfix-Liste oder AST-Scan prüfen"
+        "Keine 7b-Controller-Kandidaten gefunden — Präfix-Liste oder AST-Scan prüfen"
     )
     fehlend = [r["path"] for r in kandidaten if not r["auth"]]
     assert not fehlend, (
-        "AUTH-9-Schärfung (router): diese 7b-Routen tragen require_dual_gate NICHT "
+        "AUTH-9-Schärfung (controller): diese 7b-Routen tragen require_dual_gate NICHT "
         "(Asset-Unterrouten müssen ebenfalls gegatet sein):\n  "
         + "\n  ".join(fehlend)
     )
