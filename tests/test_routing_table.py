@@ -32,6 +32,9 @@ ALLOWED_DRIFT_IN_NGINX = {
     "/display/_shared/icons/",  # nginx Z. 16: ARASAAC-Sub-Pfad von /display/;
                                 # fällt in der URL-14-Tabelle an den allgemeinen
                                 # /display/→Router-Eintrag (URL-16, ROU-26, #135).
+    "/api/v1/icons/suche",      # nginx: exakte Location (=) für Icon-Stichwort-Suche
+                                # (ROU-31, RAT-31 E6f-B, #1586). Seiten-owned Route,
+                                # kein eigener URL-14-Eintrag (spez. unter /api/v1/).
 }
 
 # Prefixe, die in der URL-14-Tabelle stehen, aber im nginx-Kommentar-Block
