@@ -121,22 +121,19 @@ durch Cookie, wenn AUTH-6 leer ist).
 #### AUTH-2.a — Pairing-Endpoint `/auth/pair`
 
 Der Endpoint `GET /auth/pair?token=<X>` prüft den 15-Minuten-Pairing-Token
-gegen den Bot-State (Token via Bot-Skill aus GAA-3.8 generiert), setzt bei
-Erfolg den Cookie `xbuddy_session` und redirected den Browser auf das
-verwendungs-abhängige Ziel:
+(HMAC mit dem Bot-Token, aus dem Bot-Skill GAA-3.8 generiert), setzt bei
+Erfolg den Cookie `xbuddy_session` und redirected **neutral** auf die
+Geräte-/URL-Übersichtsseite `/api/v1/seiten/uebersicht` (SREG-12).
 
-- **Display-Verwendung** → `/display/<id>` (der Display-Client der Anzeige).
-- **Nicht-Display-Geräte** (Laptop, Handy, Controller u. a.) → die
-  **Geräte-/URL-Übersichtsseite** `/api/v1/seiten/uebersicht` (SREG-12), die
-  alle verfügbaren Adressen auflistet. Von dort wählt der Nutzer selbst, was er
-  öffnen will. (Nic-Setzung 2026-07-27, #1372: ein Nicht-Display-Gerät hat kein
-  sinnvolles einzelnes `/display/<id>`-Ziel; die Übersicht ist der neutrale
-  Landepunkt.)
-
-Damit ist der bisher hartkodierte `/display/<id>`-Redirect für alle Verwendungen
-(seiten/main.py:783) aufgehoben: nur Display-Geräte landen auf `/display/<id>`,
-alle anderen auf der Übersichtsseite. Die frühere Formulierung
-„Mini-App-Start-URL für Controller-Verwendung" ist damit ersetzt.
+**RAT-31 E6c (Nic-Setzung 2026-07-29, #1565) — neutraler Redirect für alle,
+korrigiert die frühere verwendungs-abhängige Ableitung:** Der Endpoint liest
+**keine** geraete.json mehr (die Registry ist tot, `geraete.md` ENTFALLEN),
+schreibt **kein** `paired_at` und leitet **kein** verwendungs-abhängiges Ziel
+ab. Es gibt keinen rollen-tragenden Token. Alle Geräte landen auf der
+Übersicht; die Rolle (Kinder-Display vs. Elterngerät) wählt das Elternteil
+**beim PWA-Installieren am Gerät**, nicht der Server. Der frühere
+verwendungs-abhängige `/display/<id>`-Redirect (Nic-Setzung 2026-07-27, #1372)
+ist damit aufgehoben.
 
 Bei ungültigem oder abgelaufenem Token antwortet der Endpoint `400` mit
 einer Anweisung, einen neuen Pairing-Link im Bot anzufordern.
@@ -275,7 +272,7 @@ symmetrisch. Es gibt zwei Kanten:
 - **READ-Routen (GET, idempotent, keine Zustands-Änderung):** dürfen eine
   **Observe/Log-only-Grace** durchlaufen. In dieser Phase prüft der Decorator
   die Identitätsquelle (AUTH-2), **loggt** das Ergebnis (valide Quelle
-  vorhanden? `paired_at` gesetzt?), gibt aber **weiter `200` zurück** —
+  vorhanden?), gibt aber **weiter `200` zurück** —
   kein `401`. Sinn: der Rollout beobachtet an echten Requests, ob die
   gepairten Geräte tatsächlich die Cookie/tma-Quelle mitschicken, **bevor**
   er hart zumacht und ein still fehlgepairtes Gerät aussperrt.
@@ -289,10 +286,12 @@ symmetrisch. Es gibt zwei Kanten:
   es in keiner Grace-Phase.
 
 **Flip-Gate (Observe → Hard) je READ-Route:** die Route wechselt von
-Observe auf Hart, wenn (a) die anvisierten Geräte einen `paired_at`-Zeitstempel
-tragen (das Pairing hat stattgefunden) **und** (b) das Observe-Log über ein
-Beobachtungsfenster **keine** valide-Quelle-fehlt-Treffer mehr für erwartete
-Geräte zeigt (sauberes Log). Der Flip ist eine **Zwei-Wege-Tür** pro Route
+Observe auf Hart, wenn das Observe-Log über ein Beobachtungsfenster **keine**
+valide-Quelle-fehlt-Treffer mehr für erwartete Geräte zeigt (sauberes Log).
+(RAT-31 E6c, #1565: das frühere Zusatzkriterium „anvisierte Geräte tragen
+einen `paired_at`-Zeitstempel" entfällt — die geraete-Registry ist tot, es
+gibt kein `paired_at` mehr; das saubere Observe-Log ist der alleinige
+Flip-Beleg.) Der Flip ist eine **Zwei-Wege-Tür** pro Route
 (Decorator-Modus umschalten, sofort zurückrollbar) — nicht eine
 Alles-oder-nichts-Schleuse.
 
@@ -585,8 +584,7 @@ Antwortet eine AUTH-3-Route mit `401`, rendert das Backend eine HTML-Seite
 mit Anweisung an den User, nicht einen rohen Status-Code. Die Seite enthält
 mindestens:
 
-- Geräte-Name (aus `geraete.json`, falls die Quell-URL eine `display_id`
-  trägt; sonst neutraler Hinweis).
+- Geräte-Name (neutraler Hinweis; kein geraete.json-Lookup mehr — RAT-31 E6c).
 - Anweisung: „Dieses Gerät muss neu verbunden werden. Frag den
   Familien-Chatbot einfach nach einem neuen Cookie für dein Gerät — dann
   geht es wieder. Oder pair im Chat ein neues Gerät."
@@ -689,9 +687,10 @@ Kind-Tablet) durchläuft **exakt einen** Auth-Pfad:
 2. **Link auf dem Ziel-Gerät öffnen** — Browser öffnet den Link; der
    `/auth/pair`-Endpoint (AUTH-2.a) prüft das Token, setzt den
    `xbuddy_session`-Cookie (HttpOnly, Secure, SameSite=Lax, 90 Tage
-   rolling, AUTH-2) und leitet auf das verwendungs-abhängige Ziel weiter
-   (Display → `/display/<id>`; Nicht-Display → Übersichtsseite, Nic-Setzung
-   2026-07-27, #1372).
+   rolling, AUTH-2) und leitet **neutral** auf die Übersichtsseite
+   `/api/v1/seiten/uebersicht` weiter (RAT-31 E6c, #1565 — kein
+   verwendungs-abhängiges Ziel mehr, die Rolle wählt die Familie beim
+   PWA-Install).
 3. **Danach: Cookie ist die Identität.** Jeder folgende Zugriff auf
    AUTH-3-Routen oder 7b-Renderer-Routen verwendet den `xbuddy_session`-Cookie
    (RAT-32 Cookie-only-hart); `tma`/`initData` bleibt parallel gültig für

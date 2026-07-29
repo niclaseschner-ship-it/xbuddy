@@ -480,8 +480,10 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     """
     # RAT-31 E1 (#1470): Unter Cookie-only-hart (RAT-32) sind die
     # Onboarding-Skills »Panel anlegen« (PanelAnlegenTask) und »CA verteilen«
-    # (CaVerteilungTask) entfallen. Die Parameter `ca_pem_path`, `cav_call_hook`,
-    # `panel_origin_url` und `paa_sessions` bleiben in der Signatur (vestigial),
+    # (CaVerteilungTask) entfallen. RAT-31 E6c (#1565): die geraete-Registry
+    # stirbt — »Gerät koppeln« mintet nur noch einen Pairing-Link. Die Parameter
+    # `ca_pem_path`, `cav_call_hook`, `panel_origin_url`, `paa_sessions`,
+    # `geraete_origin_url` und `gaa_sessions` bleiben in der Signatur (vestigial),
     # damit die ~40 build_catalog-Caller + die Rückwärtskompat-Tests
     # `build_catalog(tg, ca_pem_path)` unberührt bleiben — sie werden hier nicht
     # mehr konsumiert.
@@ -494,35 +496,32 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             tg, familie_origin_url, faa_sessions,
             family_group_chat_id_getter))
 
-    if geraete_origin_url is not None and gaa_sessions is not None \
+    # RAT-31 E6c: »Gerät koppeln« mintet nur noch einen Pairing-Link (keine
+    # geraete-Registry mehr). AND-Guard: braucht pairing_bot_token
+    # (HMAC-Sign-Key) + pairing_origin (Funnel-FQDN, /auth/pair + PWA) +
+    # family_group_chat_id_getter (GAA-2-Berechtigung). Fehlt einer, entfällt
+    # die Aufgabe still.
+    if pairing_bot_token and pairing_origin \
             and family_group_chat_id_getter is not None:
         from skills.geraet_anlegen_task import GeraetAnlegenTask
         catalog.register(GeraetAnlegenTask(
-            tg, geraete_origin_url, gaa_sessions,
-            family_group_chat_id_getter,
-            display_url_origin=display_url_origin,
-            # GAA-3.8 / auth.md AUTH-2.a (T948): Pairing-Link-Zustellung.
-            # bot_token = HMAC-Sign-Key; origin = Funnel-FQDN (/auth/pair + PWA).
-            # Fehlt einer, entfällt der Pairing-Schritt still (E-GAA-5-Agnostik).
+            tg, family_group_chat_id_getter,
             pairing_bot_token=pairing_bot_token,
             pairing_origin=pairing_origin))
 
-    # CNS-2 / #1401: »Cookie nachschicken« — frischer Pairing-Link für ein
-    # bestehendes Gerät, per DM, NUR für Erwachsene der Familie. AND-Guard:
-    # braucht pairing_bot_token (HMAC-Sign-Key) + pairing_origin (Funnel-FQDN)
-    # + geraete_origin_url (Lookup) + familie_origin_url (Erwachsenen-Gate).
-    # Fehlt einer, entfällt die Aufgabe still (kein halb-verdrahteter Credential-
-    # Pfad).
+    # CNS-2 / #1401: »Cookie nachschicken« — frischer Pairing-Link auf Nachfrage,
+    # per DM, NUR für Erwachsene der Familie. RAT-31 E6c: keine Registry mehr.
+    # AND-Guard: braucht pairing_bot_token (HMAC-Sign-Key) + pairing_origin
+    # (Funnel-FQDN) + familie_origin_url (Erwachsenen-Gate). Fehlt einer,
+    # entfällt die Aufgabe still (kein halb-verdrahteter Credential-Pfad).
     if pairing_bot_token and pairing_origin \
-            and geraete_origin_url is not None \
             and familie_origin_url is not None:
         from skills.cookie_nachschicken_task import CookieNachschickenTask
         catalog.register(CookieNachschickenTask(
             tg,
             pairing_bot_token=pairing_bot_token,
             pairing_origin=pairing_origin,
-            familie_origin_url=familie_origin_url,
-            geraete_origin_url=geraete_origin_url))
+            familie_origin_url=familie_origin_url))
 
     if zd_store_getter is not None and kav_sessions is not None \
             and family_group_chat_id_getter is not None:
@@ -911,8 +910,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     #   POST /api/v1/hoerspiel/folgen-vorschlag HFE-3,
     #   POST /api/v1/hoerspiel/alben HFE-5).
     # family_group_chat_id_getter: Live-Berechtigung (HFE-2, EC-2).
-    # display_url_origin: Heim-Origin für den Album-Display-Link (HFE-5-Bubble);
-    #   analog display_url_origin in GeraetAnlegenTask (GAA-3.7). Leer → kein Link.
+    # display_url_origin: Heim-Origin für den Album-Display-Link (HFE-5-Bubble).
+    #   Leer → kein Link.
     if hoerspiel_url_origin is not None and family_group_chat_id_getter is not None:
         from skills.hoerspiel_client import HoerspielClient
         from skills.hoerspiel_folge_erzeugen_task import HoerspielFolgeErzeugenTask

@@ -1,7 +1,7 @@
 """Tests für die geteilte SVC-6-Diagnose-Naht (tools/service_diagnostics.py).
 
-Deckt die EINE `/version`-Definition parametrisiert über alle 12 HTTP-Services
-ab (AC2, löst PW-12-klein): Router + 11 Buddy-Services registrieren dieselbe
+Deckt die EINE `/version`-Definition parametrisiert über alle 11 HTTP-Services
+ab (AC2, löst PW-12-klein): Router + 10 Buddy-Services registrieren dieselbe
 Naht, das Verhalten ist identisch (file-based, kein `git rev-parse`).
 
 Lauf: python3 -m pytest tools/tests/test_service_diagnostics.py -v
@@ -54,16 +54,15 @@ def test_register_version_auf_frischer_app(monkeypatch, tmp_path):
     assert resp.get_json() == {"version": "abc123"}
 
 
-# ── parametrisiert über alle 12 Services (AC2) ─────────────────────────────
+# ── parametrisiert über alle 11 Services (AC2) ─────────────────────────────
 
-# (Import-Pfad, App-Attribut) je Service. Router + 11 Buddy-Services teilen
+# (Import-Pfad, App-Attribut) je Service. Router + 10 Buddy-Services teilen
 # dieselbe Naht — genau die Duplikat-Menge, die T1311 eingeschmolzen hat.
 _SERVICE_MODULES = [
     "router.main",
     "familie.main",
     "plan.main",
     "wetter.main",
-    "geraete.main",
     "panel.main",
     "seiten.main",
     "routine.main",

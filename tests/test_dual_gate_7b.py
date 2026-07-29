@@ -15,8 +15,8 @@ Achsen (auth.md AUTH-7 7b Cookie-only-hart + AUTH-3.a Observe-Leiter, RAT-32):
   - /display/_shared/* bleibt public (AUTH-7:512, kein Gate).
   - SSE-Stream im Pass-Fall bleibt Streaming-Response (kein Buffering).
 
-Plus die pure auth_gate-Lib (CIDR/Cookie) direkt und der paired_at-Write-Proof
-(entry_path_probe write_verification).
+Plus die pure auth_gate-Lib (CIDR/Cookie) direkt und die /auth/pair E6c-Probe
+(RAT-31 E6c: kein geraete-Registry-Write mehr, neutraler Übersichts-Redirect).
 
 Lauf: python3 -m pytest tests/test_dual_gate_7b.py -q
 """
@@ -470,35 +470,31 @@ def test_shell_icon_maskable_public_ohne_quelle_gibt_200(seiten_client):
 
 
 # ---------------------------------------------------------------------------
-# entry_path_probe — paired_at-Write-Proof (auth.md AUTH-2.a / OD3)
+# entry_path_probe — auth/pair E6c (auth.md AUTH-2.a / RAT-31 E6c)
 # ---------------------------------------------------------------------------
 
 
-def test_paired_at_write_proof(tmp_path):
-    """write_verification: /auth/pair stempelt paired_at in den GERAETE_REGISTRY-
-    Store (GER-3), before/after des tmp-Files zeigen den Stempel."""
-    geraete_path = str(tmp_path / "geraete.json")
-    before = {"geraete": [{"id": DISPLAY_ID, "name": "Wohnzimmer",
-                           "status": "aktiv", "verwendung": "display"}]}
-    with open(geraete_path, "w", encoding="utf-8") as f:
-        json.dump(before, f)
+def test_auth_pair_e6c_kein_geraete_write(tmp_path):
+    """RAT-31 E6c: /auth/pair schreibt KEIN paired_at mehr (kein geraete.json-Write).
 
-    # BEFORE: kein paired_at.
-    with open(geraete_path, encoding="utf-8") as f:
-        assert "paired_at" not in json.load(f)["geraete"][0]
-
-    seiten_main.configure(bot_token=BOT_TOKEN, geraete_registry_path=geraete_path)
+    Verifiziert den E6c-Zielzustand: nach erfolgreichem Pairing zeigt der
+    Redirect auf /api/v1/seiten/uebersicht (neutral, gerätelos), und es gibt
+    keinen geraete.json-Dateischreibvorgang. Das Fehlen von
+    `geraete_registry_path` in configure() belegt, dass die Naht entfernt
+    wurde (RAT-31 E6c, geraete/ gelöscht #1565).
+    """
+    seiten_main.configure(bot_token=BOT_TOKEN, router_url="http://router.test:5000")
     client = seiten_main.app.test_client()
     token = sc.sign_pairing(DISPLAY_ID, BOT_TOKEN)
     resp = client.get("/auth/pair?token=%s" % token)
 
-    # ESC-3: Redirect trägt Trailing-Slash.
+    # RAT-31 E6c: neutraler Redirect auf die Übersicht (SREG-12), kein /display/<id>/.
     assert resp.status_code == 302
-    assert resp.headers["Location"].endswith("/display/%s/" % DISPLAY_ID)
-
-    # AFTER: paired_at gestempelt, bestehende Felder erhalten (additiv).
-    with open(geraete_path, encoding="utf-8") as f:
-        eintrag = json.load(f)["geraete"][0]
-    assert eintrag.get("paired_at"), "paired_at nicht in den Store geschrieben"
-    assert "T" in eintrag["paired_at"]  # ISO-8601
-    assert eintrag["name"] == "Wohnzimmer"  # additiv, kein Blind-Overwrite
+    location = resp.headers["Location"]
+    assert "/api/v1/seiten/uebersicht" in location, (
+        "E6c: Redirect muss auf /api/v1/seiten/uebersicht zeigen, got: %s" % location
+    )
+    # Kein Gerätepfad im Redirect (geraete.json entfallen).
+    assert "/display/" not in location, (
+        "E6c: Redirect darf nicht mehr auf /display/<id>/ zeigen (geraete/ gelöscht)"
+    )

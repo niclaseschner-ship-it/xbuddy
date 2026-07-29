@@ -8,7 +8,7 @@
   "ca_pem_path": "../tools/ca/out/rootCA.pem",
   "_familie_origin_url": "FAA-12 / Auftrag #215 — Origin der Familien-Komponente (PORT-2 5010). Skill schreibt/liest Personen ueber HTTP statt direkt im Datei-System.",
   "familie_origin_url": "http://127.0.0.1:5010",
-  "_geraete_origin_url": "GAA-5 / Auftrag #215 — Origin der Geraete-Komponente (PORT-2 5040). Skill schreibt Geraete ueber HTTP statt direkt im Datei-System.",
+  "_geraete_origin_url": "Vestigial seit RAT-31 E6c (#1565) — die geraete-Registry stirbt, »Gerät koppeln« mintet nur noch einen Pairing-Link. Feld bleibt strukturell erhalten (Rueckwaerts-Kompat der Config).",
   "geraete_origin_url": "http://127.0.0.1:5040",
   "_plan_origin_url": "EC-21 / Auftrag #215 — Origin der Plan-Buddy-Reload-Schnittstelle (PORT-2 5020). Nach KAV-Aenderung ruft der Bot hier den admin/reload-Endpunkt (PR #151).",
   "plan_origin_url": "http://127.0.0.1:5020",
