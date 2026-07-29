@@ -515,7 +515,6 @@ Konsumenten dieselben Renderer-Routen ansprechen:
 
    ```
    /shell/<panel_id>                             (GET, HTML-Shell)
-   /display/<display_id>                          (GET, instanz-spezifischer Display-Client)
    /controller/*                                  (Panel-Controller-Apps)
    /api/v1/displays/<display_id>/events           (SSE-Event-Stream)
    ```
