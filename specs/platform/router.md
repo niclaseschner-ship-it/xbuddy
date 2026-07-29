@@ -293,44 +293,6 @@ Pfad unter `/api/v1/` (URL-4) — Diagnose zählt zum Hub-Backend.
 
 *Tickets:* #5, #24
 
-### ROU-20 — GET /display/&lt;id&gt; — Auslieferung des Display-Clients
-`GET /display/<id>/` (Trailing-Slash-Form) liefert den Display-Client (siehe
-[`display-client.md`](display-client.md)). Der Router ist hier nur
-Auslieferungsstelle (E-DC-3); Verhalten und Eigenschaften des Clients
-legt `display-client.md` fest. Die `<id>` aus dem Pfad ist die
-Identität, mit der der Client arbeitet (DC-1).
-
-Der Endpunkt liefert den Client **unabhängig davon, ob die `<id>` dem
-Router bekannt ist** — ob ein Display existiert, klärt der Client beim
-Verbinden mit seinem Zustands-Stream (ROU-22); bei unbekannter `<id>`
-zeigt er einen Einrichtungs-Hinweis (DC-8). So wird eine fehlerhafte
-Einrichtung am Gerät selbst sichtbar, statt mit einer nackten
-404-Antwort zu enden.
-
-Der Pfad sitzt unter dem erlaubten `/display/`-Prefix (URL-1), weicht
-aber bewusst von der `/display/<buddy>/<view>`-Form (URL-2) ab: er
-adressiert ein Display über seine `id`, nicht über Buddy/View.
-Dokumentierte Abweichung — zentral als Teil der Übersicht aller
-URL-3a-Abweichungen in
-[`../../conventions/urls.md`](../../conventions/urls.md) (URL-3a) aufgelistet.
-
-**Trailing-Slash und 301-Redirect** (analog app-panel-Pattern, Refs #516):
-
-| Pfad | Antwort |
-|---|---|
-| `GET /display/<id>/` | 200, `text/html`, Display-Client mit inline gezogenem `displib.js` |
-| `GET /display/<id>` (no-slash) | 301 → `GET /display/<id>/` |
-
-Der 301-Redirect auf die Slash-Form ist notwendig, weil `index.html` relative
-Pfade enthält (`./manifest.json`, `./icon-*.png`). Ohne Trailing-Slash resolvt
-der Browser `./ ` auf den Parent-Pfad (`/display/`) statt auf
-`/display/<id>/` — alle Asset-Requests landen auf 404 und die PWA-Installation
-(DC-11) schlägt fehl. Der Redirect entspricht dem HTTP-Standard für
-Directory-vs-File-Disambiguation und ist identisch zum app-panel-Pattern
-(Refs #128).
-
-*Tickets:* #5, #24, #30, #516
-
 ### ROU-21 — Direkt-Push an Display via CDP
 
 > **Abgelöst (#30), entfernt (#102).** Die Display-Benachrichtigung läuft
@@ -608,36 +570,6 @@ Die icon-root ist konfigurierbar (`icon_root`, ROU-15); Default zeigt auf
 kein eigener statischer nginx-Block mehr.
 
 *Tickets:* #135
-
-### ROU-33 — GET /display/&lt;id&gt;/&lt;asset&gt; — Auslieferung der Display-Client-Assets
-
-`GET /display/<display_id>/<asset>` liefert statische Assets des Display-Clients
-(PWA-Manifest und Icons) aus dem `display-client/`-Verzeichnis aus. Nötig, weil
-`index.html` (ROU-20) relative Pfade enthält (`./manifest.json`, `./icon-*.png`),
-die der Browser relativ zur id-URL auflöst — ohne diese Route laufen alle
-Asset-Anfragen auf 404 und DC-11 (installierbare PWA) ist nicht erfüllbar.
-
-Auslieferung analog ROU-23 und ROU-26: `send_from_directory` mit explizitem
-Content-Type (`image/png` für `*.png`, `application/manifest+json` für
-`manifest.json`) und Defense-in-Depth-Path-Traversal-Schutz (`realpath`-Check
-gegen das Wurzelverzeichnis `display-client/`).
-
-Acceptance-Kriterien:
-
-| Pfad | Antwort |
-|---|---|
-| `GET /display/<id>/manifest.json` | 200, `application/manifest+json`, `icons[]` ≥ 3 Einträge, ≥ 1 mit `purpose: maskable` |
-| `GET /display/<id>/icon-192.png` | 200, `image/png` |
-| `GET /display/<id>/icon-512.png` | 200, `image/png` |
-| `GET /display/<id>/icon-maskable-512.png` | 200, `image/png` |
-| Path-Traversal (z. B. `/display/<id>/../../router/main.py`) | 404 — kein Dateizugriff jenseits `display-client/` |
-| Nicht existierendes Asset | 404 |
-
-Die Eltern-Route `GET /display/<id>/` (ROU-20) bleibt funktional — Flask
-differenziert beide Routen anhand des zweiten Pfadsegments. `GET /display/<id>`
-(no-slash) gibt 301 → `/display/<id>/` (ROU-20-Erweiterung, Refs #516).
-
-*Tickets:* #415
 
 ### ROU-31 — GET /api/v1/icons/suche — Stichwort-Suche über den lokalen Icon-Cache
 

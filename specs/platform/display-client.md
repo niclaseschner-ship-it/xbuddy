@@ -1,5 +1,14 @@
 # Display-Client — Spec     (ID-Präfix: DC)
 
+> ⚠️ **ENTFALLEN durch RAT-31 E6d (#1566), 2026-07-29.**
+> `display-client/` ist gelöscht. Es gibt keinen Fremdgerät-Renderer mehr —
+> das Heim-Display ist fest ein Gerät (Heim-Shell PWA, `heim-shell.md`).
+> Die Router-Routen ROU-20 und ROU-33 (Client-Serving) sind entfernt.
+> Diese Spec bleibt als historischer Anker erhalten.
+> Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`, Epic #1339.
+>
+> Status: V1 (ENTFALLEN) · Refs #30 #1566
+
 > Status: V1-MVP · Refs #30
 
 Der Display-Client ist die Komponente, die auf einem Display-Gerät der Familie
