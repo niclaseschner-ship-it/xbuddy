@@ -187,9 +187,10 @@ def test_ECP_1_adapter_map_is_single_source_of_truth():
 
     assert _ADAPTER_BRAND_VENDOR, "Adapter-Map darf nicht leer sein"
     for adapter_name, vendor in _ADAPTER_BRAND_VENDOR.items():
-        assert isinstance(vendor, str) and vendor, (
-            "ECP-1: Brand-Vendor-Slug für %r muss nicht-leerer String sein"
-            % adapter_name)
+        assert isinstance(vendor, str), (
+            "ECP-1: Brand-Vendor-Slug für %r muss ein String sein" % adapter_name)
+        assert vendor, (
+            "ECP-1: Brand-Vendor-Slug für %r darf nicht leer sein" % adapter_name)
         # Abgeleiteter Slug muss über den Helper konsistent sein.
         assert vendor_slug_for_adapter(adapter_name) == vendor
         slot = zd_name_provider_api_key(adapter_name)
