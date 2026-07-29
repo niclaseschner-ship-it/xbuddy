@@ -1,23 +1,22 @@
-"""Tests fuer Heim-Shell (SHELL-1..10) — GET /shell/<panel_id>.
+"""Tests fuer Heim-Shell (SHELL-1..11) — GET /shell/<panel_id>.
 
-Test-Anker: shell1/2/3/5/9/10 (specs/platform/heim-shell.md, Refs #1182).
+Test-Anker: shell1/3/4/5/9/10/11 (specs/platform/heim-shell.md, Refs #1182).
+RAT-31: SHELL-2 (display_id per Router-Lookup) obsolet — entfernt (#1588).
 Lauf: python3 -m pytest seiten/tests/test_heim_shell.py -q
 
 Teststruktur:
   test_shell1_route_html           — SHELL-1: Route liefert 200 + text/html
-  test_shell2_lookup_display_id    — SHELL-2: display_id per Router-Lookup (nicht Reverse-Inferenz)
-  test_shell2_lookup_real_url      — SHELL-2: _lookup_display_id baut korrekte ROU-32-URL
-  test_shell3_zwei_iframes_src     — SHELL-3: zwei Iframes (Panel-Nav + Buddy-View) mit korrekten srcs
-  test_shell3_kein_iframe_ohne_display — SHELL-3: Fehler-Meldung + kein Display-Iframe bei None
+  test_shell3_zwei_iframes         — SHELL-3: zwei Iframes (Panel-Nav-Rail + Buddy-Pane)
+  test_shell4_pane_bindet_seiten_sse — SHELL-4: rechtes Pane hat eigene EventSource
   test_shell5_kein_displib_import  — SHELL-5: kein displib-Import in Shell-HTML
   test_shell9_keine_hardcode_ids   — SHELL-9: keine Pilot-IDs im Template/Route-Code
-  test_shell10_url_in_uebersicht   — SHELL-10: Shell-URL in GET /api/v1/seiten/uebersicht
+  test_shell10_manifest_route      — SHELL-10: PWA-Manifest je panel_id
+  test_shell11_*                   — SHELL-11: Shell-Vollbild-Besitz + embedded-Guards
 """
 
 import json
 import os
 import sys
-import urllib.request
 
 import pytest
 
@@ -67,12 +66,9 @@ def _bot_token_konfiguriert():
 
 @pytest.fixture
 def client(monkeypatch):
-    """Cookie-authentifizierter Testclient mit gemocktem display_id-Lookup
-    (SHELL-2) und Origin-Config. RAT-32: /shell/ ist Cookie-only-hart."""
-    monkeypatch.setattr(
-        seiten_main, "_lookup_display_id",
-        lambda pid: DISPLAY_ID if pid == PANEL_ID else None,
-    )
+    """Cookie-authentifizierter Testclient mit Origin-Config.
+    RAT-32: /shell/ ist Cookie-only-hart.
+    RAT-31: kein display_id-Lookup-Mock mehr (SHELL-2 obsolet)."""
     seiten_main.configure(heim_origin="http://heim.test", tailscale_origin="https://tail.test")
     return _auth_client()
 
@@ -112,48 +108,6 @@ def test_shell4_pane_bindet_seiten_sse(client):
     assert "/display/" + DISPLAY_ID + "/" not in body, (
         "Rechtes Pane darf keinen statischen /display/<display_id>/-Iframe mehr tragen"
     )
-
-
-def test_shell2_lookup_real_url(monkeypatch):
-    """SHELL-2: _lookup_display_id baut korrekte ROU-32-URL (app-panel:<panel_id>)."""
-    fetched = []
-
-    class _FakeResp:
-        status = 200
-        def read(self):
-            return json.dumps({"display_id": DISPLAY_ID}).encode()
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            pass
-
-    def fake_urlopen(url, timeout=None):
-        fetched.append(url)
-        return _FakeResp()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    seiten_main.configure(router_url="http://router.test:5000")
-    result = seiten_main._lookup_display_id(PANEL_ID)
-    assert result == DISPLAY_ID, "Lookup muss display_id aus JSON-Antwort zurueckgeben"
-    assert len(fetched) == 1, "Genau ein HTTP-Aufruf erwartet"
-    assert "app-panel:" + PANEL_ID in fetched[0], "URL muss source_id app-panel:<panel_id> enthalten"
-    assert "router.test:5000" in fetched[0], "URL muss router_url-Origin enthalten"
-
-
-def test_shell2_lookup_gibt_none_bei_404(monkeypatch):
-    """SHELL-2: _lookup_display_id liefert None bei 404 (unbekanntes Panel)."""
-    class _NotFound:
-        status = 404
-        def read(self):
-            return b'{"error": "unknown source_id"}'
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            pass
-
-    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=None: _NotFound())
-    result = seiten_main._lookup_display_id("gibts-nicht")
-    assert result is None
 
 
 # ============================================================

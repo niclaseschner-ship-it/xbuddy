@@ -22,10 +22,9 @@
 
 Die Heim-Shell ist ein **dünner Split-Layout-Container**, der auf **einem**
 Familien-Gerät die heute getrennten Flächen co-loziert: **Panel-Kachel-Nav
-links, geroutete Buddy-View rechts**. Sie ist **kein neuer Routing-Kern** —
-sie bettet zwei bestehende, vom Router ausgelieferte Flächen als Iframes ein
-und überlässt ihnen ihre eigene Mechanik. Tile-Tap läuft unverändert
-`tile_selected` (PANEL-6) → Router → SSE (ROU-22) → Render im Display-Client.
+links, gerouteter Buddy-View rechts**. Sie ist **kein neuer Routing-Kern** —
+der Live-Refresh läuft same-origin über `seiten/` (SHELL-4, RAT-31 E2); der
+frühere Router-Fanout und der `display_id`-Lookup (SHELL-2) sind entfernt.
 
 **V1-Pilot-Scope:** EIN Testgerät (Paula-Tablet `tablet-tablet-paula-01`,
 1920×1200), **LAN-only** (kein Funnel). Einstieg über `panel_id`; `display_id`
@@ -50,20 +49,19 @@ stiller Fallback). Verortung: `seiten/`-Service (`seiten/static/` +
 `platform.js`); nginx routet `/shell/` zum seiten-Service.
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell1_route_html
 
-### SHELL-2 — `display_id` per Router-Lookup, keine Reverse-Inferenz
-Die Shell ermittelt das Ziel-Display **ausschließlich** über den
-Panel→Display-Lookup `GET /api/v1/router/panels/app-panel:<panel_id>` (ROU-32,
-`router/main.py:671`) und nimmt `display_id` aus dessen Antwort. Es gibt
-**keine** Reverse-Inferenz „ein Display → genau ein Panel" (mehrere Panels
-dürfen ein Display steuern, `panel-registry.md` PREG-2 / `:55`). Liefert der
-Lookup kein `display_id` (unbekanntes Panel / kein gebundenes Display), zeigt
-die Shell einen sichtbaren Fehler und bettet **kein** rechtes Pane ein.
-Test-Anker: seiten/tests/test_heim_shell.py::test_shell2_lookup_real_url
+### SHELL-2 — ~~`display_id` per Router-Lookup~~ — **OBSOLET (RAT-31 E6f-C, #1588)**
+> **RAT-31 E6f-C (2026-07-29, #1588):** SHELL-2 (`_lookup_display_id` / ROU-32-
+> Router-Lookup) ist entfernt. Das rechte Buddy-Pane bekommt seinen `src` per
+> SSE-getriebenem `iframe.src`-Swap (SHELL-4) — ein `display_id`-Lookup entfällt
+> (ein Gerät = ein Ziel, RAT-31). `seiten/main.py::_lookup_display_id` ist
+> gelöscht; `--router-url` / `router_url` runtime-Slot entfernt (#1588).
+> Tests `test_shell2_lookup_real_url` / `test_shell2_lookup_gibt_none_bei_404`
+> gelöscht. Gedeckt durch: `decisions/RAT-31-wirbelsaeule-abriss.md`.
 
 ### SHELL-9 — IDs aus Daten, kein Hardcode (n=1)
-Weder `panel_id` noch `display_id` noch Geräte-IDs stehen im Shell-Code. Die
-`panel_id` kommt aus der URL, das `display_id` aus ROU-32; die konkreten
-Pilot-IDs (`paulas-panel-01`, `tablet-tablet-paula-01`) leben in den
+Weder `panel_id` noch Geräte-IDs stehen im Shell-Code. Die `panel_id` kommt
+aus der URL; `display_id` wird nicht mehr nachgeschlagen (SHELL-2 obsolet,
+RAT-31 E6f-C). Die konkreten Pilot-IDs (`paulas-panel-01`) leben in den
 Registry-Daten (xbuddy-data, GER-4 / PREG). Was je Familie variiert, ist
 Config/Daten, nicht Code (Familie-3-Probe).
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell9_keine_hardcode_ids
@@ -185,21 +183,20 @@ Live-Daten (Kill bei Overflow/Clipping/unbedienbar). Gate-B-Beleg:
 Die Shell ist der Vollbild-Besitzer: beim ersten Nutzer-Gesture (touchend/click)
 fordert die Shell `requestFullscreen` auf `document.documentElement` der **Shell**
 an (analog FIG-26, DC-11). Self-healing-Guard: tritt der Nutzer aus dem Vollbild,
-holt ihn der nächste Tap zurück. **Beide** eingebetteten Iframes unterdrücken bei
-`window.self !== window.top` ihren Eigen-Vollbild-Listener:
+holt ihn der nächste Tap zurück. Der eingebettete Panel-Iframe unterdrückt bei
+`window.self !== window.top` seinen Eigen-Vollbild-Listener:
 
 - **Panel-Iframe (PANEL-10):** Guard in
   `controller/app-panel/app.js::attachFullscreenOnGesture`.
   Standalone Panel-Geräte (self === top) behalten PANEL-10 unverändert.
-- **Display-Client-Iframe (DC-11 embedded-Ausnahme):** Guard an der
-  Konsument-Aufrufstelle in `display-client/index.html` vor
-  `dispLib.attachFullscreenOnGesture`. `displib.js`-Lib unangetastet.
-  Standalone Display-Geräte (self === top) behalten DC-11 unverändert.
+
+> **RAT-31 E6f-C (2026-07-29, #1588):** Der Display-Client-Iframe (DC-11 embedded-
+> Ausnahme, `display-client/index.html`) ist gelöscht — das rechte Buddy-Pane ist
+> ein leerer Content-Iframe (kein DC-Embed mehr). Bullet und Test-Anker entfernt.
 
 Umsetzung: Inline-Script in `seiten/templates/heim-shell.html` (SHELL-11-Block)
-+ Guards an beiden Konsument-Aufrufstellen.
++ Guard an der Panel-Konsument-Aufrufstelle.
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell11_panel_embedded_guard,
-             seiten/tests/test_heim_shell.py::test_shell11_display_client_embedded_guard,
              seiten/tests/test_heim_shell.py::test_shell11_shell_fullscreen_script
 
 ## 3. Audio-Seiteneffekt
