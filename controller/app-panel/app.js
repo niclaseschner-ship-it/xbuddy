@@ -1039,14 +1039,26 @@
 
   (async function boot() {
     var cfg = await loadConfig();
+    // RAT-31 E6f-E (#1584): Im Shell-Flow (ingest_url gesetzt) stirbt der Router
+    // (PR-D). Der ROU-32-Lookup und der Router-SSE (attachStream) werden dann
+    // übersprungen. Der Aktiv-Marker ist bei einem Gerät (RAT-31) allein durch
+    // den lokalen Tap autoritativ — updateActiveMarker(tile) wird im onTap/onClear
+    // ohnehin optimistisch gesetzt; der frühere Router-SSE (PANEL-11) war die
+    // Wahrheit über den realen Display-Zustand (Fremd-Übersteuerung durch
+    // Figuren-Erkennung / Ruhe-Zustand), die unter RAT-31 (ein Gerät, keine
+    // Fremd-Übersteuerung, figuren-erkennung entfällt #1567) entbehrlich wird.
+    var isShellFlow = !!_ingestUrlFromParam;
     // PANEL-11 / ROU-32: display_id einmalig beim Laden vom Router holen.
     // Fehler (404 oder Netz) → sichtbarer Fehler, Panel startet nicht weiter.
+    // Standalone-Flow (kein ingest_url) UNVERÄNDERT.
     var displayId;
-    try {
-      displayId = await panelLib.fetchDisplayId(cfg);
-    } catch (err) {
-      showError('Konfigurationsfehler: ' + (err && err.message || err));
-      return;
+    if (!isShellFlow) {
+      try {
+        displayId = await panelLib.fetchDisplayId(cfg);
+      } catch (err) {
+        showError('Konfigurationsfehler: ' + (err && err.message || err));
+        return;
+      }
     }
     var tiles = await loadTiles();
     renderGrid(tiles, cfg,
@@ -1076,7 +1088,12 @@
     window.addEventListener('resize', function () { panelLib.applyGridGeometry(); });
     attachWakeLock();
     attachFullscreenOnGesture();
-    attachStream(displayId, function () { return tiles; });
+    // RAT-31 E6f-E (#1584): Router-SSE (PANEL-11 Cross-Device-Marker) nur im
+    // Standalone-Flow. Im Shell-Flow trägt der lokale Tap den Aktiv-Marker
+    // (updateActiveMarker im onTap/onClear); kein Router-Call mehr.
+    if (!isShellFlow) {
+      attachStream(displayId, function () { return tiles; });
+    }
     // HSP-42 — EventSource zu beiden HSP-Services für Audio-Source-Push.
     attachHspAudioStreams();
   })();

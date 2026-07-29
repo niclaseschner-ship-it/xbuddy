@@ -2332,3 +2332,98 @@ def test_T1519_AC3_makeTileSelected_body_hat_pflichtfelder():
     assert 'view' in out, "body.view Pflichtfeld fehlt (PANEL-6 / _adapt_shell_event)"
     assert out['app'] == 'hoerspiel', "body.app muss tile.app widerspiegeln"
     assert out['view'] == 'player', "body.view muss tile.view widerspiegeln"
+
+
+# ============================================================
+#  RAT-31 E6f-E (T1584) — Shell-Flow-Boot überspringt Router-Berührungen
+#  (PANEL-11 Shell-Flow-Zweig). Code-Level-Beweis, da boot() im DOM-gated
+#  Block läuft (nicht via node require erreichbar), analog test_T1519_AC*.
+# ============================================================
+
+def _boot_body(js):
+    """Extrahiert den (async function boot() { ... })-Rumpf aus app.js.
+    Klammer-Balance ab der boot-Deklaration bis zum schließenden `})();`."""
+    start = js.find('function boot()')
+    assert start != -1, "boot()-Funktion muss in app.js existieren (T1584)"
+    depth = 0
+    seen = False
+    for i in range(start, len(js)):
+        ch = js[i]
+        if ch == '{':
+            depth += 1
+            seen = True
+        elif ch == '}':
+            depth -= 1
+            if seen and depth == 0:
+                return js[start:i + 1]
+    raise AssertionError("boot()-Rumpf nicht balanciert extrahierbar (T1584)")
+
+
+def test_T1584_boot_definiert_isShellFlow_aus_ingest_url():
+    """T1584 (RAT-31): boot() leitet isShellFlow aus dem ingest_url-Param ab
+    (_ingestUrlFromParam), um den Shell-Flow vom Standalone-Flow zu trennen.
+    Code-Level-Beweis (Pattern-Grep), boot() läuft im DOM-gated Block."""
+    body = _boot_body(read(APPJS_PATH))
+    assert 'isShellFlow' in body, (
+        "boot() muss eine isShellFlow-Weiche definieren (T1584 / PANEL-11 Shell-Flow-Zweig)"
+    )
+    assert '_ingestUrlFromParam' in body, (
+        "isShellFlow muss aus _ingestUrlFromParam abgeleitet werden (T1584)"
+    )
+
+
+def test_T1584_boot_fetchDisplayId_nur_im_nicht_shell_zweig():
+    """T1584 (RAT-31 / PANEL-11 Shell-Flow): der ROU-32-Lookup fetchDisplayId
+    steht in boot() NUR im !isShellFlow-Zweig — im Shell-Flow kein Router-
+    Display-Lookup. Beweis: zwischen dem `if (!isShellFlow)`-Guard und dem
+    fetchDisplayId-Aufruf liegt kein weiterer Block-Ausstieg."""
+    body = _boot_body(read(APPJS_PATH))
+    assert 'fetchDisplayId' in body, "boot() muss fetchDisplayId referenzieren (Standalone-Pfad)"
+    guard_pos = body.find('if (!isShellFlow)')
+    assert guard_pos != -1, (
+        "boot() muss einen `if (!isShellFlow)`-Guard um den fetchDisplayId-Lookup tragen (T1584)"
+    )
+    fetch_pos = body.find('fetchDisplayId')
+    # fetchDisplayId muss NACH dem ersten Nicht-Shell-Guard stehen (im geschützten Zweig):
+    assert fetch_pos > guard_pos, (
+        "fetchDisplayId (ROU-32-Lookup) muss innerhalb des !isShellFlow-Zweigs stehen — "
+        "im Shell-Flow darf kein Router-Display-Lookup laufen (T1584 / PANEL-11 Shell-Flow-Zweig)"
+    )
+
+
+def test_T1584_boot_attachStream_nur_im_nicht_shell_zweig():
+    """T1584 (RAT-31 / PANEL-11 Shell-Flow): das Router-SSE-Abo attachStream
+    (ROU-22) steht in boot() NUR im !isShellFlow-Zweig — im Shell-Flow kein
+    Router-SSE. Beweis: der attachStream-Aufruf ist von einem
+    `if (!isShellFlow)`-Guard umschlossen."""
+    body = _boot_body(read(APPJS_PATH))
+    assert 'attachStream(' in body, "boot() muss attachStream aufrufen (Standalone-Pfad)"
+    attach_pos = body.find('attachStream(')
+    # Der letzte !isShellFlow-Guard vor dem attachStream-Aufruf muss existieren:
+    guard_before = body.rfind('if (!isShellFlow)', 0, attach_pos)
+    assert guard_before != -1, (
+        "attachStream (Router-SSE, ROU-22) muss hinter einem `if (!isShellFlow)`-Guard stehen — "
+        "im Shell-Flow trägt der lokale Tap den Marker, kein Router-SSE (T1584 / PANEL-11)"
+    )
+
+
+def test_T1584_spec_traegt_shell_flow_zweig_in_panel_11():
+    """T1584: PANEL-11 in specs/platform/app-panel.md trägt den Shell-Flow-Zweig
+    (ingest_url gesetzt → lokaler Tap autoritativ, kein Router-SSE/ROU-32) samt
+    RAT-31-Entfall-Notiz für die obsoleten Stream-Korrekturfälle."""
+    spec_path = os.path.normpath(os.path.join(ROOT, '..', '..', 'specs', 'platform', 'app-panel.md'))
+    spec = read(spec_path)
+    # Shell-Flow-Zweig muss innerhalb PANEL-11 (vor PANEL-12) beschrieben sein:
+    p11 = spec.find('### PANEL-11')
+    p12 = spec.find('### PANEL-12', p11)
+    assert p11 != -1 and p12 != -1, "PANEL-11 und PANEL-12 müssen in der Spec existieren"
+    section = spec[p11:p12]
+    assert 'Shell-Flow-Zweig' in section, (
+        "PANEL-11 muss einen Shell-Flow-Zweig beschreiben (T1584)"
+    )
+    assert 'RAT-31' in section and 'ingest_url' in section, (
+        "PANEL-11 Shell-Flow-Zweig muss RAT-31 und ingest_url referenzieren (T1584)"
+    )
+    assert 'entfallen' in section, (
+        "PANEL-11 muss die RAT-31-Entfall-Notiz für die Stream-Korrekturfälle tragen (T1584)"
+    )
