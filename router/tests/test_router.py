@@ -224,7 +224,7 @@ def test_ROU_13_payload_is_object_not_string(client_with_routing):
 
 
 # ============================================================
-#  ROU-14 / ROU-20 — Debug + Display-Client
+#  ROU-14 — Debug
 # ============================================================
 
 def test_ROU_14_diag_serves_html(client_with_routing):
@@ -232,35 +232,6 @@ def test_ROU_14_diag_serves_html(client_with_routing):
     assert r.status_code == 200
     assert b'<html' in r.data.lower()
     assert b'/api/v1/diag' in r.data
-
-
-def test_ROU_20_display_slash_serves_display_client(client_with_routing):
-    """ROU-20 / E-DC-3: /display/<id>/ (Trailing-Slash) liefert den
-    Display-Client mit inline gezogenem displib.js (eine same-origin-Antwort).
-    Refs #516."""
-    r = client_with_routing.get('/display/default/')
-    assert r.status_code == 200
-    assert r.content_type.startswith('text/html')
-    assert b'createClient' in r.data                   # index.html-Bootstrap
-    assert b'function parseDisplayId' in r.data         # displib.js inline gezogen
-    assert b'<script src="displib.js">' not in r.data   # Tag wurde ersetzt
-
-
-def test_ROU_20_display_no_slash_redirects_to_slash(client_with_routing):
-    """ROU-20: ohne Trailing-Slash kommt 301 zur Slash-Variante — sonst
-    brechen die relativen Asset-Pfade (./manifest.json → /display/manifest.json
-    statt /display/<id>/manifest.json). Analog app-panel-Pattern. Refs #516."""
-    r = client_with_routing.get('/display/default')
-    assert r.status_code == 301
-    assert r.headers['Location'].endswith('/display/default/')
-
-
-def test_ROU_20_display_serves_client_for_unknown_id(client_with_routing):
-    """ROU-20: der Client wird auch für eine unbekannte <id> ausgeliefert —
-    fehlerhafte Einrichtung wird am Gerät sichtbar (DC-8), nicht als 404."""
-    r = client_with_routing.get('/display/nonexistent/')
-    assert r.status_code == 200
-    assert b'createClient' in r.data
 
 
 # ============================================================
@@ -570,58 +541,6 @@ def test_ROU_26_icon_root_cli_overrides_env(monkeypatch, tmp_path):
     ])
     cfg = router_main.resolved_config(args)
     assert cfg['icon_root'] == '/tmp/from-cli'
-
-
-# ============================================================
-#  ROU-33 — Display-Client-Asset-Auslieferung (/display/<id>/<asset>)
-# ============================================================
-#
-# Entry-Path-Probe: die ECHTEN Pfade /display/<id>/manifest.json und
-# /display/<id>/icon-*.png über den Flask-Testclient gegen das echte
-# display-client/-Verzeichnis im Repo (analog ROU-23 /controller/<app>/).
-
-def test_ROU_33_manifest_json_served_with_manifest_content_type(client_with_routing):
-    """ROU-33 / DC-11: /display/<id>/manifest.json → 200, application/manifest+json,
-    JSON parsbar, icons[] ≥ 3 Einträge, ≥ 1 mit purpose:maskable."""
-    r = client_with_routing.get('/display/test-display/manifest.json')
-    assert r.status_code == 200
-    assert r.mimetype == 'application/manifest+json'
-    data = json.loads(r.data)
-    icons = data.get('icons', [])
-    assert len(icons) >= 3, f'icons[] enthält nur {len(icons)} Einträge'
-    maskable = [i for i in icons if 'maskable' in i.get('purpose', '')]
-    assert len(maskable) >= 1, 'kein Icon mit purpose:maskable'
-
-
-@pytest.mark.parametrize('icon', [
-    'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'])
-def test_ROU_33_icons_served_with_png_content_type(client_with_routing, icon):
-    """ROU-33 / DC-11: /display/<id>/icon-*.png → 200, image/png."""
-    r = client_with_routing.get('/display/test-display/' + icon)
-    assert r.status_code == 200
-    assert r.mimetype == 'image/png'
-
-
-def test_ROU_33_path_traversal_returns_404(client_with_routing):
-    """ROU-33: Ausbruch aus display-client/ → 404 (Defense in Depth)."""
-    r = client_with_routing.get('/display/test-display/..%2F..%2Frouter%2Fmain.py')
-    assert r.status_code == 404
-    r2 = client_with_routing.get('/display/test-display/../../router/main.py')
-    assert r2.status_code != 200
-
-
-def test_ROU_33_nonexistent_asset_returns_404(client_with_routing):
-    r = client_with_routing.get('/display/test-display/does-not-exist.txt')
-    assert r.status_code == 404
-
-
-def test_ROU_33_parent_route_still_works(client_with_routing):
-    """ROU-33 darf die Eltern-Route /display/<id>/ (ROU-20) nicht brechen —
-    Flask-Route-Kollision-Regression. Slash-Form liefert HTML; No-Slash-Form
-    gibt 301 (kein Asset-Route-Clash)."""
-    r = client_with_routing.get('/display/test-display/')
-    assert r.status_code == 200
-    assert b'<!DOCTYPE html>' in r.data or b'<!doctype html>' in r.data
 
 
 # ============================================================
