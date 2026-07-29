@@ -4,8 +4,7 @@
 # (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
 #
 # Bindet auf Loopback-Port 5041 (PORT-2). Öffentlich erreichbar nur über
-# nginx-Origin auf :8443 (URL-12/URL-14). Validiert beim Anlegen das
-# display_id gegen die Geräte-Registry (PREG-7) — Default-Origin 127.0.0.1:5040.
+# nginx-Origin auf :8443 (URL-12/URL-14).
 
 [Unit]
 Description=XBuddy Panel-Registry HTTP-Service (PREG-13/PREG-14/PREG-15)
@@ -17,7 +16,7 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-ExecStart=__XBUDDY_PYTHON__ -m panel.main --host 127.0.0.1 --port 5041 --panels __XBUDDY_REPO__/panel/panels.json --geraete-url http://127.0.0.1:5040
+ExecStart=__XBUDDY_PYTHON__ -m panel.main --host 127.0.0.1 --port 5041 --panels __XBUDDY_REPO__/panel/panels.json
 Restart=on-failure
 RestartSec=10
 
