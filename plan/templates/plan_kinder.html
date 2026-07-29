@@ -22,14 +22,16 @@
     overflow: hidden;
   }
 
-  /* Outer page — zentriert das 1500-Frame auf 1920er-Display */
+  /* Outer page — füllt die Pane fluid (kein 1920er-Kiosk-Fix) */
+  /* T1574: width/height 100%/100vh — die View passt sich der Pane-Breite
+     der Heim-Shell an (analog #1541 photo/wetter DC-15-Muster). */
   .page {
     width: 100vw; height: 100vh;
     display: flex; align-items: center; justify-content: center;
     padding: 24px;
   }
 
-  /* Inneres Frame — feste Design-Maße aus dem Handoff.
+  /* Inneres Frame — fluid, Design-Raster bleibt über max-height gesichert.
      BG neutral cream, damit die Pastell-Wochentagsspalten klar sichtbar
      gegen die Page (--kids-bg, gelblich) abgesetzt sind. */
   /* PLAN-6 V1.3 (RAT-4-Auflösung 2026-06-22) — Display-Robustheit:
@@ -39,9 +41,12 @@
      ein wachsender Schedule die Termin-Leiste nicht mehr aus dem Frame
      (verworfene flex-Form, Befund 2026-06-22). --slot-count wird inline aus
      der Slot-Anzahl gesetzt — keine Hardcode-Annahme. */
+  /* T1574: max-width: 1920px statt 1500px — Frame füllt Heim-Shell-Pane
+     fluid aus (analog #1541 photo/wetter); Pi-Vollbild-Kiosk (1920px) bleibt
+     unverändert, da max-width dann nicht greift. */
   .frame {
     width: 100%;
-    max-width: 1500px;
+    max-width: 1920px;
     height: 100%;
     max-height: 1020px;
     background: #fdfaf2;
@@ -379,9 +384,10 @@
   .frame--toddler .day-chip-label { font-size: 44px; }
   .frame--toddler .day-chip-date  { font-size: 18px; }
 
-  /* Row-Höhen sind aufs 1080-Display heruntergerechnet (Design-Original 132px
-     würde auf 1220px Frame gehören). Wenn das Display kleiner ist, scrollt
-     die page (siehe body-Override). */
+  /* Row-Höhen: 80px ist das Design-Raster der Slot-Zeilen (PLAN-6 V1.3).
+     Passt in max-height:1020px (7 Slots × 80px = 560px + Header + Day-Row +
+     1fr-Termin-Rest). Wenn das Display kleiner ist, scrollt die page
+     (siehe body-Override). */
   /* Toddler: höhere Slot-Zeilen — die fixe Frame-Grid-Zeile wird auf 116px
      gesetzt (PLAN-6 V1.3 Grid bleibt erhalten, nur die Slot-Höhe wächst). */
   .frame--toddler {
