@@ -76,7 +76,18 @@ Controller-Aktions-Pfad (kein `/controller/app-panel/<id>/select`),
 sondern über den generischen Event-Eingang `POST /api/v1/events`
 (ROU-3, URL-4, siehe PANEL-5).
 
-*Tickets:* #58
+> **Serving-Owner Router→seiten (RAT-31 E6b, #1564):** Das Ausliefern von
+> `/controller/app-panel/<id>/` (index.html + Assets, config/tiles/bearbeiten-
+> Proxy) ist vom Router zum **seiten-Service** verlagert (SREG-17). Grund:
+> `/shell/<id>` (heim-shell.md SHELL-1) und der Rail-Iframe
+> `/controller/app-panel/<id>/` (SHELL-3) kommen dann same-origin aus **einem**
+> Service. nginx routet `/controller/app-panel/` an `xbuddy_seiten` (vor dem
+> allgemeinen `/controller/`-Router-Block). Der Serving-Vertrag (Proxy +
+> LKG-Cache + Code-Default + sw.js-Substitution) ist unverändert 1:1
+> übernommen. Der Router-seitige Serving-Code (ROU-24/ROU-27) lebt als toter
+> Zwilling weiter, bis der Abriss #1568 ihn entfernt.
+
+*Tickets:* #58 · Serving-Verlagerung #1564 (SREG-17)
 
 ## 2. Kachel-Konfiguration
 

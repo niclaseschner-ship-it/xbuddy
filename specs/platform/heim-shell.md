@@ -79,6 +79,15 @@ Test-Anker: seiten/tests/test_heim_shell.py::test_shell9_keine_hardcode_ids
 > `/display/<display_id>` (Router-ausgeliefert) und der ROU-32-`display_id`-Lookup
 > (SHELL-2) sind damit überholt — ein Gerät = ein Ziel, kein `display_id`-Match.
 
+> **RAT-31 E6b (#1564) — Rail-src wirklich same-origin von seiten:** Der
+> Rail-Iframe `/controller/app-panel/<panel_id>/` wird seit #1564 vom **seiten-
+> Service selbst** ausgeliefert (seiten-registry.md SREG-17, app-panel.md
+> PANEL-2) — nicht mehr vom Router. Damit ist die „re-home same-origin"-Absicht
+> aus E2 eingelöst: Shell (`/shell/`) und Rail (`/controller/app-panel/`) kommen
+> aus einem Service, ein Origin, ein Auth-Gate. nginx routet
+> `/controller/app-panel/` an `xbuddy_seiten` (vor dem allgemeinen
+> `/controller/`-Router-Block).
+
 Die Shell rendert ein zweispaltiges Layout: links eine **Nav-Rail** mit einem
 Iframe auf `/controller/app-panel/<panel_id>`, rechts ein **Buddy-Pane** mit
 einem Content-Iframe (`id="buddy-pane"`, `src` per SHELL-4-Swap gesetzt). Beide

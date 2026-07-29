@@ -81,6 +81,12 @@ runtime = {
     # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
     # Default: http://127.0.0.1:5000 (Router-Loopback, PORT-2).
     "router_url":        "http://127.0.0.1:5000",
+    # SREG-17 / RAT-31 E6b (#1564): Origin des panel-Service, an den seiten
+    # config.json/tiles.json/bearbeiten* der App-Panel-Instanzen proxyt
+    # (DCOMP-1 — kein Direkt-Read der panels.json). Default http://127.0.0.1:5041
+    # (PORT-2, panel-Loopback). Serving von /controller/app-panel/ ist seit
+    # #1564 seiten-owned (vorher Router, ROU-24/ROU-27 — Code stirbt #1568).
+    "panel_service_url": "http://127.0.0.1:5041",
     "ttl":               30,
     "inventar":          None,
     "gebaut_um":         0.0,
@@ -117,6 +123,7 @@ def configure(root=None, inventar_path=None, ttl=None,
               funnel_origin=None,
               bot_token=None, init_data_config=None,
               familie_client=None, router_url=None,
+              panel_service_url=None,
               geraete_registry_path=None):
     """Setzt Aufbau-Wurzel, Inventar-Pfad, TTL und Display-URL-Origins
     (SREG-3, SREG-7).
@@ -162,6 +169,8 @@ def configure(root=None, inventar_path=None, ttl=None,
         runtime["familie_client"] = familie_client
     if router_url is not None:
         runtime["router_url"] = router_url
+    if panel_service_url is not None:
+        runtime["panel_service_url"] = panel_service_url
     if geraete_registry_path is not None:
         runtime["geraete_registry_path"] = geraete_registry_path
     runtime["inventar"] = None
@@ -453,6 +462,13 @@ def _client_ip():
     if xff:
         return xff.split(",")[0].strip()
     return request.remote_addr
+
+
+# SREG-17 / RAT-32: Auth-Modus fuer die vom Router uebernommenen App-Panel-
+# Routen (#1564). 'observe' = verhaltensneutraler Deploy, `XBUDDY_AUTH_MODE=hard`
+# flippt sie hart — identisch zum Router-Schalter (router/main.py:262), damit die
+# Serving-Verlagerung das Auth-Verhalten nicht ungewollt aendert.
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "observe")
 
 
 def require_dual_gate(mode: str = "observe"):
@@ -1886,6 +1902,255 @@ def shell_asset_view(panel_id, asset):
 
 
 # ============================================================
+#  App-Panel-Serving (SREG-17 / RAT-31 E6b, #1564)
+# ============================================================
+#
+# Spec-Anker: specs/platform/seiten-registry.md (SREG-17) + specs/platform/app-panel.md.
+# Verlagert von router/main.py (ROU-24/ROU-27/PBE-1/PBE-2 — dortiger Code stirbt
+# #1568) nach seiten, damit /shell/<id> und /controller/app-panel/<id>/ same-origin
+# aus EINEM Service kommen (SHELL-3 Rail-Iframe, kein Cross-Origin-Cookie-Jar).
+#
+# Serving-Vertrag (1:1 vom Router uebernommen):
+#   GET /controller/app-panel/<panel_id>/            → index.html (Token-Subst PANEL-2/IDENT-5)
+#   GET /controller/app-panel/<panel_id>            → 301 auf /<id>/ (Trailing-Slash, relative Assets)
+#   GET /controller/app-panel/<panel_id>/config.json → PROXY panel(5041) /api/v1/panels/<id>/config.json
+#                                                       + LKG-Cache + Code-Default-Fallback (DCOMP-3/PANEL-8)
+#   GET .../tiles.json                               → PROXY dito (LKG)
+#   GET .../bearbeiten[.js|.css]                     → PROXY panel(5041) /controller/app-panel/<id>/<sicht>
+#                                                       (KEIN LKG, 404/502 durchgereicht, PBE-1/PBE-2)
+#   GET .../sw.js                                    → Statik + __BUILD_ID__-Subst + no-cache
+#   GET .../<asset>                                  → Statik aus controller/app-panel/ (realpath-Traversal-Schutz)
+#
+# DCOMP-1: seiten liest NIE panels.json direkt — config/tiles kommen ueber HTTP
+# vom panel-Service. `from panel import …` ist verboten.
+
+# controller/app-panel/-Statik liegt im Repo, Schwester von seiten/ unter der
+# Repo-Wurzel (_REPO_ROOT). Analog Router DEFAULT_APP_PANEL_DIR.
+_DEFAULT_APP_PANEL_DIR = os.path.normpath(
+    os.path.join(_REPO_ROOT, "controller", "app-panel"))
+_DEFAULT_CONTROLLER_SHARED_DIR = os.path.normpath(
+    os.path.join(_REPO_ROOT, "controller", "_shared"))
+_DEFAULT_DISPLAY_SHARED_DESIGN_DIR = os.path.normpath(
+    os.path.join(_REPO_ROOT, "display", "_shared", "design"))
+
+# Sichten, die an den panel-Service geproxt + Last-Known-Good-gecacht werden
+# (SREG-17 / ROU-27, 1:1 vom Router).
+_PANEL_PROXY_VIEWS = frozenset({"config.json", "tiles.json"})
+
+# Editor-Seite + Assets — Proxy ohne LKG, 404 wird durchgereicht (PBE-1/PBE-2).
+_PANEL_BEARBEITEN_VIEWS = frozenset({"bearbeiten", "bearbeiten.js", "bearbeiten.css"})
+
+_PANEL_BEARBEITEN_CONTENT_TYPES = {
+    "bearbeiten":     "text/html; charset=utf-8",
+    "bearbeiten.js":  "application/javascript; charset=utf-8",
+    "bearbeiten.css": "text/css; charset=utf-8",
+}
+
+# Code-Default-Fallback, wenn der panel-Service nie erreichbar war und kein
+# LKG-Snapshot vorliegt (PANEL-8, stiller Fallback — kein Crash).
+_PANEL_CODE_DEFAULTS = {
+    "config.json": b"{}",
+    "tiles.json":  b"[]",
+}
+
+_PANEL_PROXY_TIMEOUT = 5
+
+# Content-Type-Mapping fuer Statik-Assets (analog Router _CONTROLLER_MIME).
+_APP_PANEL_MIME = {
+    ".html": "text/html; charset=utf-8",
+    ".js":   "application/javascript",
+    ".json": "application/manifest+json",
+    ".png":  "image/png",
+    ".css":  "text/css",
+    ".svg":  "image/svg+xml",
+    ".mp3":  "audio/mpeg",
+}
+
+# LKG-Cache fuer die Proxy-Sichten (config/tiles). Zugriff aus Flask-Threads → Lock.
+_panel_lkg_cache: dict = {}
+_panel_lkg_lock = threading.Lock()
+
+
+def _app_panel_dir():
+    """Wurzelverzeichnis der App-Panel-Statik (controller/app-panel/).
+
+    Test-Naht: ueberschreibbar via runtime['app_panel_dir'] (analog
+    _shell_asset_root, main.py). Default: Repo-Schwester controller/app-panel/.
+    """
+    override = runtime.get("app_panel_dir") if isinstance(runtime, dict) else None
+    return override or _DEFAULT_APP_PANEL_DIR
+
+
+def _panel_service_base():
+    """Origin-Basis des panel-Service (SREG-17). Runtime-Wert (panel_service_url),
+    Default http://127.0.0.1:5041 (PORT-2)."""
+    return runtime.get("panel_service_url") or "http://127.0.0.1:5041"
+
+
+def _app_panel_build_id():
+    """PANEL-14: build_id aus max(mtime) des cache-relevanten Runtime-Asset-Satzes
+    (app.js, style.css, sw.js, manifest.json, silent.mp3, controller/_shared/config.js,
+    display/_shared/design/tokens.css). 1:1 vom Router uebernommen — der Service-Worker
+    precacht config.js + tokens.css, deshalb muessen sie in die build_id einfliessen,
+    sonst bleibt ein geaendertes Token-Asset unsichtbar. OSError-Fallback: '0'."""
+    panel_dir = _app_panel_dir()
+    asset_paths = [
+        os.path.join(panel_dir, "app.js"),
+        os.path.join(panel_dir, "style.css"),
+        os.path.join(panel_dir, "sw.js"),
+        os.path.join(panel_dir, "manifest.json"),
+        os.path.join(panel_dir, "silent.mp3"),
+        os.path.join(_DEFAULT_CONTROLLER_SHARED_DIR, "config.js"),
+        os.path.join(_DEFAULT_DISPLAY_SHARED_DESIGN_DIR, "tokens.css"),
+    ]
+    try:
+        return str(int(max(os.path.getmtime(p) for p in asset_paths)))
+    except OSError:
+        return "0"
+
+
+def _proxy_panel_view(panel_id, sicht):
+    """SREG-17 / ROU-27: holt config.json oder tiles.json vom panel-Service und
+    liefert (body_bytes, content_type). Erfolg frischt den LKG-Cache; Ausfall
+    (Timeout/5xx/Connection) greift auf den LKG-Snapshot zurueck, fehlt auch der,
+    kommt der Code-Default (PANEL-8, kein Crash). Monkeypatch-bare Test-Naht
+    analog _lookup_display_id, aber MIT LKG. `sicht` ∈ _PANEL_PROXY_VIEWS."""
+    url = "%s/api/v1/panels/%s/%s" % (_panel_service_base(), panel_id, sicht)
+    cache_key = (panel_id, sicht)
+    content_type = "application/json"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=_PANEL_PROXY_TIMEOUT) as resp:
+            if resp.status >= 400:
+                raise urllib.error.HTTPError(
+                    url, resp.status, "panel-Service Fehler", {}, None)
+            body = resp.read()
+        with _panel_lkg_lock:
+            _panel_lkg_cache[cache_key] = (body, content_type)
+        return body, content_type
+    except Exception as exc:
+        logging.warning(
+            "SREG-17: panel-Service nicht erreichbar (%s/%s): %s — LKG/Fallback",
+            panel_id, sicht, exc)
+    with _panel_lkg_lock:
+        cached = _panel_lkg_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    return _PANEL_CODE_DEFAULTS[sicht], content_type
+
+
+def _proxy_panel_bearbeiten(panel_id, sicht):
+    """PBE-1/PBE-2: holt bearbeiten / bearbeiten.js / bearbeiten.css vom
+    panel-Service und liefert (body_bytes, content_type, status_code).
+
+    KEIN LKG, kein Code-Default: ein 404 vom panel-Service wird als (body, ct, 404)
+    durchgereicht (Browser bekommt das korrekte HTTP-Signal). Netz-Fehler / 5xx
+    liefern 502. Die Editor-Seite haengt am /controller/app-panel/-Pfad des
+    panel-Service (nicht /api/v1/panels/) — Produktions-Bug-Lehre aus T459."""
+    url = "%s/controller/app-panel/%s/%s" % (_panel_service_base(), panel_id, sicht)
+    content_type = _PANEL_BEARBEITEN_CONTENT_TYPES.get(sicht, "application/octet-stream")
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=_PANEL_PROXY_TIMEOUT) as resp:
+            body = resp.read()
+        return body, content_type, 200
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            body = exc.read() if hasattr(exc, "read") else b""
+            return body, "application/json", 404
+        logging.warning(
+            "PBE proxy: panel-Service antwortet mit %s fuer %s/%s",
+            exc.code, panel_id, sicht)
+        return b"", "application/json", 502
+    except Exception as exc:
+        logging.warning(
+            "PBE proxy: panel-Service nicht erreichbar (%s/%s): %s",
+            panel_id, sicht, exc)
+        return b"", "application/json", 502
+
+
+def _render_app_panel_index(panel_id):
+    """PANEL-2 / IDENT-5: liefert index.html mit der Panel-Identitaet als
+    __PANEL_ID__-Token (Server-side-Identitaet, kein Roundtrip) und der aktuellen
+    build_id fuer alle __BUILD_ID__-Asset-URLs (PANEL-14). 1:1 vom Router."""
+    index_path = os.path.join(_app_panel_dir(), "index.html")
+    with open(index_path, encoding="utf-8") as fh:
+        html = fh.read()
+    build_id = _app_panel_build_id()
+    return (html
+            .replace("__PANEL_ID__", panel_id, 1)
+            .replace("__BUILD_ID__", build_id))
+
+
+def _send_app_panel_asset(rel_path):
+    """Statik-Auslieferung aus controller/app-panel/ mit realpath-Traversal-Schutz
+    (Defense in Depth, analog shell_asset_view / Router _send_app_panel_asset)."""
+    from flask import abort, send_from_directory
+
+    root = os.path.realpath(_app_panel_dir())
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _APP_PANEL_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route("/controller/app-panel/<panel_id>", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (App-Panel-Index-no-slash)
+def app_panel_index_no_slash(panel_id):
+    # Relative Asset-Pfade in index.html (./app.js …) brauchen den Trailing-Slash,
+    # sonst resolvt der Browser ./ auf den Parent (301 → /<id>/, HTTP-Standard).
+    return redirect("/controller/app-panel/" + panel_id + "/", code=301)
+
+
+@app.route("/controller/app-panel/<panel_id>/", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (App-Panel-Index)
+def app_panel_index_slash(panel_id):
+    """PANEL-2: index.html mit Panel-Identitaet + build_id (SREG-17, #1564)."""
+    return _render_app_panel_index(panel_id), 200, {
+        "Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/controller/app-panel/<panel_id>/<path:asset>", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (App-Panel-Assets)
+def app_panel_asset(panel_id, asset):
+    """SREG-17 (#1564): App-Panel-Asset-Auslieferung.
+
+    config.json/tiles.json → Proxy an panel-Service + LKG (ROU-27/PANEL-8).
+    bearbeiten* → Proxy ohne LKG, 404/502 durchgereicht (PBE-1/PBE-2).
+    sw.js → Statik + __BUILD_ID__-Subst + no-cache (PANEL-14).
+    sonst → Statik aus controller/app-panel/ (realpath-Traversal-Schutz).
+    """
+    from flask import Response, abort
+
+    if asset in _PANEL_PROXY_VIEWS:
+        body, content_type = _proxy_panel_view(panel_id, asset)
+        return Response(body, status=200, mimetype=content_type)
+    if asset in _PANEL_BEARBEITEN_VIEWS:
+        body, content_type, status = _proxy_panel_bearbeiten(panel_id, asset)
+        return Response(body, status=status, mimetype=content_type)
+    if asset == "sw.js":
+        # __BUILD_ID__-Subst + no-cache, damit der Browser den neuen Worker holt.
+        # Defense-in-Depth-Traversal-Schutz analog _send_app_panel_asset.
+        root = os.path.realpath(_app_panel_dir())
+        target = os.path.realpath(os.path.join(root, "sw.js"))
+        if not (target == root or target.startswith(root + os.sep)):
+            abort(404)
+        if not os.path.isfile(target):
+            abort(404)
+        with open(target, encoding="utf-8") as fh:
+            body = fh.read().replace("__BUILD_ID__", _app_panel_build_id())
+        resp = Response(body, status=200)
+        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+    return _send_app_panel_asset(asset)
+
+
+# ============================================================
 #  Entrypoint
 # ============================================================
 
@@ -1927,6 +2192,12 @@ def parse_args(argv):
     # ENV ROUTER_URL ueberschreibt Default; CLI-Flag schlaegt ENV.
     p.add_argument("--router-url", dest="router_url",
                    help="Origin des Router-Service fuer SHELL-2-Lookup (SHELL-2/ROU-32, Default http://127.0.0.1:5000)")
+    # SREG-17 / RAT-31 E6b (#1564): Origin des panel-Service, an den seiten
+    # config.json/tiles.json/bearbeiten* der App-Panel-Instanzen proxyt (DCOMP-1).
+    # ENV PANEL_SERVICE_URL ueberschreibt Default; CLI-Flag schlaegt ENV.
+    p.add_argument("--panel-service-url", dest="panel_service_url",
+                   help="Origin des panel-Service fuer das App-Panel-Serving-Proxy "
+                        "(SREG-17, Default http://127.0.0.1:5041)")
     return p.parse_args(argv)
 
 
@@ -1970,6 +2241,11 @@ def resolved_config(args):
     cfg["router_url"] = (
         args.router_url
         or os.environ.get("ROUTER_URL", "http://127.0.0.1:5000"))
+    # SREG-17 (#1564): Origin des panel-Service fuer das App-Panel-Serving-Proxy.
+    # CLI schlaegt ENV schlaegt Default (127.0.0.1:5041, PORT-2).
+    cfg["panel_service_url"] = (
+        args.panel_service_url
+        or os.environ.get("PANEL_SERVICE_URL", "http://127.0.0.1:5041"))
     # T948 / AUTH-2.a: Pfad zur geraete.json für den paired_at-Write (OD3).
     # Derselbe Store wie geraete/main.py — dieselbe ENV GERAETE_REGISTRY
     # (Store-Truth). Default "geraete.json" (analog geraete/main.py GER-9).
@@ -1988,6 +2264,7 @@ def main(argv=None):
               tailscale_origin=cfg["tailscale_origin"],
               funnel_origin=cfg["funnel_origin"],
               router_url=cfg["router_url"],
+              panel_service_url=cfg["panel_service_url"],
               geraete_registry_path=cfg["geraete_registry_path"])
     # SREG-7 / #1458: SEITEN_TAILSCALE_ORIGIN ist aufgegeben — kein Warning mehr.
     if not cfg["funnel_origin"]:
