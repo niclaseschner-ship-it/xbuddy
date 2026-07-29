@@ -14,6 +14,7 @@ Wants=network-online.target
 [Service]
 User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
+EnvironmentFile=__XBUDDY_DATA__/eltern-chat/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
 ExecStart=__XBUDDY_PYTHON__ -m photo.main --host 127.0.0.1 --port 5051
