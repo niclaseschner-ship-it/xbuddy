@@ -138,7 +138,6 @@ class Context:
     family_group_locked: bool = False  # True ⇒ Familien-Gruppe per Env/Config gesetzt, Vorrang (ONB-6, EC-18)
     onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
     faa_sessions: dict = None  # FAA-12: laufende »Familie anlegen«-Sessions (chat_id → FaaSession)
-    gaa_sessions: dict = None  # GAA-5: laufende »Gerät anlegen«-Sessions (chat_id → GaaSession)
     kav_sessions: dict = None  # KAV-3: laufende »Kalender verbinden«-Sessions (chat_id → KavSession)
     tes_sessions: dict = None  # TES-3: laufende »Termin eintragen«-Sessions (chat_id → TesSession)
     tab_sessions: dict = None  # TAB-12: laufende »Termine aus Bild«-Sessions (chat_id → TabSession)
@@ -158,7 +157,8 @@ class Context:
 # handle_update iteriert darüber, statt pro Sorte einen eigenen if-Block
 # zu tragen. Reihenfolge entspricht der früheren if-Kette und darf nicht
 # ohne Routing-Check geändert werden (alle in _SESSION_SORTS registrierten
-# Sorten — aktuell FAA→GAA→KAV→TES→TAB→AVB).
+# Sorten — aktuell FAA→KAV→TES→TAB→AVB). RAT-31 E6c: GAA hat keine
+# PrivateChatSession mehr (nur noch Link-Minten, synchron) — kein gaa_sessions-Slot.
 #
 # Die make_input-Callables werden einmal beim Modul-Load gebunden —
 # die skills-Module liegen zu diesem Zeitpunkt bereits auf sys.path
@@ -169,13 +169,11 @@ class Context:
 def _build_session_sorts():
     from skills.anbieter_wechseln_task import make_avb_input
     from skills.familie_anlegen_task import make_faa_input
-    from skills.geraet_anlegen_task import make_gaa_input
     from skills.kalender_verbinden_task import make_kav_input
     from skills.termin_eintragen_task import make_tes_input
     from skills.termine_aus_bild_task import make_tab_input
     return (
         SessionSortEntry("faa_sessions", make_faa_input),   # FAA-12
-        SessionSortEntry("gaa_sessions", make_gaa_input),   # GAA-5
         SessionSortEntry("kav_sessions", make_kav_input),   # KAV-3
         SessionSortEntry("tes_sessions", make_tes_input),   # TES-3
         SessionSortEntry("tab_sessions", make_tab_input),   # TAB-12
@@ -1044,9 +1042,7 @@ def build_context(cfg, db_path, zd_cli_path=None):
     # FAA-12: in-memory Session-Registry je Privatchat. Wird vom
     # FamilieAnlegenTask gefüllt und von `handle_update` ausgelesen.
     faa_sessions = {}
-    # GAA-5: analog FAA, eigene Session-Map für die »Gerät anlegen«-Aufgabe.
-    gaa_sessions = {}
-    # KAV-3: analog FAA/GAA, eigene Session-Map für »Kalender verbinden«.
+    # KAV-3: analog FAA, eigene Session-Map für »Kalender verbinden«.
     kav_sessions = {}
     # TES-3: analog FAA/GAA/KAV, eigene Session-Map für »Termin eintragen«.
     tes_sessions = {}
@@ -1088,7 +1084,6 @@ def build_context(cfg, db_path, zd_cli_path=None):
         store=OnboardingStore(zd=zd_store),
         family_group_locked=cfg.family_group_locked,
         faa_sessions=faa_sessions,
-        gaa_sessions=gaa_sessions,
         kav_sessions=kav_sessions,
         tes_sessions=tes_sessions,
         tab_sessions=tab_sessions,
@@ -1114,8 +1109,8 @@ def build_context(cfg, db_path, zd_cli_path=None):
         familie_origin_url=cfg.familie_origin_url,
         faa_sessions=faa_sessions,
         family_group_chat_id_getter=lambda: ctx.family_group_chat_id,
-        geraete_origin_url=cfg.geraete_origin_url,
-        gaa_sessions=gaa_sessions,
+        # RAT-31 E6c (#1565): geraete_origin_url/gaa_sessions entfallen — die
+        # geraete-Registry stirbt, »Gerät koppeln« mintet nur einen Pairing-Link.
         display_url_origin=cfg.display_url_origin,
         # GAA-3.8 / auth.md AUTH-2.a (T948): Pairing-Link-Zustellweg live.
         # pairing_bot_token = per-Instanz-Bot-Token (HMAC-Sign-Key, cfg.bot_token).
