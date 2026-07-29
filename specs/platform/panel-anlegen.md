@@ -7,6 +7,13 @@
 > Anker erhalten. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`,
 > Epic #1339.
 >
+> **RAT-31 E6a — PREG-15-Schema geändert:** Der PREG-15-POST kennt **kein**
+> `display_id`-Pflichtfeld und **kein** `router_url` mehr (Display-Bindung +
+> Router-Origin abgerissen). Das aktuelle POST-Schema ist `{slug, config?,
+> tiles?}`. Die untenstehende Display-Auswahl (PAA-3.1) und der
+> `{slug, display_id, tiles}`-Body beschreiben den historischen, nicht mehr
+> lebenden Flow.
+>
 > Status: RATIFIZIERT (ENTFALLEN) · Refs #183 #138 #141
 
 Damit eine Familie eine **Panel-Instanz** (App-Panel-Controller, `app-panel.md`

@@ -7,8 +7,8 @@ Schnittstelle bereit (PREG-13/14/15). Es lädt sie aus einer Per-Instanz-Datei
 
 Die Panel-Instanzen sind Daten, nicht Code (CLAUDE.md §6): dieses Modul enthält
 keine hartkodierte Panel-Liste, nur das Laden, das atomare Schreiben, das
-Modell und die Schnittstelle. Schwester-Modell der Geräte-Registry
-(geraete/registry.py, GER) — gleiche Lock-/Atomar-/LKG-Muster, eigene Daten.
+Modell und die Schnittstelle (gleiche Lock-/Atomar-/LKG-Muster wie die anderen
+Daten-Services, eigene Daten).
 """
 
 import json
@@ -51,23 +51,17 @@ def source_id_for(panel_id):
 class Panel:
     """Eine App-Panel-Instanz der Familie (PREG-3).
 
-    Pflichtfelder: `panel_id`, `source_id`, `display_id`, `config`, `tiles`.
-    `router_url` ist optional (PREG-8: leer/fehlend = same-origin). `config`
+    Pflichtfelder: `panel_id`, `source_id`, `config`, `tiles`. `config`
     (Tuning, instanz-stabil) und `tiles` (Daten) sind getrennte Felder mit
     getrennten Lebenszyklen (PREG-5, E-PANEL-3). Konsumenten lesen nur über
     `to_dict()`, nicht über interne Attribute (CLAUDE.md §6).
     """
 
-    def __init__(self, panel_id, display_id, config, tiles,
-                 router_url="", source_id=None):
+    def __init__(self, panel_id, config, tiles, source_id=None):
         self.panel_id = panel_id
         # `source_id` wird aus `panel_id` abgeleitet, in der Datei aber als
         # eigenes Feld geführt (PREG-3), damit Konsumenten nicht parsen müssen.
         self.source_id = source_id if source_id is not None else source_id_for(panel_id)
-        self.display_id = display_id
-        # PREG-8: leerer/fehlender router_url = same-origin. Wir normalisieren
-        # None/fehlend auf den Leerstring — kein Default-Host wird eingesetzt.
-        self.router_url = router_url or ""
         self.config = config
         self.tiles = tiles
 
@@ -80,8 +74,6 @@ class Panel:
         return {
             "panel_id": self.panel_id,
             "source_id": self.source_id,
-            "display_id": self.display_id,
-            "router_url": self.router_url,
             "config": self.config,
             "tiles": self.tiles,
         }
@@ -293,7 +285,7 @@ def _validate_dict(raw):
     verletzt. Wird sowohl beim Laden der Datei als auch beim `add`-Aufruf
     benutzt — eine Stelle, die die Validierung kennt.
     """
-    for feld in ("panel_id", "display_id", "config", "tiles"):
+    for feld in ("panel_id", "config", "tiles"):
         if feld not in raw or raw[feld] in (None, ""):
             raise RegistryError("Panel ohne Pflichtfeld %r: %r" % (feld, raw))
     panel_id = raw["panel_id"]
@@ -316,14 +308,10 @@ def _validate_dict(raw):
         raise RegistryError(
             "Panel %r: tiles muss ein Objekt sein (PANEL-3)" % panel_id)
     _validate_query_flat(raw["tiles"], panel_id)
-    # PREG-8: router_url ist optional; None/fehlend → Leerstring (same-origin).
-    router_url = raw.get("router_url") or ""
     return Panel(
         panel_id=panel_id,
-        display_id=raw["display_id"],
         config=raw["config"],
         tiles=raw["tiles"],
-        router_url=router_url,
         source_id=erwartet,
     )
 
@@ -382,7 +370,7 @@ def load(path):
 def save(registry, path):
     """Schreibt die Registry atomar mit 0600-Rechten in die Datei (PREG-4/15).
 
-    Pattern wie geraete.save (GER-6): erst eine Temp-Datei im Zielverzeichnis,
+    Atomares Schreib-Pattern (GER-6-Geist): erst eine Temp-Datei im Zielverzeichnis,
     kontrolliert mit `os.open(..., 0o600)` geöffnet, dann `os.replace` (in-
     Filesystem atomares Rename, DCOMP-4). Bei einem Fehlschlag wird die
     Temp-Datei aufgeräumt und ein RegistryError geworfen — die alte Datei
@@ -418,7 +406,7 @@ def save(registry, path):
 def is_owner_only(path):
     """True, wenn `path` die Dateirechte aus PREG-4 (0600) trägt.
 
-    Hilfsfunktion für Diagnose und Tests — analog `geraete.is_owner_only`.
+    Hilfsfunktion für Diagnose und Tests.
     """
     mode = stat.S_IMODE(os.stat(path).st_mode)
     return mode == FILE_MODE
