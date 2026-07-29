@@ -970,6 +970,36 @@ sw.js-build_id, Traversal-404, DCOMP-1-kein-panel-Import).
 
 *Tickets:* #1564 (Refs RAT-31, DCOMP-1; Router-Abriss #1568)
 
+## SREG-18 — Icon-Serving in seiten (verlagert vom Router, RAT-31 E6f-B)
+
+> **RAT-31 E6f-B (#1586):** Das Servieren der Icon-Bibliothek
+> (`/display/_shared/icons/`) und der Stichwort-Suche (`/api/v1/icons/suche`)
+> wird vom Router (ROU-26/ROU-31) nach seiten verlagert. Grund: same-Origin
+> mit den Display-Views und dem Shell-Serving; kein Cross-Service-Zugriff auf
+> die icon-root. Router-Code lebt bis zum Abriss #1568 als toter Zwilling
+> (ROU-26/ROU-31-Marker in router.md).
+
+**seiten serviert:**
+
+- `GET /display/_shared/icons/<path>` → read-only aus der **icon-root**
+  (Per-Instanz-Daten, Default `/home/buddy/apps/icons/`, ICONS-2/ROU-26).
+  realpath-Traversal-Schutz. Ungated (Display-Views laden credential-los).
+  nginx-Block `/display/_shared/icons/` spezifisch VOR dem allgemeinen
+  `/display/`-Router-Block (URL-14).
+- `GET /api/v1/icons/suche?q=<stichwort>&max=<n>` → Stichwort-Suche über
+  `pictogram_cache.json` in der icon-root (ROU-31/ICONS-7). Ungated.
+  nginx exakter Match `= /api/v1/icons/suche` → `xbuddy_seiten`, spezifisch
+  VOR dem allgemeinen `/api/v1/`-Block (URL-14).
+
+**icon-root-Config:** seiten-Runtime-Wert `--icon-root` / ENV `ICON_ROOT`,
+Default `/home/buddy/apps/icons/` (ICONS-2). Am Pi: `ICON_ROOT` in der
+seiten-EnvironmentFile oder CLI-Flag setzen.
+
+**Durchsetzung:** `seiten/tests/test_icons_serving.py` (entry_path_probe,
+Traversal-404, ungated, De-Dup, kein-PNG-Ausfiltern, icon_root-Config-Naht).
+
+*Tickets:* #1586 (Refs RAT-31, Router-Abriss #1568)
+
 ## Offene Punkte
 
 ### OPEN-SREG-Kategorie — Kategorisierung der Seiten-/Add-Liste
