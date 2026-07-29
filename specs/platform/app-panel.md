@@ -475,7 +475,29 @@ PANEL-1 bleibt gewahrt: das Panel entscheidet weiterhin **nichts** über
 das Routing — es liest den Display-Zustand nur, um seine eigene UI zu
 spiegeln.
 
-*Tickets:* #58
+**Shell-Flow-Zweig (RAT-31, `ingest_url` gesetzt).** Läuft das Panel im
+Shell-Flow (eingebettet, `?ingest_url=` gesetzt — vgl. SHELL-4/T1519), dann
+trägt der **lokale Tap den Aktiv-Marker autoritativ**: `onTap`/`onClear`
+setzen die Markierung optimistisch, und es gibt **kein Router-SSE-Abo
+(ROU-22) und keinen ROU-32-Display-Lookup** mehr. Ein Gerät (RAT-31,
+`decisions/RAT-31-wirbelsaeule-abriss.md`) ist die einzige Wahrheit über den
+eigenen Anzeige-Zustand; ohne Fremd-Gerät gibt es keinen zu spiegelnden
+externen Zustand.
+
+Die oben beschriebenen **Stream-Korrekturfälle entfallen im Shell-Flow**
+(RAT-31-gedeckt):
+- **Figuren-Erkennungs-Übersteuerung** (Match-los / falsche optimistische
+  Markierung korrigieren) — die Figuren-Erkennung **stirbt** (#1567), es gibt
+  keine übersteuernde Route mehr.
+- **Display-Ruhe-Zustand / `null`** und **Fremd-Übersteuerung** — bei einem
+  Gerät (RAT-31) gibt es keinen fremden Steuernden, der den lokalen Marker
+  überstimmen könnte; der lokale Tap ist final.
+
+Die **Standalone-Flow-Beschreibung oben (Router-SSE, ROU-22/ROU-32,
+Stream-als-Wahrheit) BLEIBT unverändert** für den Nicht-Shell-Fall gültig
+(der Standalone-Pfad stirbt erst mit dem Router selbst, PR-D).
+
+*Tickets:* #58, #1584
 
 ## 7. Layout (statisch, scroll-frei)
 
