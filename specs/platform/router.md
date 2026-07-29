@@ -119,6 +119,17 @@ nicht neu vergeben (siehe `specs/README.md`).
 ## 3a. App-Panel-Adapter
 
 ### ROU-24 — App-Panel-Adapter
+> **Serving verlagert nach seiten (RAT-31 E6b, #1564):** Das **Ausliefern** der
+> App-Panel-Views (`GET /controller/app-panel/<id>/` — index.html + Assets +
+> config/tiles/bearbeiten-Proxy) ist zum seiten-Service verlagert
+> (seiten-registry.md SREG-17, app-panel.md PANEL-2). nginx routet
+> `/controller/app-panel/` an `xbuddy_seiten`. Der **Event-Adapter** (die Tabelle
+> unten: `tile_selected`/`panel_cleared` → State-Setzen) bleibt Router-Aufgabe —
+> nur das HTTP-Serving zieht um. Der Router-seitige Serving-Code
+> (`app_panel_index_*`/`app_panel_asset` in `router/main.py`) lebt als **toter
+> Zwilling** weiter, bis der Abriss #1568 ihn entfernt; er wird nicht mehr
+> erreicht (nginx-Split greift davor).
+
 Der App-Panel-Adapter ist der zweite Controller-Adapter neben dem
 Phone-Adapter (ROU-6). Er nimmt die zwei Event-Typen des
 App-Panel-Controllers (siehe [`app-panel.md`](app-panel.md), PANEL-6):
@@ -718,6 +729,15 @@ In der Origin-Routing-Tabelle
 *Tickets:* #323
 
 ### ROU-27 — Proxy und Last-Known-Good-Cache für das Panel-Instanz-Serving
+> **Verlagert nach seiten (RAT-31 E6b, #1564):** Dieser Proxy- + LKG-Cache-
+> Mechanismus ist 1:1 in den seiten-Service übernommen (seiten-registry.md
+> SREG-17) und wird dort produktiv ausgeführt. Der hier beschriebene Router-Code
+> lebt als **toter Zwilling** weiter, bis der Abriss #1568 ihn entfernt — nach
+> dem nginx-Split (`/controller/app-panel/` → `xbuddy_seiten`) erreicht ihn kein
+> Request mehr. Das beschriebene **Verhalten** (Proxy, LKG-Cache, Code-Default,
+> PBE-1/2 bearbeiten-Passthrough) gilt unverändert weiter, nur der ausführende
+> Service wechselt.
+
 Der Router proxyt die beiden instanz-spezifischen Datendateien an den
 panel-Service (`xbuddy-panel`, PORT-2 :5041), statt sie aus dem
 Auslieferungs-Verzeichnis zu lesen (Spiegel zu PREG-9):

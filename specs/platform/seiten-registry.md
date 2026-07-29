@@ -926,6 +926,49 @@ ROT (kein #1208-Blindfleck durch eine statische Liste).
 
 *Tickets:* #1210 (Refs #1208, #920, #608) · Prozess-Wurzel xbuddy-prozess#80
 
+## SREG-17 — App-Panel-Serving in seiten (verlagert vom Router, RAT-31 E6b)
+
+> **RAT-31 E6b (#1564):** Das Servieren der App-Panel-Instanz-Views wird vom
+> Router (ROU-24/ROU-27/PBE-1/PBE-2) nach seiten verlagert, damit `/shell/<id>`
+> (SHELL-1) und der Rail-Iframe `/controller/app-panel/<id>/` (SHELL-3)
+> **same-origin aus EINEM Service** kommen — kein Cross-Origin-Cookie-Jar, ein
+> Auth-Gate, ein Deploy-Ort. Der Router-Serving-Code lebt bis zum Abriss #1568
+> als toter Zwilling weiter (siehe router.md ROU-24/ROU-27-Marker); **produktiv
+> serviert seiten** (nginx-Split `/controller/app-panel/` → `xbuddy_seiten`, vor
+> dem allgemeinen `/controller/`-Router-Block).
+
+**seiten serviert `GET /controller/app-panel/<panel_id>/` (HTML + Assets) und
+proxyt die datentragenden Sichten an den panel-Service (127.0.0.1:5041):**
+
+- `GET /controller/app-panel/<id>/` → `index.html` mit `__PANEL_ID__`- und
+  `__BUILD_ID__`-Substitution (PANEL-2 / IDENT-5 / PANEL-14). Ohne Trailing-Slash
+  → `301` auf `/<id>/` (relative Asset-Pfade, HTTP-Directory-Disambiguation).
+- `config.json` / `tiles.json` → **Proxy** an `panel(5041)/api/v1/panels/<id>/<sicht>`
+  mit **Last-Known-Good-Cache + Code-Default-Fallback** (`{}` bzw. `[]`,
+  ROU-27-Verhalten 1:1, PANEL-8 stiller Fallback — kein Crash bei
+  panel-Service-Ausfall).
+- `bearbeiten` / `bearbeiten.js` / `bearbeiten.css` → **Proxy** an
+  `panel(5041)/controller/app-panel/<id>/<sicht>` — **kein LKG**, `404`/`502`
+  werden durchgereicht (PBE-1 / PBE-2).
+- `sw.js` → Statik mit `__BUILD_ID__`-Substitution + `no-cache`-Headern (PANEL-14).
+- alle übrigen Assets → Statik aus `controller/app-panel/` (die Datei-Ablage
+  bleibt physisch am Ort) mit realpath-Traversal-Schutz.
+
+**DCOMP-1 (Pflicht):** seiten liest die `panels.json` **nie** direkt und
+importiert **nicht** `panel` — config/tiles kommen ausschliesslich über HTTP vom
+panel-Service. Der panel-Service-Origin ist ein seiten-Runtime-Wert
+(`--panel-service-url` / ENV `PANEL_SERVICE_URL`, Default `http://127.0.0.1:5041`).
+
+**Auth:** die drei Routen tragen `require_dual_gate(mode=_AUTH_MODE)` — identisch
+zum Router-Schalter (`XBUDDY_AUTH_MODE`, initial `observe`), damit die
+Verlagerung das Auth-Verhalten nicht ändert (AUTH-7b / RAT-32).
+
+**Durchsetzung:** `seiten/tests/test_app_panel_serving.py` (Serving-200,
+config/tiles-Proxy + LKG-Fallback + Code-Default, bearbeiten-404-Passthrough,
+sw.js-build_id, Traversal-404, DCOMP-1-kein-panel-Import).
+
+*Tickets:* #1564 (Refs RAT-31, DCOMP-1; Router-Abriss #1568)
+
 ## Offene Punkte
 
 ### OPEN-SREG-Kategorie — Kategorisierung der Seiten-/Add-Liste

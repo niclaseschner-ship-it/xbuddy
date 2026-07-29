@@ -46,7 +46,11 @@ Environment=SEITEN_FUNNEL_ORIGIN=__XBUDDY_DISPLAY_ORIGIN_FUNNEL__
 # (OD3, additiv). Ohne diese ENV zeigt der Default relativ auf ./geraete.json im
 # Checkout (Repo-Phantom) — der Stempel landet dann nie im echten xbuddy-data-Store.
 Environment=GERAETE_REGISTRY=__XBUDDY_DATA__/geraete/geraete.json
-ExecStart=__XBUDDY_PYTHON__ -m seiten.main --host 127.0.0.1 --port 5042 --root __XBUDDY_REPO__ --inventar __XBUDDY_DATA__/seiten/inventar.json --panel-url http://127.0.0.1:5041 --geraete-url http://127.0.0.1:5040
+# SREG-17 / RAT-31 E6b (#1564): --panel-service-url speist das App-Panel-
+# Serving-Proxy (config.json/tiles.json/bearbeiten* → panel-Service). Die toten
+# --panel-url/--geraete-url-Flags sind entfernt: nach RAT-31 E3 (#1496) kennt
+# parse_args() sie nicht mehr, sie hätten einen argparse-Crash-Loop ausgelöst.
+ExecStart=__XBUDDY_PYTHON__ -m seiten.main --host 127.0.0.1 --port 5042 --root __XBUDDY_REPO__ --inventar __XBUDDY_DATA__/seiten/inventar.json --panel-service-url http://127.0.0.1:5041
 Restart=on-failure
 RestartSec=10
 
