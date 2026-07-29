@@ -584,8 +584,7 @@ Antwortet eine AUTH-3-Route mit `401`, rendert das Backend eine HTML-Seite
 mit Anweisung an den User, nicht einen rohen Status-Code. Die Seite enthält
 mindestens:
 
-- Geräte-Name (aus `geraete.json`, falls die Quell-URL eine `display_id`
-  trägt; sonst neutraler Hinweis).
+- Geräte-Name (neutraler Hinweis; kein geraete.json-Lookup mehr — RAT-31 E6c).
 - Anweisung: „Dieses Gerät muss neu verbunden werden. Frag den
   Familien-Chatbot einfach nach einem neuen Cookie für dein Gerät — dann
   geht es wieder. Oder pair im Chat ein neues Gerät."
