@@ -61,10 +61,6 @@ from tools.service_diagnostics import register_version  # noqa: E402
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
 FILE_MODE = 0o600
 
-# CLIENT-2: HTTP-Timeout für Cross-Component-Calls (SHELL-2 Router-Lookup).
-# RAT-31 E3: Panel-/Geräte-Registry-Calls entfernt; Router-Lookup (SHELL-2)
-# bleibt (SSE-Pane braucht display_id für den Panel→Display-Pfad).
-HTTP_TIMEOUT = 2.0
 
 
 # ============================================================
@@ -78,9 +74,6 @@ HTTP_TIMEOUT = 2.0
 runtime = {
     "root":              _REPO_ROOT,
     "inventar_path":     None,
-    # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
-    # Default: http://127.0.0.1:5000 (Router-Loopback, PORT-2).
-    "router_url":        "http://127.0.0.1:5000",
     # SREG-17 / RAT-31 E6b (#1564): Origin des panel-Service, an den seiten
     # config.json/tiles.json/bearbeiten* der App-Panel-Instanzen proxyt
     # (DCOMP-1 — kein Direkt-Read der panels.json). Default http://127.0.0.1:5041
@@ -121,8 +114,9 @@ def configure(root=None, inventar_path=None, ttl=None,
               heim_origin=None, tailscale_origin=None,
               funnel_origin=None,
               bot_token=None, init_data_config=None,
-              familie_client=None, router_url=None,
-              panel_service_url=None, icon_root=None):
+              familie_client=None,
+              panel_service_url=None, icon_root=None,
+              router_url=None):  # RAT-31 E6f-C (#1588): SHELL-2-Slot entfernt, Param bleibt als no-op fuer aeltere Test-Aufrufe.
     """Setzt Aufbau-Wurzel, Inventar-Pfad, TTL und Display-URL-Origins
     (SREG-3, SREG-7).
 
@@ -168,8 +162,6 @@ def configure(root=None, inventar_path=None, ttl=None,
         runtime["init_data_config"] = init_data_config
     if familie_client is not None:
         runtime["familie_client"] = familie_client
-    if router_url is not None:
-        runtime["router_url"] = router_url
     if panel_service_url is not None:
         runtime["panel_service_url"] = panel_service_url
     if icon_root is not None:
@@ -1300,38 +1292,26 @@ def hoerspiel_player_asset_view(asset):
 # nginx routet /shell/ zum seiten-Service (PORT-2, Loopback 5042) — Deploy-Schritt.
 #
 # SHELL-3: Split-Layout — linke Rail 280px Iframe → /controller/app-panel/<panel_id>/,
-#   rechts Iframe → /display/<display_id>/. Panel bleibt unpetraendert (PANEL-12
-#   berechnet Grid-Geometrie adaptiv, kein 1-Spalten-Modus noetig).
-# SHELL-4: kein Shell-Zustand, keine eigene EventSource, kein Cross-Iframe-Nachricht.
-# SHELL-5: rechtes Pane reiner Iframe, keine displib-Kopie.
-# SHELL-9: IDs aus Daten (URL + ROU-32-Lookup), kein Hardcode im Code.
+#   rechts Buddy-Pane ohne statischen src (src per SSE-Swap, SHELL-4 RAT-31 E2).
+#   Panel bleibt unpetraendert (PANEL-12 berechnet Grid-Geometrie adaptiv).
+# SHELL-4: Same-device Live-Refresh — seiten-seitiger SSE-Stream + Ingest (RAT-31 E2).
+#   KEIN Router-Fanout, KEIN display_id-Lookup mehr (SHELL-2 obsolet durch RAT-31).
+# SHELL-5: rechtes Pane swappt nur iframe.src, keine displib-Kopie.
+# SHELL-9: IDs aus Daten (URL), kein Hardcode im Code.
 # SHELL-PWA: PWA-Mantel analog ESSEN-33..35 — Manifest (Icons+display:fullscreen+
 #   scope /shell/), eigener SW (Scope /shell/, Service-Worker-Allowed-Header),
 #   Asset-Route analog einkauf_asset_view. Kachel-Scaling shell-seitig via CSS.
 
 
-def _lookup_display_id(panel_id):
-    """SHELL-2: display_id fuer panel_id via Router-Lookup (ROU-32).
+def _lookup_display_id(panel_id):  # pragma: no cover
+    """SHELL-2 TOMBSTONE — RAT-31 E6f-C (#1588): entfernt.
 
-    Ruft GET /api/v1/router/panels/app-panel:<panel_id> am Router-Service auf
-    (DCOMP-1). Liefert display_id-String bei
-    Erfolg oder None bei unbekanntem Panel, fehlendem display_id oder
-    Transport-/Parse-Fehler. Keine Reverse-Inferenz (SHELL-2: mehrere Panels
-    duerfen ein Display steuern — PREG-2). Als Funktion monkeypatching-bar
-    (Test-Naht).
+    Funktion ist tot (kein Produktions-Aufrufer). Bleibt als Stub damit
+    monkeypatch.setattr(seiten_main, '_lookup_display_id', ...) in aelteren
+    Tests (seiten/tests/test_build_id_registry.py) nicht AttributeError wirft.
+    Loeschen sobald alle externen Test-Aufrufer bereinigt sind.
     """
-    source_id = "app-panel:" + panel_id
-    url = runtime["router_url"].rstrip("/") + "/api/v1/router/panels/" + source_id
-    try:
-        with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT) as resp:
-            if resp.status != 200:
-                logging.warning("SHELL-2: Router-Lookup fuer %r liefert HTTP %s", source_id, resp.status)
-                return None
-            data = json.loads(resp.read().decode("utf-8"))
-            return data.get("display_id") or None
-    except (urllib.error.URLError, OSError, ValueError) as exc:
-        logging.warning("SHELL-2: Router-Lookup fuer %r nicht erreichbar: %s", source_id, exc)
-        return None
+    return None
 
 
 _HARD_RESET_HTML = """<!doctype html>
@@ -1553,9 +1533,9 @@ def shell_events(panel_id):
 def shell_ingest(panel_id):
     """SHELL-4 (RAT-31 E2): tile_selected-Ingest same-origin, publiziert an den
     Shell-SSE-Stream — OHNE router-Hop (Analog router POST /api/v1/events, aber
-    ohne routing.json). Die linke Panel-Nav postet bei leerem router_url an die
-    ORIGIN der Seite (app.js:985, #128) → die Nav braucht KEINE Änderung, nur
-    diesen Ingest unter der seiten-Origin.
+    ohne routing.json). Die linke Panel-Nav postet an die ORIGIN der Seite
+    (app.js:985, #128) → die Nav braucht KEINE Änderung, nur diesen Ingest
+    unter der seiten-Origin.
 
     Ein Gerät = ein Ziel: kein source_id/display_id-Match — jedes valide
     tile_selected trifft den einen Shell-Zustand.
@@ -1893,7 +1873,7 @@ def _proxy_panel_view(panel_id, sicht):
     liefert (body_bytes, content_type). Erfolg frischt den LKG-Cache; Ausfall
     (Timeout/5xx/Connection) greift auf den LKG-Snapshot zurueck, fehlt auch der,
     kommt der Code-Default (PANEL-8, kein Crash). Monkeypatch-bare Test-Naht
-    analog _lookup_display_id, aber MIT LKG. `sicht` ∈ _PANEL_PROXY_VIEWS."""
+    Monkeypatch-bare Test-Naht mit LKG. `sicht` ∈ _PANEL_PROXY_VIEWS."""
     url = "%s/api/v1/panels/%s/%s" % (_panel_service_base(), panel_id, sicht)
     cache_key = (panel_id, sicht)
     content_type = "application/json"
@@ -2323,10 +2303,6 @@ def parse_args(argv):
     p.add_argument("--seiten-funnel-origin", dest="seiten_funnel_origin",
                    help="Funnel-FQDN-Origin für Familien-User-Geräte (SREG-7 dritte Origin,"
                         " AUTH-7b, RAT-27; z.B. https://buddyboard.demo-tailnet.ts.net)")
-    # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
-    # ENV ROUTER_URL ueberschreibt Default; CLI-Flag schlaegt ENV.
-    p.add_argument("--router-url", dest="router_url",
-                   help="Origin des Router-Service fuer SHELL-2-Lookup (SHELL-2/ROU-32, Default http://127.0.0.1:5000)")
     # SREG-17 / RAT-31 E6b (#1564): Origin des panel-Service, an den seiten
     # config.json/tiles.json/bearbeiten* der App-Panel-Instanzen proxyt (DCOMP-1).
     # ENV PANEL_SERVICE_URL ueberschreibt Default; CLI-Flag schlaegt ENV.
@@ -2377,10 +2353,6 @@ def resolved_config(args):
     cfg["funnel_origin"] = (
         args.seiten_funnel_origin
         or os.environ.get("SEITEN_FUNNEL_ORIGIN", ""))
-    # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
-    cfg["router_url"] = (
-        args.router_url
-        or os.environ.get("ROUTER_URL", "http://127.0.0.1:5000"))
     # SREG-17 (#1564): Origin des panel-Service fuer das App-Panel-Serving-Proxy.
     # CLI schlaegt ENV schlaegt Default (127.0.0.1:5041, PORT-2).
     cfg["panel_service_url"] = (
@@ -2404,7 +2376,6 @@ def main(argv=None):
               heim_origin=cfg["heim_origin"],
               tailscale_origin=cfg["tailscale_origin"],
               funnel_origin=cfg["funnel_origin"],
-              router_url=cfg["router_url"],
               panel_service_url=cfg["panel_service_url"],
               icon_root=cfg["icon_root"])
     # SREG-7 / #1458: SEITEN_TAILSCALE_ORIGIN ist aufgegeben — kein Warning mehr.

@@ -3,7 +3,7 @@
 Spec-Anker:
   specs/platform/router.md ROU-26 (Icon-Asset-Auslieferung) + ROU-31 (Stichwort-Suche).
   specs/platform/icons.md ICONS-5 (stable URL) + ICONS-7 (Suche).
-  specs/platform/seiten-registry.md SREG-17 (Serving-Host-Verlagerung).
+  specs/platform/seiten-registry.md SREG-18 (Serving-Host-Verlagerung Icons).
 
 Lauf: python3 -m pytest seiten/tests/test_icons_serving.py -q
 
