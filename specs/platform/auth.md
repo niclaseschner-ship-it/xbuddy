@@ -514,10 +514,20 @@ Konsumenten dieselben Renderer-Routen ansprechen:
    SHELL-6). 7b umfasst:
 
    ```
-   /shell/<panel_id>                             (GET, HTML-Shell)
-   /controller/*                                  (Panel-Controller-Apps)
-   /api/v1/displays/<display_id>/events           (SSE-Event-Stream)
+   /shell/<panel_id>                             (GET, HTML-Shell, seiten-served)
+   /shell/<panel_id>/events                       (SSE-Event-Stream, seiten-served)
+   /controller/*                                  (Panel-Controller-Apps, seiten-served)
    ```
+
+   > **RAT-31-Nachzug (E6f, Router-Tod).** Der eigenständige Display-Router
+   > (`router/main.py`) ist gelöscht. Die 7b-Renderer-Routen werden jetzt **von
+   > seiten** (`seiten/main.py`) ausgeliefert, tragen dort denselben Dual-Gate.
+   > Der alte `/api/v1/displays/<display_id>/events`-SSE-Fanout (Router-Hop) ist
+   > **ersatzlos entfallen**; der Shell-SSE-Stream läuft same-origin als
+   > `/shell/<panel_id>/events` (kein Router-Hop). Die früher hier gelisteten
+   > `/display/<id>`-Renderer-Routen sind mit dem Router entfallen; nur die
+   > public `/display/_shared/*`-Assets (7b-Public-Ausnahme, unten) leben auf
+   > seiten weiter.
 
 **Einheitlicher Eltern-Auth-Pfad (RAT-27 Nic-Bedingung).** 7b ist NICHT auf die
 Heim-Shell begrenzt: Cookie-über-Funnel ist **derselbe** Auth-Pfad wie AUTH-3 für

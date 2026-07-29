@@ -1,8 +1,0 @@
-{
-  "_comment": "ROU-19 — optionale Tuning-Werte. Kopiere als config.json. Nicht gesetzte Felder bleiben auf den Code-Defaults (ROU-15). ENV-Variablen und CLI-Flags überschreiben diese Datei.",
-  "listen_host": "0.0.0.0",
-  "listen_port": 5000,
-  "log_level":   "INFO",
-  "_controller_dir": "ROU-23: Pfad zur Controller-PWA-Statik. Leer = Default neben dem Router-Code (../controller/figuren-erkennung).",
-  "controller_dir": ""
-}

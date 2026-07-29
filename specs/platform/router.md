@@ -1,5 +1,18 @@
 # Router — Spec     (ID-Präfix: ROU)
 
+> ⚠️ **ENTFALLEN durch RAT-31 E6f (#1568), 2026-07-29.**
+> `router/` ist gelöscht. Es gibt keinen zentralen Routing-/State-Hub-Prozess
+> mehr — das Heim-Display ist fest ein Gerät (Heim-Shell PWA, `heim-shell.md`),
+> die verbleibenden Router-Funktionen (Icon-Suche ROU-31, /display/_shared/
+> ROU-26/ROU-30, /controller/_shared/ ROU-23, App-Panel-Serving) sind in den
+> Seiten-Registry-Dienst verlagert (`seiten-registry.md`, RAT-31 E6b/E6f-A/B).
+> Die nginx-Origin hat keinen `xbuddy_router`-Upstream und keine allgemeinen
+> /display/-, /controller/-, /api/v1/-Fallbacks mehr.
+> Diese Spec bleibt als historischer Anker erhalten.
+> Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`, Epic #1339.
+>
+> Status: V1 (ENTFALLEN) · Refs #5 #1568
+
 > Status: V1-Kern · Refs #5
 
 Der Router ist die Routing-Logik des Hubs: er nimmt Events von Controllern
