@@ -42,26 +42,13 @@ DEMO_PANELS = {
         {
             "panel_id": "kueche-01",
             "source_id": "app-panel:kueche-01",
-            "display_id": "pi-display-flur-01",
-            "router_url": "",
             "config": {
                 "source_id": "app-panel:kueche-01",
-                "display_id": "pi-display-flur-01",
-                "router_url": "",
             },
             "tiles": {"tiles": []},
         },
     ]
 }
-
-
-@pytest.fixture(autouse=True)
-def stub_externe_dienste(monkeypatch):
-    """PREG-12: Geräte-Registry + Router stubben — kein Netz."""
-    monkeypatch.setattr(panel_main, "display_existiert",
-                        lambda d: True)
-    monkeypatch.setattr(panel_main, "router_panels_upsert",
-                        lambda s, d: True)
 
 
 @pytest.fixture

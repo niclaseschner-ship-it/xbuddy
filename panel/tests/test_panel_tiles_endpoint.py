@@ -15,8 +15,6 @@ Abgedeckt:
   test_pbe4_other_panels_preserved                 — andere Panels bleiben erhalten
   test_pbe4_last_write_wins_zwei_sequentielle_puts — PBE-4: zweiter PUT gewinnt vollständig
 
-AC5 (PBE-10 Reload-Signal) NICHT in T446 — folgt #450 (Spec-Halt SSE-Publish-Form).
-
 Lauf: python3 -m pytest panel/tests/ -v
 """
 
@@ -43,12 +41,8 @@ DEMO_PANELS = {
         {
             "panel_id": "kueche-01",
             "source_id": "app-panel:kueche-01",
-            "display_id": "pi-display-flur-01",
-            "router_url": "",
             "config": {
                 "source_id": "app-panel:kueche-01",
-                "display_id": "pi-display-flur-01",
-                "router_url": "",
                 "backoffs": [200, 1000, 5000],
             },
             "tiles": {
@@ -67,8 +61,6 @@ DEMO_PANELS = {
         {
             "panel_id": "flur-01",
             "source_id": "app-panel:flur-01",
-            "display_id": "tablet-elias-01",
-            "router_url": "https://hub.local:8443",
             "config": {"source_id": "app-panel:flur-01"},
             "tiles": {"tiles": []},
         },
@@ -95,15 +87,6 @@ GUELTIGE_TILES = {
         },
     ]
 }
-
-
-@pytest.fixture(autouse=True)
-def stub_externe_dienste(monkeypatch):
-    """PREG-12: Geräte-Registry + Router stubben — kein Netz."""
-    monkeypatch.setattr(panel_main, "display_existiert",
-                        lambda d: True)
-    monkeypatch.setattr(panel_main, "router_panels_upsert",
-                        lambda s, d: True)
 
 
 @pytest.fixture
@@ -269,9 +252,6 @@ def test_pbe4_config_field_not_touched(write_client):
     config_nachher = json.dumps(reg_nachher.get("kueche-01").config, sort_keys=True)
     assert config_vorher == config_nachher, (
         "config wurde durch PUT /tiles verändert (PREG-5 verletzt)")
-
-
-# AC5 (PBE-10 Reload-Signal) NICHT in T446 — folgt #450 (Spec-Halt SSE-Publish-Form).
 
 
 # ============================================================
