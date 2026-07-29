@@ -23,7 +23,6 @@ sys.path.insert(0, _REPO_ROOT)
 from panel import main as panel_main  # noqa: E402
 from panel import registry as registry_mod  # noqa: E402
 
-
 # ============================================================
 #  Demo-Daten + Fixtures
 # ============================================================
