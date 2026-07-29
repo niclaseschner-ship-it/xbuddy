@@ -57,9 +57,9 @@ DEFAULTS = {
     # FAM-12) und liest (`GET /api/v1/familie/personen` FAM-7). Per-Instanz-
     # Wert; Default passt zum Pi-Setup (PORT-2 Familie auf 5010).
     "familie_origin_url": "http://127.0.0.1:5010",
-    # GAA-5 / Auftrag #215: Origin der Geraete-Komponente, ueber die die
-    # GeraetAnlegenTask Geraete schreibt (`POST /api/v1/geraete/` GER-15).
-    # Per-Instanz-Wert; Default passt zum Pi-Setup (PORT-2 Geraete auf 5040).
+    # `geraete_origin_url` vestigial seit RAT-31 E6c — die geraete-Registry
+    # stirbt (#1565), »Gerät koppeln« mintet nur noch einen Pairing-Link.
+    # Feld + Default bleiben strukturell erhalten (config bleibt unangetastet).
     "geraete_origin_url": "http://127.0.0.1:5040",
     # `panel_origin_url` vestigial seit RAT-31 E1 — PanelAnlegenTask entfallen
     # (#1470, panel_anlegen-Skill gelöscht). Feld + Default bleiben strukturell
@@ -213,7 +213,7 @@ class Config:
         self.context_depth = context_depth
         self.ca_pem_path = ca_pem_path             # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
         self.familie_origin_url = familie_origin_url   # FAA-12 / #215: Origin der Familien-Komponente
-        self.geraete_origin_url = geraete_origin_url   # GAA-5 / #215: Origin der Geraete-Komponente
+        self.geraete_origin_url = geraete_origin_url   # vestigial seit RAT-31 E6c (#1565): geraete-Registry stirbt
         self.panel_origin_url = panel_origin_url       # PAA-5 / #183: Origin der Panel-Registry (PREG-15)
         self.plan_origin_url = plan_origin_url         # EC-21 / #215: Origin der Plan-Buddy-Reload-Schnittstelle
         self.display_url_origin = display_url_origin   # GAA-3.7 (deprecated → display_url_origin_heim, SREG-7)

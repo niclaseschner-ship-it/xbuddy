@@ -1,7 +1,0 @@
-# GER-4 — Per-Instanz-Dateien des Geräte-Buddys, je Instanz separat
-# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
-# dokumentiert.
-#
-# Geräte-Registry (GER-4) — je Instanz separat, trägt 0600-Rechte.
-# Format: geraete/geraete.example.json
-geraete.json

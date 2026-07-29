@@ -4,10 +4,11 @@
 > Setup ist fest **ein Gerät** (Heim-Shell). Damit entfallen die Multi-Geräte-
 > Annahmen: die Übersicht (`/api/v1/seiten/uebersicht`, SREG-12) zieht ihre
 > Kachel-Daten künftig aus den **committeten Buddy-View-Manifesten** statt aus
-> den `panel/`- und `geraete/`-Registry-Snapshots (die sterben), und das
-> „Geräte-Paar"-Box-Modell (SREG-12) kollabiert auf ein Gerät. Die Umschreibung
-> erfolgt in Etappe #1496 (E3 Aggregator-Umbau) + #1499 (E7 Spec-Cleanup). Bis
-> dahin ist **RAT-31 der bindende Ziel-Zustand**. Governance:
+> den `panel/`- und `geraete/`-Registry-Snapshots, und das „Geräte-Paar"-Box-
+> Modell (SREG-12) kollabiert auf ein Gerät. Der Aggregator-Umbau (E3, #1496)
+> ist erfolgt; die `geraete/`-Registry ist mit **RAT-31 E6c (#1565)** gelöscht
+> (`geraete.md` ENTFALLEN). Bis zum vollen Spec-Cleanup (#1499, E7) ist **RAT-31
+> der bindende Ziel-Zustand**. Governance:
 > `decisions/RAT-31-wirbelsaeule-abriss.md`, Epic #1339.
 >
 > Status: V1-Entwurf · Refs #347 #1339 · ratifiziert RAT-13 (berater-runde 2026-06-06), fortgeschrieben RAT-31

@@ -1,6 +1,16 @@
 # Geräte-Registry — Spec     (ID-Präfix: GER)
 
-> Status: V1 · Refs #105
+> ⚠️ **ENTFALLEN durch RAT-31 E6c (#1565), 2026-07-29.**
+> Die Geräte-Registry (`geraete/`-Service, `geraete.json`, `GeraeteClient`)
+> ist gelöscht. Es gibt **kein** Registry-Tracking der Geräte einer Familie
+> mehr, keine gespeicherte Geräte-Identität/Verwendung/`paired_at`-Zuordnung.
+> Das Setup ist fest **ein Gerät** (Heim-Shell); „Gerät koppeln" mintet nur
+> noch einen Pairing-Link (`geraet-anlegen.md`), die Rolle (Kinder-Display vs.
+> Elterngerät) wählt die Familie beim PWA-Installieren. Diese Spec beschreibt
+> einen **nicht mehr lebenden Zustand**; sie bleibt als historischer Anker
+> erhalten. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`, Epic #1339.
+>
+> Status: V1 (ENTFALLEN) · Refs #105 #1565
 
 Die Geräte-Registry ist die **zentrale** Liste der Geräte einer Familie —
 Tablets, Handys, Monitore und das Pi-Display. Sie ist die eine Quelle für
