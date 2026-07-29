@@ -2,122 +2,75 @@
 geraet-anlegen.md GAA-5 + E-GAA-4 und eltern-chat.md EC-8/EC-10 (Refs #106).
 
 Diese Aufgabe ist der V1-Trigger der `geraet_anlegen`-Funktion (GAA-1):
-versteht der Agent eine natürlichsprachige Bitte („leg mein Tablet an"),
-schlägt er die Anlage vor — nach EC-10-Bestätigung startet der Task die
-Funktion im Privatchat des Aufrufers (GAA-5).
+versteht der Agent eine natürlichsprachige Bitte („koppel mein Tablet"),
+schlägt er das Koppeln vor — nach EC-10-Bestätigung mintet der Task einen
+frischen Pairing-Link und postet ihn im Privatchat des Aufrufers (GAA-5).
 
-Eine **schreibende** Aufgabe (EC-10, GAA-5): die Funktion ergänzt die
-Geraete-Registry über die HTTP-Schreib-Schnittstelle der Geraete-Komponente
-(GER-15, Auftrag #215). Das EC-10-Bestätigungs-Gate vor dem Aufgaben-Start
-ist redundant mit GAA-3.6 (jedes Gerät wird einzeln bestätigt), aber
-Pattern-treu.
+RAT-31 E6c (Nic-Setzung 2026-07-29): es gibt keine geraete-Registry mehr.
+Die Aufgabe schreibt nichts in eine Registry — sie mintet nur einen
+Pairing-Link. Sie bleibt eine EC-10-Aufgabe (propose→confirm), ist aber
+**synchron, single-shot** (keine PrivateChatSession, kein Worker-Thread):
+`execute()` prüft die Berechtigung (GAA-2 via `geraet_anlegen`) und postet
+den Link direkt.
 
 Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
-(GAA-1 / E-GAA-1) — keine eigene Anlage-Logik. Sie liefert nur den
-Privatchat-Stream als `next_message`-Callable und gibt die Quittung
-zurück, die der Agent dem Aufrufer weiterreicht.
+(GAA-1 / E-GAA-1) — keine eigene Anlage-Logik.
 """
 
 import logging
 
-from private_chat_session import PrivateChatSession
 from tasks import Proposal, WriteTask, is_from_private_chat
 
 from skills import geraet_anlegen
-from skills.geraete_client import GeraeteClient
-from skills.typing_indicator import make_typing_fn
 
-# Quittung in den Agent-Loop zurück — die Anlage selbst läuft im Privatchat,
-# der Agent formuliert daraus seine kurze Antwort.
-#
-# Wir unterscheiden zwei Faelle (Refs #157):
-# - Aufgabe aus dem Familien-Chat gestartet → Wechsel-Quittung
-#   `_QUITTUNG_START_FROM_GROUP`.
-# - Aufgabe schon IM Privatchat gestartet → keine Wechsel-Ankuendigung; die
-#   erste Frage (GAA-3.1 Typ-Schritt: „Was für ein Gerät …") erscheint direkt
-#   im selben Chat asynchron aus dem Session-Thread.
-_QUITTUNG_START_FROM_GROUP = (
-    "Ich richte das im Privatchat mit dir ein — antworte mir "
-    "dort einfach Schritt für Schritt.")
-_QUITTUNG_START_FROM_PRIVATE = (
-    "Ich lege das Gerät hier mit dir an — Schritt für Schritt. Die erste "
-    "Frage kommt gleich.")
+logger = logging.getLogger(__name__)
+
+# Quittung in den Agent-Loop zurück — den Link postet `geraet_anlegen` selbst
+# im Privatchat, der Agent formuliert daraus seine kurze Antwort.
+_QUITTUNG = (
+    "Ich habe dir einen frischen Pairing-Link in den Privatchat geschickt — "
+    "öffne ihn auf dem Gerät, das du koppeln willst.")
+_KEIN_PRIVATCHAT = (
+    "Ich schicke den Pairing-Link nur in deinen Privatchat. Schreib mir bitte "
+    "direkt eine Nachricht und frag dort noch einmal.")
 
 # EC-10 / #266: Vorschlags-Zusammenfassung ist kontextabhängig (EC-10-Wortlaut):
-# - Aufruf aus der Familien-Gruppe → nennt den Privatchat als Ort der Einrichtung.
+# - Aufruf aus der Familien-Gruppe → nennt den Privatchat als Zustell-Ort.
 # - Aufruf schon IM Privatchat → kein Ortswechsel-Hinweis.
 _PROPOSAL_SUMMARY_FROM_GROUP = (
-    "Neues Gerät im Privatchat anlegen — ich frage dort der Reihe nach nach "
-    "Typ, Name, Auflösung, Betriebssystem und Verwendung (V1 nur Display-Geräte).")
+    "Einen frischen Pairing-Link für ein neues Gerät erzeugen und dir per "
+    "Privatchat schicken. Die Rolle (Kinder-Display oder Elterngerät) wählst "
+    "du beim Installieren am Gerät.")
 _PROPOSAL_SUMMARY_FROM_PRIVATE = (
-    "Neues Gerät anlegen — ich frage hier der Reihe nach nach Typ, Name, "
-    "Auflösung, Betriebssystem und Verwendung (V1 nur Display-Geräte).")
-
-
-class GaaSession(PrivateChatSession):
-    """Eine laufende »Gerät anlegen«-Session in einem Privatchat.
-
-    Analog `FaaSession`: der Worker-Thread läuft `geraet_anlegen(...)` synchron
-    und blockiert in `next_message()` auf der Queue. Die main-Loop steckt
-    eingehende Privatchat-Updates dieses Chats per `deliver()` in die Queue,
-    statt sie dem Agenten weiterzureichen — solange die Session aktiv ist.
-
-    Die Worker-Thread+Queue+Timeout-Mechanik lebt in `PrivateChatSession`
-    (EC-20, Refs #130); diese Subklasse benennt nur Thread- und Logging-Präfix.
-    """
-
-    THREAD_NAME_PREFIX = "gaa"
-    LOG_PREFIX = "GAA"
+    "Einen frischen Pairing-Link für ein neues Gerät erzeugen und dir hier "
+    "schicken. Die Rolle (Kinder-Display oder Elterngerät) wählst du beim "
+    "Installieren am Gerät.")
 
 
 class GeraetAnlegenTask(WriteTask):
     """Schreibende Katalog-Aufgabe (EC-10), die »Gerät anlegen« auslöst
-    (GAA-5). Die Anlage selbst läuft im Privatchat — der Task startet die
-    Session und gibt eine kurze Quittung zurück, die Konversation läuft
-    danach autonom im Privatchat.
+    (GAA-5). RAT-31 E6c: mintet nur einen Pairing-Link (keine Registry) und
+    postet ihn synchron in den Privatchat des Aufrufers.
     """
 
-    # Refs #159: `execute()` startet nur den Worker-Thread und kehrt sofort
-    # mit der Quittung zurueck — die eigentliche Schreib-Operation passiert
-    # erst spaeter im Worker. Das Framework skipt die inline-Hook-Iteration
-    # (GAA deklariert heute keine Hooks; das Flag haelt das Verhalten
-    # konsistent mit FAA/KAV).
-    is_async = True
-
-    def __init__(self, tg, geraete_origin_url, sessions,
-                 family_group_chat_id_getter,
-                 display_url_origin=None, client=None,
+    def __init__(self, tg, family_group_chat_id_getter,
                  pairing_bot_token=None, pairing_origin=None):
-        """`geraete_origin_url` ist die Origin der Geraete-Komponente (z. B.
-        `http://127.0.0.1:5040`). `client` ist die Test-Naht: liefert ein
-        vorgefertigter `GeraeteClient` (mit `transport=`-Callable) hereingegeben,
-        nutzt der Task diesen statt einer neuen Instanz — symmetrisch zur
-        FAA-Aufgabe.
-
-        `pairing_bot_token` / `pairing_origin` (GAA-3.8 / auth.md AUTH-2.a):
+        """`pairing_bot_token` / `pairing_origin` (GAA-3.8 / auth.md AUTH-2.a):
         der per-Instanz-Bot-Token (HMAC-Sign-Key) und die Funnel-FQDN-Origin,
-        unter der `/auth/pair` (seiten) + die PWA liegen. Der Task reicht beide
-        an `geraet_anlegen` durch → `_poste_pairing_link` feuert (postet den
-        15-Minuten-Pairing-Link in den Privatchat). Fehlt einer, entfällt der
-        Pairing-Link-Schritt in `geraet_anlegen` stillschweigend (E-GAA-5-
-        Agnostik) — die Quelle im Live-Betrieb ist der Aufrufer (build_catalog:
-        cfg.bot_token + cfg.mini_app_base_url)."""
+        unter der `/auth/pair` (seiten) + die PWA liegen. Fehlt einer, meldet
+        `geraet_anlegen` das dem Aufrufer (kein halb-verdrahteter Pfad)."""
         super().__init__(
             name="geraet_anlegen",
             description=(
-                "Legt ein oder mehrere Geräte (Tablet, Handy, Monitor, "
-                "Pi-Display) der Familie im Privatchat des Aufrufers an. "
-                "Aufrufen, wenn jemand sagt »leg mein Tablet an«, »trag "
-                "den Monitor in die Geräte ein«, oder ähnliche Anlage-"
-                "Bitten. Die Anlage selbst läuft als Schritt-für-Schritt-"
-                "Konversation im Privatchat."),
+                "Erzeugt einen frischen Pairing-Link für ein neues Gerät der "
+                "Familie und schickt ihn per Privatchat. Aufrufen, wenn jemand "
+                "sagt »koppel mein Tablet«, »neues Gerät hinzufügen«, »richte "
+                "das Kinder-Display ein«, oder ähnliche Bitten. Die Rolle "
+                "(Kinder-Display oder Elterngerät) wählt die Familie beim "
+                "Installieren am Gerät selbst."),
             parameters={"type": "object", "properties": {}})
         self._tg = tg
-        self._client = client if client is not None else GeraeteClient(
-            geraete_origin_url)
-        self._sessions = sessions   # dict chat_id -> GaaSession (in-memory)
         self._family_group_chat_id_getter = family_group_chat_id_getter
-        self._display_url_origin = display_url_origin
         self._pairing_bot_token = pairing_bot_token
         self._pairing_origin = pairing_origin
 
@@ -129,73 +82,29 @@ class GeraetAnlegenTask(WriteTask):
         return Proposal(_PROPOSAL_SUMMARY_FROM_GROUP)
 
     def execute(self, arguments, turn_context):
-        """Startet die GAA-Session im Privatchat des Aufrufers (GAA-5).
+        """Mintet den Pairing-Link und postet ihn im Privatchat des Aufrufers
+        (GAA-5).
 
         Der Zielchat — der Privatchat des Aufrufers — entstammt dem
         `TurnContext` (private_chat_id), nie den Modell-`arguments`: so
-        bestimmt nicht das Sprachmodell, wo angelegt wird (EC-12-Geist).
+        bestimmt nicht das Sprachmodell, wo der Link landet (EC-12-Geist).
         """
-        private_chat_id = turn_context.private_chat_id
-        user_id = turn_context.from_user_id
+        private_chat_id = turn_context.private_chat_id if turn_context else None
+        user_id = turn_context.from_user_id if turn_context else None
         if private_chat_id is None or user_id is None:
-            return ("Ich brauche deinen Privatchat, um die Anlage zu starten. "
-                    "Schreib mir bitte direkt eine Nachricht.")
-
-        # Schon eine Session im selben Privatchat? Nicht doppelt starten.
-        if private_chat_id in self._sessions:
-            return ("Eine Geräte-Anlage läuft schon in deinem Privatchat — "
-                    "bitte dort antworten oder mit »abbrechen« beenden.")
-
-        session = GaaSession(private_chat_id)
-        self._sessions[private_chat_id] = session
+            return _KEIN_PRIVATCHAT
 
         family_group_chat_id = self._family_group_chat_id_getter()
-        client = self._client
-        tg = self._tg
-        sessions = self._sessions
-        display_url_origin = self._display_url_origin
-        pairing_bot_token = self._pairing_bot_token
-        pairing_origin = self._pairing_origin
-
-        # EC-25 / Issue #285: Typing-Indikator vor jeder send_message-Phase im
-        # Privatchat. Best-Effort: Fehler werden in fire_typing geschluckt.
-        # Vgl. skills/typing_indicator.py (EC-25-Helfer, gemeinsam für TES/FAA/GAA/KAV).
-        typing_fn = make_typing_fn(tg, private_chat_id)
-
-        def run_gaa():
-            try:
-                result = geraet_anlegen.geraet_anlegen(
-                    tg, private_chat_id, user_id, family_group_chat_id,
-                    client, session.next_message,
-                    display_url_origin=display_url_origin,
-                    typing_fn=typing_fn,
-                    # GAA-3.8 / AUTH-2.a: Pairing-Link-Zustellung durchreichen.
-                    pairing_bot_token=pairing_bot_token,
-                    pairing_origin=pairing_origin)
-                logging.info(
-                    "GAA-Session in Chat %s beendet — authorized=%s, ids=%s",
-                    private_chat_id, result.authorized,
-                    result.vergebene_display_ids)
-            finally:
-                sessions.pop(private_chat_id, None)
-
-        session.start(run_gaa, ())
-        # Refs #157: Wechsel-Quittung NUR, wenn der Aufrufer noch nicht im
-        # Privatchat ist. Sonst direkt mit der Einleitung — die erste Frage
-        # (Typ-Schritt) kommt asynchron im selben Chat.
-        if is_from_private_chat(turn_context):
-            return _QUITTUNG_START_FROM_PRIVATE
-        return _QUITTUNG_START_FROM_GROUP
-
-
-def make_gaa_input(incoming_message):
-    """Übersetzt eine `IncomingMessage` (Privatchat-Nachricht des Aufrufers)
-    in den `GaaInput`, den `geraet_anlegen.next_message` erwartet (GAA-5-
-    Adapter, analog `make_faa_input`).
-
-    Der Adapter ist hier, nicht in `telegram.py` — `IncomingMessage` bleibt
-    so eine reine Datenklasse ohne GAA-Wissen, und GAA muss nicht
-    `IncomingMessage` importieren (die Funktion lebt im Eltern-Chat,
-    GAA-Funktion ist trigger-agnostisch, E-GAA-1).
-    """
-    return geraet_anlegen.GaaInput(text=incoming_message.text or "")
+        result = geraet_anlegen.geraet_anlegen(
+            self._tg, private_chat_id, user_id, family_group_chat_id,
+            pairing_bot_token=self._pairing_bot_token,
+            pairing_origin=self._pairing_origin)
+        logger.info(
+            "GAA in Chat %s beendet — authorized=%s, links=%d",
+            private_chat_id, result.authorized, len(result.pairing_links))
+        if not result.pairing_links:
+            # geraet_anlegen hat dem Aufrufer bereits die Ablehnung/den
+            # Fehlerhinweis in den Privatchat gepostet — knappe Loop-Quittung.
+            return ("Ich konnte gerade keinen Pairing-Link schicken — sieh in "
+                    "deinen Privatchat.")
+        return _QUITTUNG

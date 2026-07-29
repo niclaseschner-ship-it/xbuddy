@@ -1,22 +1,30 @@
 # Gerät anlegen — Spec     (ID-Präfix: GAA)
 
-> ⚠️ **ZIEL-ZUSTAND geändert durch RAT-31 (2026-07-27) — Wirbelsäule-Abriss.**
-> Setup ist fest **ein Gerät** (Heim-Shell). „Gerät anlegen" bleibt als Eltern-
-> Chat-Grundfunktion erhalten, wird aber **eingedampft**: statt Typ/OS/Auflösung/
-> Name abzufragen und einen `geraete.json`-Registry-Eintrag zu schreiben, fragt
-> die Funktion nur noch **eine Binär-Wahl — Kind-Gerät oder Eltern-Gerät —** und
-> mintet den **Pairing-Link** mit dem passenden Ziel (Kind → `/shell/<panel_id>`,
-> Eltern → Cookie + Mini-App-Übersicht). Damit **überholt**: der `GeraeteClient`-
-> Registry-Write (GAA-3.7), die Abfrage von `typ`/`os`/`aufloesung`/`name`
-> (GAA-3.x), das `paired_at`-Tracking. **Kein Registry-Tracking mehr, welche
-> Geräte gepaart sind.** Die eltern-chat-Skills `panel_anlegen` und
-> `ca-verteilung` entfallen (Etappe #1470, E1 umgesetzt). `cookie_nachschicken`
-> **bleibt** — Grundfunktion der Cookie-Zustellung (Nic-Entscheid 2026-07-27).
-> Bis zur vollen Per-Requirement-Umschreibung ist **RAT-31 der bindende
-> Ziel-Zustand**. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`,
-> Epic #1339.
+> ⚠️ **ZIEL-ZUSTAND geändert durch RAT-31 E6c (#1565), 2026-07-29 — LINK-MINT-ONLY.**
+> Setup ist fest **ein Gerät** (Heim-Shell). „Gerät koppeln" bleibt als Eltern-
+> Chat-Grundfunktion erhalten, ist aber auf **reines Link-Minten** eingedampft:
+> nach der GAA-2-Berechtigungsprüfung mintet die Funktion **einen Pairing-Link**
+> (`<origin>/auth/pair?token=<X>`, 15 Minuten, HMAC mit dem Bot-Token) und postet
+> ihn im Privatchat — **mehr nicht**.
 >
-> Status: V1 (RAT-18/GER) → eingedampft auf Binär {Kind|Eltern} (RAT-31) · Refs #106 #1339
+> **Korrektur einer früheren Fehlannahme (Nic-Setzung 2026-07-29):** Es gibt
+> **KEINE** Binär-Wahl (Kind-Gerät/Eltern-Gerät) beim Minten und **KEINEN**
+> rollen-tragenden Pairing-Token. Die Rolle (Kinder-Display vs. Elterngerät)
+> wählt das Elternteil **beim PWA-Installieren am Gerät**, nicht der Server.
+> `/auth/pair` setzt nur den Cookie und redirected **neutral** auf die Übersicht
+> (`auth.md` AUTH-2.a). Der Cookie/Link wird **auf Nachfrage im Chat** verteilt.
+>
+> Damit **entfallen ersatzlos**: der `GeraeteClient`-Registry-Write (GAA-3.7),
+> die Geräte-Attribut-Abfrage `typ`/`os`/`aufloesung`/`name`/`verwendung`
+> (GAA-3.x), das `paired_at`-Tracking und die geraete-Registry insgesamt
+> (`geraete.md` ENTFALLEN). Die eltern-chat-Skills `panel_anlegen` und
+> `ca-verteilung` entfielen bereits (E1, #1470). `cookie_nachschicken`
+> **bleibt** — mintet auf Nachfrage einen frischen Link (ebenfalls ohne
+> Registry). Der untenstehende GAA-3.x-Konversationsfluss beschreibt den
+> historischen, nicht mehr lebenden Zustand. Governance:
+> `decisions/RAT-31-wirbelsaeule-abriss.md`, Epic #1339.
+>
+> Status: V1 (RAT-18/GER) → Link-Mint-only (RAT-31 E6c) · Refs #106 #1339 #1565
 
 Damit eine Familie ihre Geräte in die Geräte-Registry (`geraete.md` GER-6)
 bekommt, ohne `geraete.json` von Hand zu pflegen, definiert diese Spec
