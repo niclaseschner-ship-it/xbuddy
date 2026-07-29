@@ -546,3 +546,105 @@ def test_T1126_plan_location_steht_nach_seiten_routine_location():
         "T1126: /seiten/plan/ muss nach /seiten/routine/ stehen "
         f"(Positionen: routine={pos_routine}, plan={pos_plan})"
     )
+
+
+# ============================================================
+#  controller/_shared + display/_shared/design → seiten (ROU-23 + ROU-30, RAT-31 E6f-A, #1582)
+# ============================================================
+#
+# Beide Pfade werden seit RAT-31 E6f-A (#1582) vom seiten-Service serviert.
+# Spezifische Prefixe müssen VOR den allgemeinen /controller/- bzw. /display/-
+# Blöcken stehen (längster Prefix gewinnt — URL-14).
+
+
+def test_ROU_23_controller_shared_location_existiert():
+    """ROU-23 / RAT-31 E6f-A (#1582): location /controller/_shared/ muss existieren
+    und auf xbuddy_seiten zeigen."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/controller/_shared/\s*\{[^}]*proxy_pass\s+http://xbuddy_seiten\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /controller/_shared/ fehlt oder proxypasst nicht an xbuddy_seiten "
+        "(ROU-23, RAT-31 E6f-A, #1582)"
+    )
+
+
+def test_ROU_23_controller_shared_steht_vor_controller_allgemein():
+    """URL-14: /controller/_shared/ muss VOR dem allgemeinen /controller/-Block stehen
+    (spezifisch vor allgemein — längster Prefix gewinnt)."""
+    text = _conf_text()
+    pos_shared = text.find("location /controller/_shared/")
+    pos_controller = text.find("location /controller/ {")
+    assert pos_shared != -1, "location /controller/_shared/ nicht gefunden"
+    assert pos_controller != -1, "location /controller/ nicht gefunden"
+    assert pos_shared < pos_controller, (
+        "URL-14-Verstoß: /controller/_shared/ muss VOR dem allgemeinen /controller/-Block stehen "
+        f"(Positionen: _shared={pos_shared}, /controller/={pos_controller})"
+    )
+
+
+def test_ROU_23_controller_shared_steht_nach_app_panel():
+    """Tabellenreihenfolge: /controller/app-panel/ (spezifischer) steht vor /controller/_shared/.
+
+    Beide sind spezifische Sub-Prefixe von /controller/; app-panel ist das laengere
+    und spezifischere Praefix und steht zuerst in der Conf-Tabelle.
+    """
+    text = _conf_text()
+    pos_app_panel = text.find("location /controller/app-panel/")
+    pos_shared = text.find("location /controller/_shared/")
+    assert pos_app_panel != -1, "location /controller/app-panel/ nicht gefunden"
+    assert pos_shared != -1, "location /controller/_shared/ nicht gefunden"
+    assert pos_app_panel < pos_shared, (
+        "Tabellenreihenfolge: /controller/app-panel/ soll vor /controller/_shared/ stehen "
+        f"(Positionen: app-panel={pos_app_panel}, _shared={pos_shared})"
+    )
+
+
+def test_ROU_30_display_shared_design_location_existiert():
+    """ROU-30 / DTOK-1/2 / RAT-31 E6f-A (#1582): location /display/_shared/design/ muss
+    existieren und auf xbuddy_seiten zeigen."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/display/_shared/design/\s*\{[^}]*proxy_pass\s+http://xbuddy_seiten\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /display/_shared/design/ fehlt oder proxypasst nicht an xbuddy_seiten "
+        "(ROU-30, DTOK-1/2, RAT-31 E6f-A, #1582)"
+    )
+
+
+def test_ROU_30_display_shared_design_steht_vor_display_allgemein():
+    """URL-14: /display/_shared/design/ muss VOR dem allgemeinen /display/-Block stehen
+    (spezifisch vor allgemein — längster Prefix gewinnt)."""
+    text = _conf_text()
+    pos_design = text.find("location /display/_shared/design/")
+    pos_display = text.find("location /display/ {")
+    assert pos_design != -1, "location /display/_shared/design/ nicht gefunden"
+    assert pos_display != -1, "location /display/ nicht gefunden"
+    assert pos_design < pos_display, (
+        "URL-14-Verstoß: /display/_shared/design/ muss VOR dem allgemeinen /display/-Block stehen "
+        f"(Positionen: design={pos_design}, /display/={pos_display})"
+    )
+
+
+def test_ROU_23_ROU_30_im_conf_header_dokumentiert():
+    """Der Conf-Header muss die neuen _shared-Pfade erwaehnen (ROU-23 + ROU-30, #1582).
+
+    Analog /display/_shared/icons/ (ALLOWED_DRIFT_IN_NGINX): Sub-Pfade unter einem
+    allgemeinen Block brauchen keinen eigenen Tabellen-Eintrag mit Pfeil, aber sie
+    MUESSEN im Header-Kommentar erwaehnt sein, damit Leser verstehen, wohin diese
+    Pfade gehen.
+    """
+    text = _conf_text()
+    header = text.split("server {", 1)[0]
+    assert "/controller/_shared/" in header, (
+        "Conf-Header erwaehnt /controller/_shared/ nicht (ROU-23, RAT-31 E6f-A, #1582)."
+    )
+    assert "/display/_shared/design/" in header, (
+        "Conf-Header erwaehnt /display/_shared/design/ nicht (ROU-30, RAT-31 E6f-A, #1582)."
+    )

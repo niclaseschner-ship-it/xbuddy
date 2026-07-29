@@ -2022,6 +2022,71 @@ def app_panel_asset(panel_id, asset):
 
 
 # ============================================================
+#  controller/_shared — PWA-übergreifende Helper (ROU-23, RAT-31 E6f-A, #1582)
+# ============================================================
+
+def _send_controller_shared_asset(rel_path):
+    """Statik-Auslieferung aus controller/_shared/ mit realpath-Traversal-Schutz
+    (Defense in Depth, analog _send_app_panel_asset / Router _send_shared_asset).
+    ROU-23: PWA-übergreifender Helper-Pfad, z.B. config.js."""
+    from flask import abort, send_from_directory
+
+    root = os.path.realpath(_DEFAULT_CONTROLLER_SHARED_DIR)
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _APP_PANEL_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route("/controller/_shared/<path:asset>", methods=["GET"])
+# ROU-23: /controller/_shared/<asset> — ungegated statischer Asset-Pfad,
+# analog zum Router (router/main.py:1181 — kein require_dual_gate).
+# config.js wird vom Service-Worker precacht und von allen Panels geladen,
+# bevor ein Auth-Cookie gesetzt ist; ein Gate würde den SW-Precache brechen.
+def controller_shared_asset(asset):
+    """ROU-23 / RAT-31 E6f-A (#1582): /controller/_shared/<asset> aus controller/_shared/.
+    PWA-übergreifende Helper (config.js). 1:1 vom Router nach seiten verlagert."""
+    return _send_controller_shared_asset(asset)
+
+
+# ============================================================
+#  display/_shared/design — geteilte Design-Tokens (ROU-30, RAT-31 E6f-A, #1582)
+# ============================================================
+
+def _send_display_shared_design_asset(rel_path):
+    """Statik-Auslieferung aus display/_shared/design/ mit realpath-Traversal-Schutz
+    (Defense in Depth, analog _send_controller_shared_asset / Router _send_design_asset).
+    ROU-30 / DTOK-1 / DTOK-2: geteilter Design-Token-Strang (tokens.css)."""
+    from flask import abort, send_from_directory
+
+    root = os.path.realpath(_DEFAULT_DISPLAY_SHARED_DESIGN_DIR)
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _APP_PANEL_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route("/display/_shared/design/<path:asset>", methods=["GET"])
+# ROU-30: /display/_shared/design/<asset> — ungegated statischer Asset-Pfad,
+# analog zum Router (router/main.py:1220 — kein require_dual_gate).
+# tokens.css wird vom Service-Worker precacht und von JEDEM Buddy-View geladen;
+# ein Gate würde den SW-Precache und nicht-authentifizierte Display-Views brechen.
+def display_shared_design_asset(asset):
+    """ROU-30 / DTOK-1 / DTOK-2 / RAT-31 E6f-A (#1582): /display/_shared/design/<asset>
+    aus display/_shared/design/. Geteilter Design-Token-Strang (tokens.css).
+    1:1 vom Router nach seiten verlagert."""
+    return _send_display_shared_design_asset(asset)
+
+
+# ============================================================
 #  Entrypoint
 # ============================================================
 
