@@ -314,13 +314,14 @@ def test_LOG_4_log_level_from_file(tmp_path, monkeypatch):
 # -- EC-15 / #443: icon_origin_url (Icon-Router-Naht für RPS-7) -----
 
 def test_EC15_icon_origin_url_default(tmp_path, monkeypatch):
-    """EC-15 / #443: icon_origin_url hat den Default http://127.0.0.1:5000
-    (Icon-Router, ICONS-7). Fehlt der Wert in ENV und Datei, wird der Default
+    """EC-15 / #443: icon_origin_url hat den Default http://127.0.0.1:5042
+    (Icon-Suche seit RAT-31 E6f-B/#1586 in der Seiten-Registry, vormals Router
+    auf :5000, ICONS-7). Fehlt der Wert in ENV und Datei, wird der Default
     gesetzt — das ist die Wiring-Bedingung für RoutinePunkteSetzenTask."""
     _set_bot_token(monkeypatch)
     monkeypatch.delenv("ELTERNCHAT_ICON_ORIGIN_URL", raising=False)
     cfg = config_mod.resolve(_missing(tmp_path))
-    assert cfg.icon_origin_url == "http://127.0.0.1:5000"
+    assert cfg.icon_origin_url == "http://127.0.0.1:5042"
 
 
 def test_EC15_icon_origin_url_from_env(tmp_path, monkeypatch):

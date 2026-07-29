@@ -56,10 +56,10 @@ def test_register_version_auf_frischer_app(monkeypatch, tmp_path):
 
 # ── parametrisiert über alle 11 Services (AC2) ─────────────────────────────
 
-# (Import-Pfad, App-Attribut) je Service. Router + 10 Buddy-Services teilen
+# (Import-Pfad, App-Attribut) je Service. Die Buddy-Services teilen
 # dieselbe Naht — genau die Duplikat-Menge, die T1311 eingeschmolzen hat.
+# (Router mit RAT-31/#1568 abgerissen.)
 _SERVICE_MODULES = [
-    "router.main",
     "familie.main",
     "plan.main",
     "wetter.main",

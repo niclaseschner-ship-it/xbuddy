@@ -80,13 +80,14 @@ DEFAULTS = {
     # zum Pi-Setup (PORT-2 Wetter-Buddy auf 5030). Leer ⇒ Aufgabe NICHT
     # im Katalog (WRO-8 AND-Guard).
     "wetter_origin_url": "http://127.0.0.1:5030",
-    # EC-15 / #443: Origin des Icon-Routers, über den der
+    # EC-15 / #443: Origin des Icon-Dienstes, über den der
     # RoutinePunkteSetzenTask die ICONS-7-Stichwort-Suche aufruft
     # (`GET /api/v1/icons/suche` ICONS-7). Per-Instanz-Wert; Default
-    # passt zum Pi-Setup (PORT-2 Router auf 5000). Leer ⇒ Aufgabe NICHT
-    # im Katalog (RPS-7 AND-Guard mit routine_origin_url +
-    # family_group_chat_id_getter).
-    "icon_origin_url": "http://127.0.0.1:5000",
+    # passt zum Pi-Setup: seit RAT-31 (Router-Abriss, #1568) serviert die
+    # Seiten-Registry `icons/suche` auf 5042 (vormals Router auf 5000).
+    # Leer ⇒ Aufgabe NICHT im Katalog (RPS-7 AND-Guard mit
+    # routine_origin_url + family_group_chat_id_getter).
+    "icon_origin_url": "http://127.0.0.1:5042",
     # FSE-7 / #393: Origin des Photo-Buddys, über den der FotoSendenTask
     # Medien hochlädt (`POST /api/v1/photo/medien` PHOTO-13) und widerruft
     # (`DELETE /api/v1/photo/medien/<id>` PHOTO-16). Per-Instanz-Wert; Default

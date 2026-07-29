@@ -1,5 +1,15 @@
 # Figuren-Erkennung — Spec     (ID-Präfix: FIG)
 
+> ⚠️ **ENTFALLEN durch RAT-31 E6f (#1568), 2026-07-29.**
+> `controller/figuren-erkennung/` ist gelöscht. Der Phone-Controller-Prototyp
+> sendete Events an den Router (`router.md`, ebenfalls ENTFALLEN); mit dem
+> Router-Abriss und dem Ein-Gerät-Heim-Display (Heim-Shell PWA, `heim-shell.md`)
+> gibt es keinen Konsumenten mehr. Diese Spec bleibt als historischer Anker
+> erhalten.
+> Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`, Epic #1339.
+>
+> Status: V1 (ENTFALLEN) · Refs #1 #6 #1568
+
 > Status: V1-Kern · Refs #1, #6 · Implementiert in #7
 
 Wiederverwendbare HTML/JS-Seite, die auf einem im Querformat liegenden
