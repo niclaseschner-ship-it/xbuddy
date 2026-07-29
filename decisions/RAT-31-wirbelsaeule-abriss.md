@@ -26,7 +26,7 @@ Linke Panel-Nav + rechtes Buddy-Pane + Tile-Tap-Ingest + Live-Refresh laufen **a
 ### 2. Was stirbt / was bleibt
 - **Stirbt:** `geraete/`-Registry, `display/` + `display-client/` (Fremdgerät-Renderer), `router/` (Fanout-Dienst), panel-`display_id`/`router_url`-Bindung + Router-Proxy. Die vier eltern-chat-Skills `panel_anlegen`, `cookie_nachschicken`, `ca-verteilung` (+ `geraet_anlegen` eingedampft, nicht gelöscht).
 - **Bleibt / re-home same-origin:** Shell, tiles+Editor (#1400), `controller/app-panel`-Assets (linke Nav), alle Buddy-Views, Pairing/Cookie/Kind-Eltern-Redirect, Mini-App-Übersicht (Quelle → Buddy-Manifeste statt Registries). Der HMAC-Cookie-Auth-Pfad (`tools/initdata/auth_gate.py`) ist von `geraete/` **entkoppelt** — bleibt.
-- **Offen (Etappe 6):** `controller/figuren-erkennung/` — Live-Feature (bleibt, re-home) oder Spike (stirbt)? Nicht blind löschen.
+- **ENTSCHIEDEN (Nic, mehrfach — nicht re-litigieren):** `controller/figuren-erkennung/` ist ein **Spike → wird gelöscht** (mit dem Router, Leaf 5 mit Leaf 6 zusammengelegt). Gegen Code bestätigt: `specs/platform/figuren-erkennung.md:9` „Standalone Test-Seite, Demo-Registry", kein Live-Konsument (nicht im aggregator, keine Kachel, nirgends re-homed), nur `DEFAULT_CONTROLLER_DIR`-Kopplung im sterbenden Router. **Keine Rückfrage mehr.**
 
 ### 3. Abriss in 8 main-grün-gegateten Etappen (Epic #1339)
 0. Spec-Fundament (diese Datei + `heim-shell.md` self-contained + `seiten-registry.md` Ein-Gerät) — #1494
