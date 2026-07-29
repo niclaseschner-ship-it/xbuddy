@@ -109,6 +109,24 @@ Test-Anker: seiten/tests/test_heim_shell.py::test_shell3_zwei_iframes
 > bleiben bis E5/E6 (#1498) am Leben und werden hier **nicht** gelöscht — E2
 > verpflanzt nur.
 
+> **RAT-35 (2026-07-29) — Amendment zu RAT-31 (n anonyme Geräte, registry-frei):**
+> Der Nordstern „ein Gerät für immer" wird ergänzt zu **n anonyme Geräte parallel,
+> registry-frei**. Damit wird das unten stehende „**ein** prozess-weiter
+> Shell-Zustand … **eine** Subscriber-Menge (ein Gerät = ein Ziel)" **abgelöst**:
+> der Zustand wird **pro ephemerer Verbindungs-ID gekeyt** (Mechanismus B, Berater-
+> Runde `brainstorm/berater-runde/20260729-1230-RATIFIZIERT-registry-frei-multi-geraet.md`).
+> Der Client erzeugt pro Shell-Dokument eine anonyme `crypto.randomUUID()` (`sid`,
+> geräte-anonym — **kein** `panel_id`- oder Geräte-Registry-Key, RAT-31-Invariante
+> gewahrt), sendet sie beim SSE-Connect (Query-Param) **und** bei jedem
+> `tile_selected`/`panel_cleared`. Das Backend hält ein Dict `sid → {state,
+> subscribers}` (nicht persistiert, GC bei leerem Subscriber-Set nach Disconnect)
+> statt des globalen `_shell_state`. Broadcast geht nur an die Subscriber
+> **derselben** `sid` — zwei offene Shells (Pi + Tablet) cross-triggern sich nicht
+> mehr. Der Satz „Mehrere offene Shell-Tabs teilen sich denselben Stream" (unten)
+> gilt damit nur noch **pro `sid`**. SHELL-5 (Iframe-`src`-Swap) unverändert.
+> **Kill-Kriterium:** wächst nach Reconnect die EventSource-Zahl (Geister-`sid`),
+> wird die `sid` pro *Tab* (`sessionStorage`) statt pro *Verbindung* gehalten. Bau #1546.
+
 Das `seiten/`-Backend hält den Live-Refresh selbst: **ein prozess-weiter
 Shell-Zustand** (kein `display_id`-Dict — ein Gerät = ein Ziel) und **eine**
 Subscriber-Menge. Zwei Nähte:
