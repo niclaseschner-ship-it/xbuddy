@@ -536,6 +536,14 @@ verweisen darauf, statt eigene Anker zu erfinden.
 
 ### ROU-26 — GET /display/_shared/icons/&lt;asset&gt; — geteilte Display-Assets
 
+> **Serving verlagert nach seiten (RAT-31 E6f-B, #1586):** Das Ausliefern
+> der Icon-Bibliothek unter `/display/_shared/icons/` ist zum seiten-Service
+> verlagert (seiten-registry.md SREG-17, nginx-Block spezifisch vor dem
+> allgemeinen `/display/`→Router-Block — URL-14). Der Router-seitige
+> Serving-Code (`_send_icon_asset` / `display_shared_icon` in
+> `router/main.py`) lebt als **toter Zwilling** weiter, bis der Abriss
+> #1568 ihn entfernt; er wird nicht mehr erreicht (nginx-Split greift davor).
+
 `GET /display/_shared/icons/<source>/<id>.<ext>` liefert die zentrale
 Icon-Bibliothek (ARASAAC-Piktogramme, siehe
 [`icons.md`](icons.md) ICONS-1..6) read-only aus der **icon-root** aus —
@@ -546,14 +554,13 @@ Namensraum für geteilte Display-Assets, die keinem einzelnen Buddy gehören.
 
 Anders als `/controller/_shared/` (Helper-**Code** im Repo) zeigt dieser
 Pfad auf die **icon-root** — Per-Instanz-Daten außerhalb des Repos
-(ICONS-2, Default `/home/buddy/apps/icons/`). Der Router liefert sie
-selbst aus, statt nginx einen statischen `alias` zu geben: der
-Router-Prozess läuft als User `buddy` und liest die icon-root problemlos,
-während ein nginx-`alias` (nginx = `www-data`) an der `0700`-Home-Permission
-scheiterte und 404 lieferte (#135). Auslieferung wie ROU-23:
-`send_from_directory` mit explizitem Content-Type und Defense-in-Depth-
-Path-Traversal-Schutz (werkzeug `safe_join` + `realpath`-Check gegen die
-aufgelöste Wurzel).
+(ICONS-2, Default `/home/buddy/apps/icons/`). Der **seiten-Service** liefert
+sie aus, statt nginx einen statischen `alias` zu geben: der Prozess läuft
+als User `buddy` und liest die icon-root problemlos, während ein nginx-`alias`
+(nginx = `www-data`) an der `0700`-Home-Permission scheiterte und 404 lieferte
+(#135). Auslieferung wie ROU-23: `send_from_directory` mit explizitem
+Content-Type und Defense-in-Depth-Path-Traversal-Schutz (werkzeug `safe_join`
++ `realpath`-Check gegen die aufgelöste Wurzel).
 
 Acceptance-Kriterien:
 
@@ -573,11 +580,18 @@ kein eigener statischer nginx-Block mehr.
 
 ### ROU-31 — GET /api/v1/icons/suche — Stichwort-Suche über den lokalen Icon-Cache
 
+> **Serving verlagert nach seiten (RAT-31 E6f-B, #1586):** `GET /api/v1/icons/suche`
+> ist zum seiten-Service verlagert (nginx exakter Match `= /api/v1/icons/suche`
+> → `xbuddy_seiten`, spezifisch vor dem allgemeinen `/api/v1/`-Block — URL-14).
+> Der Router-seitige Code (`icons_suche` / `_load_pictogram_cache` / `_score_match`
+> in `router/main.py`) lebt als **toter Zwilling** weiter, bis der Abriss
+> #1568 ihn entfernt.
+
 `GET /api/v1/icons/suche?q=<stichwort>&max=<n>` durchsucht den lokalen
 `pictogram_cache.json` (Wort→ID) in der icon-root und liefert JSON-Kandidaten —
 das Verhalten (Matching, ID-Dedup, nur lokal vorhandene PNGs, `max`-Grenze, kein
-Re-Fetch) ist in [`icons.md`](icons.md) **ICONS-7** definiert. Der Router ist der
-Host, weil er die icon-root ohnehin besitzt (ROU-26-Zwilling); kein eigener
+Re-Fetch) ist in [`icons.md`](icons.md) **ICONS-7** definiert. Der **seiten-Service**
+ist der Host, weil er die icon-root ohnehin besitzt (ROU-26-Zwilling); kein eigener
 Dienst. Lesen mit demselben Path-/Wurzel-Schutz wie ROU-26 (kein Zugriff jenseits
 der icon-root).
 
