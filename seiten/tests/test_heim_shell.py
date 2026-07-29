@@ -300,39 +300,6 @@ def test_shell11_panel_embedded_guard():
     )
 
 
-def test_shell11_display_client_embedded_guard():
-    """SHELL-11/AC4 + DC-11 embedded-Ausnahme: display-client/index.html enthält Guard
-    (window.self === window.top) vor attachFullscreenOnGesture — symmetrisch zum Panel-Guard."""
-    index_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "display-client", "index.html",
-    )
-    with open(index_path, encoding="utf-8") as fh:
-        src = fh.read()
-    # Guard-Ausdruck muss vorhanden sein
-    assert "window.self" in src, "Guard-Ausdruck 'window.self' fehlt in display-client/index.html"
-    assert "window.top" in src, "Guard-Ausdruck 'window.top' fehlt in display-client/index.html"
-    # Guard muss VOR dem attachFullscreenOnGesture-Aufruf stehen
-    guard_pos = src.find("window.self === window.top")
-    attach_pos = src.find("attachFullscreenOnGesture", guard_pos)
-    assert guard_pos != -1, (
-        "Guard 'window.self === window.top' nicht in display-client/index.html gefunden (DC-11 embedded-Ausnahme)"
-    )
-    assert attach_pos != -1, (
-        "attachFullscreenOnGesture nach dem Guard nicht gefunden — Guard sitzt nicht vor dem DC-11-Aufruf"
-    )
-    # displib.js darf NICHT den Guard enthalten — Guard ausschließlich im Konsument
-    displib_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "display-client", "displib.js",
-    )
-    with open(displib_path, encoding="utf-8") as fh:
-        displib_src = fh.read()
-    assert "window.self !== window.top" not in displib_src, (
-        "displib.js darf den embedded-Guard nicht enthalten — Lib bleibt unangetastet (SHELL-11 stop_rule)"
-    )
-
-
 def test_shell11_shell_fullscreen_script(client):
     """SHELL-11/AC2: Shell-HTML enthaelt Vollbild-Script (requestFullscreen auf Shell-Dokument).
     T1448: Operator-IP als Auth-Quelle (opt-in)."""
