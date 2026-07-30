@@ -295,9 +295,10 @@ Analog ONB-9, mit kontrollierter Doppelung **beider** Anbieter-Adapter
 - ONB-11 Same-Provider-Quittung: wer den aktuell aktiven Anbieter erneut
   wählt, bekommt eine deterministische Quittung; nichts wird geändert.
 - ONB-11 Multi-Slot-Migration (Welle A): vorbefüllter Single-Slot
-  `eltern-chat-provider-api-key` (heutige Form) + aktiver `provider=claude`
-  → Skill liest read-both, schreibt `eltern-chat-anthropic-api-key` (lazy
-  Migration), Single-Slot-Wert bleibt vorerst stehen.
+  `eltern-chat-provider-api-key` (Legacy-Form) + aktiver `provider=claude`
+  → Skill liest vendor-spezifischen Slot `eltern-chat-anthropic-api-key`,
+  schreibt in diesen vendor-spezifischen Slot. Single-Slot bleibt vorerst
+  lesbar (Fallback bei Lücken), wird aber nicht mehr beschrieben.
 - ONB-12 Validierungs-Fehler: Pfad-B-Wechsel-Versuch mit ungültigem Key →
   neuer vendor-spezifischer Slot wird NICHT geschrieben, alter Anbieter
   bleibt aktiv.

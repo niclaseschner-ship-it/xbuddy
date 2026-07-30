@@ -927,9 +927,10 @@ Schema). Der `provider`-Wert in der Konfiguration entscheidet, welchen
 Slot der Eltern-Chat zur Laufzeit liest. Ein Wechsel des aktiven Anbieters
 auf einen bereits eingerichteten Vendor (vorhandener Slot) braucht keinen
 Re-Key (ONB-11 Pfad A); ein erster Wechsel auf einen neuen Vendor läuft
-die Re-Key-Sequenz (ONB-11 Pfad B). Der heutige Single-Slot
-`eltern-chat-provider-api-key` bleibt während Welle A als Fallback
-lesbar; Welle B entfernt ihn.
+die Re-Key-Sequenz (ONB-11 Pfad B). Der vendor-spezifische Slot
+(`eltern-chat-<vendor>-api-key`) ist der Laufzeit-Standard seit Welle A.
+Der Single-Slot `eltern-chat-provider-api-key` bleibt als Legacy-Fallback
+für alte Instanzen lesbar; Welle B wird ihn entfernen.
 
 Die nicht-geheimen Werte leben in der Per-Instanz-Datei
 `eltern-chat/config.json` (gitignored). Auflösung, Datei-Schlüssel, ENV-
