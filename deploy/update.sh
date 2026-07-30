@@ -5,7 +5,7 @@
 #   pull --ff-only origin main
 #     → Diff (git diff --name-only <alt> <neu>)
 #     → betroffene Services ableiten: geteilter Mapper
-#       methode/hooks/restart_pending_log.py:services_for_paths PLUS
+#       ~/.claude/hooks/restart_pending_log.py:services_for_paths PLUS
 #       Shared-Pfad-Fan-out (eine Änderung unter tools/ oder conventions/
 #       trifft ALLE Services — geteilter Code / geteilte Konvention, SVC-6)
 #     → deploy/version schreiben (die Datei, die /version jedes Service liest)
@@ -61,7 +61,7 @@ import sys
 
 repo = os.environ["XBUDDY_REPO"]
 sys.path.insert(0, repo)
-from methode.hooks.restart_pending_log import load_mapping, services_for_paths
+from deploy.restart_pending_log import load_mapping, services_for_paths
 
 paths = [p.strip() for p in sys.argv[1:] if p.strip()]
 mapping = load_mapping()
