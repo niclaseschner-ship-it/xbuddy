@@ -700,3 +700,61 @@ def test_ROU_23_ROU_30_im_conf_header_dokumentiert():
     assert "/display/_shared/design/" in header, (
         "Conf-Header erwaehnt /display/_shared/design/ nicht (ROU-30, RAT-31 E6f-A, #1582)."
     )
+
+
+# ============================================================
+#  Heim-Shell: /shell/ → seiten (SHELL-1, heim-shell.md, #1592)
+# ============================================================
+#
+# PR-D (#1568) hat den /shell/-Block versehentlich mit-entfernt.
+# Diese Tests sichern seine Existenz, damit kuenftige Router-Chirurgie
+# dieselbe Regression nicht erneut durchlaesst.
+
+
+def test_SHELL_1_shell_location_existiert_und_zeigt_auf_seiten():
+    """SHELL-1 (heim-shell.md): location /shell/ muss existieren und auf
+    xbuddy_seiten zeigen (#1592, Hotfix fuer PR-D-Regression).
+
+    /shell/<panel_id> ist die Haupt-Tablet-Sicht; ohne diesen Block gab
+    nginx 404 obwohl seiten sie serviert.
+    """
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/shell/\s*\{[^}]*proxy_pass\s+http://xbuddy_seiten\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /shell/ fehlt oder proxypasst nicht an xbuddy_seiten "
+        "(SHELL-1, heim-shell.md, #1592)"
+    )
+
+
+def test_SHELL_1_shell_location_vorhanden_ohne_router_fallback():
+    """RAT-31 (#1568) + SHELL-1: /shell/ bleibt als spezifischer seiten-Block
+    bestehen; ein allgemeiner /shell/-Router-Fallback darf nicht da sein
+    (der Router-Prozess ist abgerissen)."""
+    text = _conf_text()
+    assert "location /shell/ {" in text, (
+        "location /shell/ nicht gefunden (SHELL-1, #1592)"
+    )
+    # Kein allgemeiner Router-Fallback — location / { return 404; } ist der Catch-all
+    # Sanity: der allgemeine /display/-Block darf weiterhin nicht existieren (RAT-31)
+    assert "location /display/ {" not in text, (
+        "RAT-31 (#1568): der allgemeine /display/-Router-Block muss entfernt sein"
+    )
+
+
+def test_SHELL_1_shell_in_routing_tabelle_dokumentiert():
+    """Der Conf-Header muss /shell/ in der Routing-Tabelle listen (SHELL-1, #1592).
+
+    Doku und Verhalten duerfen nicht auseinanderlaufen; die fehlende Zeile in der
+    Tabelle war mitpetrantwortlich, dass die Regression durch PR-D nicht sofort
+    auffiel.
+    """
+    text = _conf_text()
+    header = text.split("server {", 1)[0]
+    assert "/shell/" in header, (
+        "Routing-Tabelle im Conf-Header listet /shell/ nicht — "
+        "Doku und Verhalten duerfen nicht auseinanderlaufen (SHELL-1, heim-shell.md, #1592)."
+    )
