@@ -578,37 +578,6 @@
   }
 
   // ============================================================
-  //  PANEL-11 / ROU-32 — display_id beim Bootstrap vom Router laden
-  // ============================================================
-  //
-  // PANEL-8 (Nic-Entscheid 2026-06-08 / #414): display_id ist bewusst nicht
-  // mehr in config.json. Der Panel-Code holt sie einmalig beim Laden vom
-  // Router per ROU-32: GET <router_url>/api/v1/router/panels/<source_id>.
-  // 404 → sichtbarer Fehler — Panel startet nicht weiter (analog PANEL-8).
-  //
-  // fetchImpl ist parametrisierbar (Tests übergeben Mock; Browser nutzt global
-  // fetch), damit die Funktion ohne Browser testbar ist.
-
-  function fetchDisplayId(cfg, fetchImpl) {
-    var fetchFn = fetchImpl || /* istanbul ignore next */ fetch;
-    var base = cfg.router_url ? cfg.router_url.replace(/\/+$/, '') : '';
-    var url = base + '/api/v1/router/panels/' + encodeURIComponent(cfg.source_id);
-    return fetchFn(url, { cache: 'no-store' }).then(function (res) {
-      if (!res.ok) {
-        return Promise.reject(new Error(
-          'display_id-Lookup via ROU-32 fehlgeschlagen (HTTP ' + res.status + '): '
-          + 'source_id "' + cfg.source_id + '" ist dem Router unbekannt. '
-          + 'routing.json panels-Eintrag fehlt?'));
-      }
-      return res.json().then(function (data) { return data.display_id; });
-    }, function (err) {
-      return Promise.reject(new Error(
-        'Router nicht erreichbar beim display_id-Lookup: '
-        + (err && err.message || err)));
-    });
-  }
-
-  // ============================================================
   //  API
   // ============================================================
 
@@ -629,7 +598,6 @@
     BACKOFFS: BACKOFFS,
     postWithRetry: postWithRetry,
     checkConfigConsistency: checkConfigConsistency,
-    fetchDisplayId: fetchDisplayId,
     makeStreamHandlers: makeStreamHandlers,
     attachWakeLockImpl: attachWakeLockImpl,
     attachFullscreenImpl: attachFullscreenImpl,
@@ -1039,27 +1007,6 @@
 
   (async function boot() {
     var cfg = await loadConfig();
-    // RAT-31 E6f-E (#1584): Im Shell-Flow (ingest_url gesetzt) stirbt der Router
-    // (PR-D). Der ROU-32-Lookup und der Router-SSE (attachStream) werden dann
-    // übersprungen. Der Aktiv-Marker ist bei einem Gerät (RAT-31) allein durch
-    // den lokalen Tap autoritativ — updateActiveMarker(tile) wird im onTap/onClear
-    // ohnehin optimistisch gesetzt; der frühere Router-SSE (PANEL-11) war die
-    // Wahrheit über den realen Display-Zustand (Fremd-Übersteuerung durch
-    // Figuren-Erkennung / Ruhe-Zustand), die unter RAT-31 (ein Gerät, keine
-    // Fremd-Übersteuerung, figuren-erkennung entfällt #1567) entbehrlich wird.
-    var isShellFlow = !!_ingestUrlFromParam;
-    // PANEL-11 / ROU-32: display_id einmalig beim Laden vom Router holen.
-    // Fehler (404 oder Netz) → sichtbarer Fehler, Panel startet nicht weiter.
-    // Standalone-Flow (kein ingest_url) UNVERÄNDERT.
-    var displayId;
-    if (!isShellFlow) {
-      try {
-        displayId = await panelLib.fetchDisplayId(cfg);
-      } catch (err) {
-        showError('Konfigurationsfehler: ' + (err && err.message || err));
-        return;
-      }
-    }
     var tiles = await loadTiles();
     renderGrid(tiles, cfg,
       function onTap(tile) {
@@ -1088,12 +1035,6 @@
     window.addEventListener('resize', function () { panelLib.applyGridGeometry(); });
     attachWakeLock();
     attachFullscreenOnGesture();
-    // RAT-31 E6f-E (#1584): Router-SSE (PANEL-11 Cross-Device-Marker) nur im
-    // Standalone-Flow. Im Shell-Flow trägt der lokale Tap den Aktiv-Marker
-    // (updateActiveMarker im onTap/onClear); kein Router-Call mehr.
-    if (!isShellFlow) {
-      attachStream(displayId, function () { return tiles; });
-    }
     // HSP-42 — EventSource zu beiden HSP-Services für Audio-Source-Push.
     attachHspAudioStreams();
   })();
