@@ -758,3 +758,57 @@ def test_SHELL_1_shell_in_routing_tabelle_dokumentiert():
         "Routing-Tabelle im Conf-Header listet /shell/ nicht — "
         "Doku und Verhalten duerfen nicht auseinanderlaufen (SHELL-1, heim-shell.md, #1592)."
     )
+
+
+# ============================================================
+#  T1542 — Shell-SSE nginx-Pufferung: Regex-Location + proxy_buffering off
+# ============================================================
+#
+# Root Cause (CDP-bestätigt): nginx pufferte /shell/<panel_id>/events → Pane-
+# Swap-Echo kam erst beim 2. Tap. Fix-Scope B (Hosenträger): dedizierte Regex-
+# Location vor der Prefix-`/shell/`-Location schaltet die Pufferung ab.
+
+
+def test_T1542_shell_sse_regex_location_existiert():
+    """T1542 (Hosenträger): Die Conf muss eine `location ~ ^/shell/[^/]+/events$`
+    enthalten, die `proxy_buffering off` und `proxy_cache off` setzt.
+
+    Regex-Locations gewinnen in nginx vor Prefix-Locations (`/shell/`), sodass
+    der SSE-Pfad immer ungepuffert durchläuft — unabhaengig von der generischen
+    /shell/-Location (Gürtel+Hosenträger, T1542).
+    """
+    text = _conf_text()
+    _LOCATION_MARKER = "location ~ ^/shell/[^/]+/events$"
+    # Regex-Location vorhanden
+    assert _LOCATION_MARKER in text, (
+        "T1542: `location ~ ^/shell/[^/]+/events$` fehlt in der nginx-Conf "
+        "(Hosenträger-Fix nicht deployed — SSE-Pufferung weiterhin aktiv)"
+    )
+    # Alles ab der Location-Zeile bis zur nächsten schließenden Klammer extrahieren
+    # und proxy_buffering off + proxy_cache off darin prüfen.
+    idx_start = text.index(_LOCATION_MARKER)
+    idx_close = text.index("}", idx_start)
+    sse_block = text[idx_start: idx_close + 1]
+    assert "proxy_buffering off;" in sse_block, (
+        "T1542: `proxy_buffering off` fehlt im Shell-SSE-Regex-Location-Block "
+        "(nginx puffert den SSE-Stream weiterhin — Doppel-Tap-Bug lebt)"
+    )
+    assert "proxy_cache off;" in sse_block, (
+        "T1542: `proxy_cache off` fehlt im Shell-SSE-Regex-Location-Block"
+    )
+
+
+def test_T1542_shell_sse_regex_location_steht_vor_shell_prefix():
+    """T1542: Die Regex-Location muss im Conf-Text VOR der Prefix-`/shell/`-
+    Location stehen (Lesbarkeits-Konvention; nginx bevorzugt Regex unabhaengig
+    von der Reihenfolge, aber die Positionierung spiegelt die Absicht).
+    """
+    text = _conf_text()
+    pos_regex = text.find(r"location ~ ^/shell/[^/]+/events$")
+    pos_prefix = text.find("location /shell/ {")
+    assert pos_regex != -1, "T1542: Regex-Location nicht gefunden"
+    assert pos_prefix != -1, "SHELL-1: Prefix-Location /shell/ nicht gefunden"
+    assert pos_prefix < pos_regex, (
+        "T1542: Regex-Location soll NACH der Prefix-`/shell/`-Location stehen "
+        "(Lesbarkeits-Konvention: erst Prefix, dann SSE-Ausnahme darunter)"
+    )

@@ -637,3 +637,28 @@ def test_t1551_template_truthy_zweig_stellt_display_wieder_her():
         "pane.style.display='' muss im Template VOR pane.src=next stehen "
         "(T1551: erst sichtbar, dann src, kein Flash)"
     )
+
+
+# ============================================================
+#  T1542 — X-Accel-Buffering: no (Gürtel — App-seitiger Fix)
+# ============================================================
+#
+# shell_events muss `X-Accel-Buffering: no` setzen, damit nginx die SSE-Response
+# nicht puffert, auch wenn keine Regex-Location greift (Gürtel + Hosenträger).
+
+
+def test_t1542_shell_events_traegt_x_accel_buffering_no():
+    """T1542 (Gürtel): GET /shell/<panel_id>/events liefert den Header
+    `X-Accel-Buffering: no`, der nginx anweist, diese Response NICHT zu puffern.
+
+    Ohne diesen Header kommen Pane-Swap-SSE-Events erst beim 2. Tap an, weil
+    nginx den Stream puffert bis ein internes Chunk-Limit erreicht ist.
+    """
+    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
+    c = _auth_client()
+    resp = c.get("/shell/" + PANEL_ID + "/events", buffered=False)
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Accel-Buffering") == "no", (
+        "shell_events muss 'X-Accel-Buffering: no' setzen "
+        "(T1542 Gürtel: nginx-Pufferung am Stream-Ursprung abschalten)"
+    )
