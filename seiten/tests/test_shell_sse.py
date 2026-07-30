@@ -30,18 +30,30 @@ PANEL_ID = "paulas-panel-01"
 BOT_TOKEN = "123456:ABCdef_testtoken"
 
 
+# RAT-35 (#1546): Der Shell-Zustand ist per ephemerer `sid` gekeyed. Die Tests
+# fahren gegen die "legacy"-Fallback-sid (sid-loser HTTP-Request → gleicher Key),
+# damit HTTP-Client-Calls ohne ?sid= und interne API-Calls dieselbe Session
+# treffen. Der Zwei-sid-Isolations-Test nutzt bewusst explizite sids A/B.
+_SID = seiten_main._SHELL_LEGACY_SID
+
+
 @pytest.fixture(autouse=True)
 def _reset_shell_state():
-    """Jeder Test startet mit sauberem, prozess-weitem Shell-Zustand + leerer
-    Subscriber-Menge (die Naht ist bewusst prozess-weit — RAT-31 ein Gerät)."""
+    """Jeder Test startet mit leeren Shell-Sessions (RAT-35: sid-gekeyt). Der
+    Reset räumt ALLE Sessions, damit kein Zustand zwischen Tests leakt."""
     seiten_main.configure(bot_token=BOT_TOKEN)
-    seiten_main._shell_state = None
-    with seiten_main._shell_subscribers_lock:
-        seiten_main._shell_subscribers.clear()
+    with seiten_main._shell_sessions_lock:
+        seiten_main._shell_sessions.clear()
     yield
-    seiten_main._shell_state = None
-    with seiten_main._shell_subscribers_lock:
-        seiten_main._shell_subscribers.clear()
+    with seiten_main._shell_sessions_lock:
+        seiten_main._shell_sessions.clear()
+
+
+def _shell_state_for(sid=_SID):
+    """Liest den aktuellen State einer sid-Session (oder None), threadsicher."""
+    with seiten_main._shell_sessions_lock:
+        sess = seiten_main._shell_sessions.get(sid)
+        return sess["state"] if sess is not None else None
 
 
 def _auth_client():
@@ -76,7 +88,7 @@ def test_ac1_sse_liefert_initialen_state():
 
     Dieser Test prueft den gesetzten Fall: Zustand vorbelegen, dann verbinden —
     erstes Event traegt payload.url (AC1). Den None-Fall deckt test_ac3_ruhe_zustand_nur_heartbeat."""
-    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
+    seiten_main._apply_shell_trigger(_SID, {"app": "hoerspiel", "view": "player"})
     c = _auth_client()
     resp = c.get("/shell/" + PANEL_ID + "/events", buffered=False)
     assert resp.status_code == 200
@@ -101,7 +113,7 @@ def test_ac1_sse_kein_routing_json():
     """AC1: Der Stream hängt an KEINEM routing.json/display_id-Lookup — der
     prozess-weite Zustand ist die einzige Quelle (ein Gerät = ein Ziel)."""
     # Zustand vorbelegen, ohne Router/routing.json anzufassen:
-    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
+    seiten_main._apply_shell_trigger(_SID, {"app": "hoerspiel", "view": "player"})
     c = _auth_client()
     resp = c.get("/shell/" + PANEL_ID + "/events", buffered=False)
     gen = resp.response
@@ -127,13 +139,13 @@ def test_ac2_ingest_setzt_state_und_baut_url():
               "query": {"tag": "montag"}},
     )
     assert resp.status_code == 204
-    assert seiten_main._shell_state["payload"]["url"] == "/display/essen/liste?tag=montag"
+    assert _shell_state_for()["payload"]["url"] == "/display/essen/liste?tag=montag"
 
 
 def test_ac2_ingest_publiziert_an_offenen_stream():
     """AC2: Ein Ingest publiziert den neuen Zustand an einen offenen SSE-Stream
     (beobachtbar in der Subscriber-Queue) — Tap → SSE-Event, ohne router."""
-    q = seiten_main._shell_subscribe()
+    q = seiten_main._shell_subscribe(_SID)
     try:
         c = _auth_client()
         r = c.post(
@@ -144,21 +156,21 @@ def test_ac2_ingest_publiziert_an_offenen_stream():
         published = q.get(timeout=1.0)
         assert published["payload"]["url"] == "/display/hoerspiel/player"
     finally:
-        seiten_main._shell_unsubscribe(q)
+        seiten_main._shell_unsubscribe(_SID, q)
 
 
 def test_ac2_panel_cleared_setzt_ruhezustand():
     """AC2: panel_cleared setzt den Ruhe-Zustand (None) und publiziert ihn."""
-    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
-    q = seiten_main._shell_subscribe()
+    seiten_main._apply_shell_trigger(_SID, {"app": "hoerspiel", "view": "player"})
+    q = seiten_main._shell_subscribe(_SID)
     try:
         c = _auth_client()
         r = c.post("/shell/" + PANEL_ID + "/events", json={"type": "panel_cleared"})
         assert r.status_code == 204
-        assert seiten_main._shell_state is None
+        assert _shell_state_for() is None
         assert q.get(timeout=1.0) is None
     finally:
-        seiten_main._shell_unsubscribe(q)
+        seiten_main._shell_unsubscribe(_SID, q)
 
 
 def test_ac2_ingest_lehnt_ungueltiges_event_ab():
@@ -174,6 +186,89 @@ def test_ac2_ingest_lehnt_ungueltiges_event_ab():
                 json={"type": "tile_selected", "app": "e", "view": "v",
                       "query": {"bad": {"nested": 1}}})
     assert r3.status_code == 400
+
+
+# ============================================================
+#  RAT-35 (#1546) — sid-Isolation: der Bug-Beweis
+# ============================================================
+
+def test_rat35_publish_erreicht_nur_eigene_sid():
+    """RAT-35 (#1546) KERN-AC: Zwei Shell-Dokumente mit VERSCHIEDENEN sids (A/B,
+    z. B. Pi und Tablet mit derselben panel_id) sind voneinander isoliert.
+
+    Ein _apply_shell_trigger auf sid A publiziert NUR an A-Subscriber; die
+    B-Queue bleibt leer. Das ist der eigentliche Bug-Beweis: vor RAT-35 teilten
+    sich beide Geräte einen prozess-weiten Zustand + eine Subscriber-Menge, ein
+    Tap auf einem Gerät swappte auch das andere. Mit sid-Keying nicht mehr."""
+    import queue as _queue
+
+    sid_a = "sid-A-pi"
+    sid_b = "sid-B-tablet"
+
+    q_a = seiten_main._shell_subscribe(sid_a)
+    q_b = seiten_main._shell_subscribe(sid_b)
+    try:
+        # Trigger NUR auf A.
+        seiten_main._apply_shell_trigger(sid_a, {"app": "hoerspiel", "view": "player"})
+
+        # A-Subscriber bekommt das Event ...
+        published_a = q_a.get(timeout=1.0)
+        assert published_a is not None
+        assert published_a["payload"]["url"] == "/display/hoerspiel/player"
+
+        # ... B-Subscriber bekommt NICHTS (der Isolations-Beweis).
+        with pytest.raises(_queue.Empty):
+            q_b.get(timeout=0.2)
+
+        # Auch der gespeicherte State ist pro sid getrennt:
+        assert _shell_state_for(sid_a) is not None
+        assert _shell_state_for(sid_b) is None
+    finally:
+        seiten_main._shell_unsubscribe(sid_a, q_a)
+        seiten_main._shell_unsubscribe(sid_b, q_b)
+
+
+def test_rat35_leerer_subscriber_set_gc_loescht_session():
+    """RAT-35 (#1546): Geht der letzte Subscriber einer sid, wird ihre Session
+    GC'd — sonst leaken anonyme sids prozess-weit (Registry-frei-Riegel)."""
+    sid = "sid-ephemeral"
+    q = seiten_main._shell_subscribe(sid)
+    with seiten_main._shell_sessions_lock:
+        assert sid in seiten_main._shell_sessions
+    seiten_main._shell_unsubscribe(sid, q)
+    with seiten_main._shell_sessions_lock:
+        assert sid not in seiten_main._shell_sessions, (
+            "Session muss nach dem letzten Unsubscribe GC'd sein (kein sid-Leak)"
+        )
+
+
+def test_rat35_events_ohne_sid_fallen_auf_legacy():
+    """RAT-35 (#1546): Ein POST OHNE ?sid= (gecachtes altes Shell-Dokument) trifft
+    die weiche "legacy"-Session — funktionsfähig, additiv, kein 400/Registry."""
+    c = _auth_client()
+    r = c.post(
+        "/shell/" + PANEL_ID + "/events",
+        json={"type": "tile_selected", "app": "essen", "view": "liste"},
+    )
+    assert r.status_code == 204
+    assert _shell_state_for(seiten_main._SHELL_LEGACY_SID) is not None
+    assert _shell_state_for(seiten_main._SHELL_LEGACY_SID)["payload"]["url"] == \
+        "/display/essen/liste"
+
+
+def test_rat35_events_mit_sid_trennt_von_legacy():
+    """RAT-35 (#1546): Ein POST MIT ?sid=X landet in Session X, NICHT in legacy —
+    HTTP-Ebene-Beweis, dass der Query-Param durchgereicht wird."""
+    c = _auth_client()
+    r = c.post(
+        "/shell/" + PANEL_ID + "/events?sid=geraet-X",
+        json={"type": "tile_selected", "app": "hoerspiel", "view": "player"},
+    )
+    assert r.status_code == 204
+    assert _shell_state_for("geraet-X") is not None
+    assert _shell_state_for("geraet-X")["payload"]["url"] == "/display/hoerspiel/player"
+    # legacy blieb unberuehrt (keine Cross-Kontamination):
+    assert _shell_state_for(seiten_main._SHELL_LEGACY_SID) is None
 
 
 def test_t1542_subscribe_nach_post_liefert_zustand_sofort():
@@ -198,14 +293,14 @@ def test_t1542_subscribe_nach_post_liefert_zustand_sofort():
         json={"type": "tile_selected", "app": "hoerspiel", "view": "player"},
     )
     assert r.status_code == 204
-    assert seiten_main._shell_state is not None, (
-        "POST muss _shell_state setzen, unabhaengig von Subscribern"
+    assert _shell_state_for() is not None, (
+        "POST muss den sid-State setzen, unabhaengig von Subscribern"
     )
 
     # Jetzt SSE-Generator direkt starten — prueft last-state-on-subscribe intern.
     # _shell_event_stream liest _shell_state NACH _shell_subscribe() (Reihenfolge
     # load-bearing: Race-Schluss). Erster yield muss sofort den Zustand liefern.
-    gen = seiten_main._shell_event_stream()
+    gen = seiten_main._shell_event_stream(_SID)
     try:
         first_raw = next(gen)
         if isinstance(first_raw, bytes):
@@ -246,9 +341,9 @@ def test_t1542_ruhe_zustand_nur_heartbeat():
     import threading
 
     # Voraussetzung: Ruhe-Zustand.
-    assert seiten_main._shell_state is None
+    assert _shell_state_for() is None
 
-    gen = seiten_main._shell_event_stream()
+    gen = seiten_main._shell_event_stream(_SID)
     result = []
     exc_holder = []
 
@@ -266,15 +361,19 @@ def test_t1542_ruhe_zustand_nur_heartbeat():
     t.start()
 
     # Kurz warten bis subscriber registriert ist (Generator laeuft bis q.get()).
+    def _sid_subscribers():
+        with seiten_main._shell_sessions_lock:
+            sess = seiten_main._shell_sessions.get(_SID)
+            return set(sess["subscribers"]) if sess is not None else set()
+
     import time
     deadline = time.time() + 1.0
     while time.time() < deadline:
-        with seiten_main._shell_subscribers_lock:
-            if seiten_main._shell_subscribers:
-                break
+        if _sid_subscribers():
+            break
         time.sleep(0.01)
 
-    assert seiten_main._shell_subscribers, (
+    assert _sid_subscribers(), (
         "Generator muss sich innerhalb 1s subscriben"
     )
     # Noch kein yield eingetreten (kein Geister-null-Event).
@@ -284,7 +383,7 @@ def test_t1542_ruhe_zustand_nur_heartbeat():
     )
 
     # Jetzt einen Zustand broadcasen — das erste yield muss diesen State tragen.
-    seiten_main._apply_shell_trigger({"app": "essen", "view": "liste"})
+    seiten_main._apply_shell_trigger(_SID, {"app": "essen", "view": "liste"})
     t.join(timeout=1.0)
     assert result, "Generator muss nach Broadcast yielden"
     assert not exc_holder, "Unerwartete Exception: %r" % exc_holder
@@ -322,7 +421,7 @@ def test_ac3_smoke_tap_links_refresh_rechts_ohne_router():
     existiert, publish → Queue → naechstes next(gen) liefert neuen Zustand)."""
     # Rechtes Pane: Zustand vorbelegen, dann SSE öffnen.
     # (last-state-on-subscribe: erster yield liefert sofort den vorhandenen Zustand)
-    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
+    seiten_main._apply_shell_trigger(_SID, {"app": "hoerspiel", "view": "player"})
     c = _auth_client()
     stream = c.get("/shell/" + PANEL_ID + "/events", buffered=False)
     gen = iter(stream.response)
@@ -421,8 +520,8 @@ def test_ac3_ingest_endpunkt_akzeptiert_tile_selected_body():
         "POST /shell/<panel_id>/events mit makeTileSelected-Body muss 204 liefern "
         "(Sender-Empfaenger-Kompatibilitaet T1519 AC3), got %d" % r.status_code
     )
-    assert seiten_main._shell_state is not None
-    assert seiten_main._shell_state["payload"]["url"] == "/display/hoerspiel/player"
+    assert _shell_state_for() is not None
+    assert _shell_state_for()["payload"]["url"] == "/display/hoerspiel/player"
 
 
 # ============================================================
@@ -546,14 +645,14 @@ def test_t1547_cleared_event_setzt_shell_state_auf_none():
     Prueft den seiten-seitigen Publish-Pfad: nach Cleared ist _shell_state==None
     und der publizierte Wert in der Queue ebenfalls None.
     """
-    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
-    q = seiten_main._shell_subscribe()
+    seiten_main._apply_shell_trigger(_SID, {"app": "hoerspiel", "view": "player"})
+    q = seiten_main._shell_subscribe(_SID)
     try:
         c = _auth_client()
         r = c.post("/shell/" + PANEL_ID + "/events", json={"type": "panel_cleared"})
         assert r.status_code == 204
-        assert seiten_main._shell_state is None, (
-            "_shell_state muss nach panel_cleared None sein"
+        assert _shell_state_for() is None, (
+            "sid-State muss nach panel_cleared None sein"
         )
         published = q.get(timeout=1.0)
         assert published is None, (
@@ -561,14 +660,14 @@ def test_t1547_cleared_event_setzt_shell_state_auf_none():
             "(Browser empfaengt null → next===null → removeAttribute('src'))"
         )
     finally:
-        seiten_main._shell_unsubscribe(q)
+        seiten_main._shell_unsubscribe(_SID, q)
 
 
 def test_t1547_truthy_event_setzt_url_in_state():
     """T1547 AC3 (Backend): tile_selected publiziert payload.url — der truthy-Trigger,
     den der Browser-Client als 'next!==null' auswertet und mit pane.src=next beantwortet.
     """
-    q = seiten_main._shell_subscribe()
+    q = seiten_main._shell_subscribe(_SID)
     try:
         c = _auth_client()
         r = c.post(
@@ -582,7 +681,7 @@ def test_t1547_truthy_event_setzt_url_in_state():
             "payload.url muss /display/essen/liste sein"
         )
     finally:
-        seiten_main._shell_unsubscribe(q)
+        seiten_main._shell_unsubscribe(_SID, q)
 
 
 # ============================================================
@@ -654,7 +753,7 @@ def test_t1542_shell_events_traegt_x_accel_buffering_no():
     Ohne diesen Header kommen Pane-Swap-SSE-Events erst beim 2. Tap an, weil
     nginx den Stream puffert bis ein internes Chunk-Limit erreicht ist.
     """
-    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
+    seiten_main._apply_shell_trigger(_SID, {"app": "hoerspiel", "view": "player"})
     c = _auth_client()
     resp = c.get("/shell/" + PANEL_ID + "/events", buffered=False)
     assert resp.status_code == 200
