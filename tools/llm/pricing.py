@@ -13,6 +13,10 @@ mit dem (deutlich niedrigeren) Cached-Input-Preis abgerechnet, Cache-Creation
 behandelt die V1-Schätzung als regulären Input (Anthropic-Pricing-Bucket).
 Unbekanntes Modell → Rückgabe `None` (Telemetrie zeigt dann keinen
 Kosten-Wert, LLMP-S4 `est_cost_eur` optional).
+
+`as_of`-Substrat (T1368, #1366-Drop): Jede Preiszeile hat ein maschinenlesbares
+Datum `_PRICES_AS_OF` (YYYY-MM-DD). `as_of_for(model_id)` liefert das Datum oder
+None. `monthly_rollup` in `telemetry_read` nutzt es für die Staleness-Warnung.
 """
 
 # Preise je 1 Million Tokens in US-Dollar (input, cached_input, output).
@@ -33,11 +37,31 @@ _PRICES_USD_PER_MILLION = {
     "mistral-medium-3504": (0.40, 0.40, 2.00),
 }
 
+# Maschinenlesbares Preisstand-Datum pro Modell (YYYY-MM-DD).
+# Quelle: Kommentare in _PRICES_USD_PER_MILLION; #1366-Drop vervollständigt
+# durch T1368-as_of-Substrat (ENTSCHEID-1268).
+_PRICES_AS_OF: dict[str, str] = {
+    "claude-opus-4-7":    "2026-05-31",  # Anthropic-Pricing-Quelle
+    "claude-sonnet-4-6":  "2026-05-31",  # Anthropic-Pricing-Quelle
+    "claude-haiku-4-5":   "2026-05-31",  # Anthropic-Pricing-Quelle
+    "mistral-medium-2508": "2026-07-07",  # Mistral-Pricing, korrigiert 2026-07-07
+    "mistral-medium-3504": "2026-07-07",  # Mistral-Pricing, korrigiert 2026-07-07
+}
+
 # V1-Vereinfachung (analog `eltern-chat/providers/pricing.EUR_PER_USD`): fester
 # Wechselkurs 0.92. Die JSONL-Telemetrie ist Diagnose-Werkzeug für die
 # Bewertungsphase — eine schwankende Live-Rate wäre Bau ohne belegte
 # Notwendigkeit (E-EC-11).
 EUR_PER_USD = 0.92
+
+
+def as_of_for(model_id: str) -> str | None:
+    """Liefert das maschinenlesbare Preisstand-Datum (YYYY-MM-DD) für `model_id`.
+
+    Gibt `None` zurück, wenn das Modell unbekannt ist oder kein Datum vorliegt.
+    Wird von `telemetry_read.monthly_rollup` für die Staleness-Warnung genutzt.
+    """
+    return _PRICES_AS_OF.get(model_id)
 
 
 def compute_eur(
