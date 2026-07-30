@@ -287,11 +287,25 @@
         // laden. Cookie bleibt unberührt (separater Speicher); nur Cache/SW
         // werden frisch. updateViaCache:'none' + update() ziehen die neue sw.js
         // sofort statt erst nach ~24 h.
+        //
+        // #1609 — Reload-Loop-Riegel (Kollision #1455 x #1543 x #1603):
+        // Der frühere Riegel `__reloaded` war NUR pro-Dokument — er resettet bei
+        // jedem Reload. Mit clients.claim() (#1603) feuert controllerchange bei
+        // JEDER SW-Übernahme, also nach jedem Reload erneut → Reload-Sturm
+        // (~6 s-Kadenz, „Verbindung unerwartet geschlossen"). Der Riegel muss den
+        // Reload ÜBERLEBEN: pro build_id höchstens EIN controllerchange-Reload,
+        // persistiert in localStorage. Neue build_id (echtes Deploy) erlaubt
+        // wieder genau einen Reload.
+        var SERVER_BUILD_ID = '{{ build_id }}';
+        var CC_KEY = 'shell_cc_reloaded_build';
         var __hadController = !!navigator.serviceWorker.controller;
-        var __reloaded = false;
         navigator.serviceWorker.addEventListener('controllerchange', function () {
-          if (!__hadController || __reloaded) return;
-          __reloaded = true;
+          if (!__hadController) return;   // Erst-Installation (kein Vorgänger) → kein Reload
+          try {
+            if (window.localStorage &&
+                localStorage.getItem(CC_KEY) === SERVER_BUILD_ID) return;  // schon einmal für diese Version
+            if (window.localStorage) localStorage.setItem(CC_KEY, SERVER_BUILD_ID);
+          } catch (e) { /* Storage gesperrt (Kiosk) → __hadController bleibt Einmalschutz im Dokument */ }
           window.location.reload();
         });
         window.addEventListener('load', function () {
