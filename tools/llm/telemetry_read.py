@@ -265,6 +265,7 @@ def monthly_rollup(
             "cache_read_tokens": 0,
             "cost_sum": 0.0,
             "cost_has_value": False,
+            "saw_none_cost": False,
             "distinct_days": set(),
         }
     )
@@ -295,6 +296,8 @@ def monthly_rollup(
         if cost is not None:
             bucket["cost_sum"] += float(cost)
             bucket["cost_has_value"] = True
+        else:
+            bucket["saw_none_cost"] = True
 
     # -- Pass 2: Rows bauen -------------------------------------------------
     rows = []
@@ -313,6 +316,11 @@ def monthly_rollup(
         n_days = len(bucket["distinct_days"])
         calls_per_day = bucket["calls"] / n_days if n_days > 0 else 0.0
 
+        # cost_complete: False wenn €-tragende Gruppe mindestens einen None-Beitrag hat
+        # (still-halbierte Summe, Antiberater-Fund 1, ENTSCHEID-1268:17).
+        # True wenn alle Beiträge €-Werte haben ODER alle None sind (nix zu halbieren).
+        cost_complete: bool = not (bucket["cost_has_value"] and bucket["saw_none_cost"])
+
         row: dict = {
             "month": month,
             "caller": caller,
@@ -322,6 +330,7 @@ def monthly_rollup(
             "input_tokens": input_tok,
             "output_tokens": bucket["output_tokens"],
             "est_cost_eur": bucket["cost_sum"] if bucket["cost_has_value"] else None,
+            "cost_complete": cost_complete,
             "cache_read_ratio": cache_read_ratio,
             "calls_per_day": calls_per_day,
         }
