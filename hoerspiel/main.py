@@ -537,7 +537,7 @@ def alben(kind_id: str):
         return err
     if request.method == "GET":
         return jsonify(album_builder.liste_alben(_data_root()))
-    return _post_alben()
+    return _post_alben(kind_id)
 
 
 @app.route("/api/v1/hoerspiel/<kind_id>/alben/<album_id>/manifest", methods=["GET"])
@@ -610,7 +610,7 @@ def _naechste_nummer_aus_historie(historie: str) -> int:
     return album_builder._naechste_nummer(historie)
 
 
-def _post_alben():
+def _post_alben(kind_id: str):
     body = request.get_json(silent=True) or {}
     titel = (body.get("titel") or "").strip()
     text = (body.get("text") or "").strip()
@@ -635,6 +635,13 @@ def _post_alben():
     pause_absatz = dcfg.pause_absatz_sek if dcfg is not None else config_mod.DEFAULT_PAUSE_ABSATZ_SEK
     pause_titel = dcfg.pause_titel_sek if dcfg is not None else config_mod.DEFAULT_PAUSE_TITEL_SEK
 
+    # T1632: Multi-Voice-Verdrahtung — instance.voices an baue_album durchreichen
+    instance = config_mod.load_instance(
+        data_root=_data_root(),
+        kind_id=kind_id,
+        data_cfg=dcfg,
+    )
+
     try:
         ergebnis = album_builder.baue_album(
             titel=titel, text=text, voice=voice, idee=idee,
@@ -645,6 +652,7 @@ def _post_alben():
             pause_absatz_sek=pause_absatz,
             pause_titel_sek=pause_titel,
             meta=meta,
+            voices=instance.voices,
         )
     except tts_service.SharedAssetsMissing as e:
         return jsonify({"fehler": str(e)}), 412

@@ -7,6 +7,7 @@ Cross-kind-Test: Anfrage an fremde kind_id → 404 (HSP-26-Self-Check).
 import json
 import os
 import pathlib
+from unittest.mock import patch
 
 
 def test_folgen_vorschlag_happy_path(client, fake_llm, data_root):
@@ -240,6 +241,49 @@ def test_cross_kind_api_returns_404(client):
     assert response.status_code == 404
     body = response.get_json()
     assert "fehler" in body
+
+
+def test_post_alben_multivoice_voices_param_durchgereicht(client, data_root, monkeypatch):
+    """T1632: POST /alben durchreicht instance.voices an album_builder.baue_album.
+
+    Schreibt instance.json mit Multi-Voice-Map, moxt baue_album, und prüft,
+    dass voices=instance.voices tatsächlich übergeben wurde.
+    """
+    from hoerspiel import album_builder
+
+    # instance.json mit Multi-Voice-Map schreiben (paula ist die Test-Instanz)
+    instance_path = pathlib.Path(data_root) / "instance.json"
+    instance_path.write_text(json.dumps({
+        "kind_id": "paula",
+        "name": "Paula",
+        "alter": 7,
+        "voices": {"KIM": "shimmer", "RUBEN": "onyx"},
+    }))
+
+    # baue_album mocken, um die übergebenen Parameter zu prüfen
+    captured_kwargs = {}
+
+    def mock_baue_album(**kwargs):
+        captured_kwargs.update(kwargs)
+        # Original nur für die Struktur aufrufen — Rückgabe vortäuschen
+        from hoerspiel.album_builder import BaueErgebnis
+        return BaueErgebnis(
+            album_id="test-album",
+            manifest_pfad=str(pathlib.Path(data_root) / "alben" / "test-album" / "manifest.json"),
+            dauer_sek_gesamt=0,
+            cached=False,
+        )
+
+    with patch.object(album_builder, 'baue_album', side_effect=mock_baue_album):
+        response = client.post("/api/v1/hoerspiel/paula/alben", json={
+            "titel": "T", "text": "Absatz.",
+            "voice": "onyx", "idee": "x",
+        })
+
+    assert response.status_code == 200
+    # Überprüfe: voices wurde mit der Map aus instance.json übergeben
+    assert captured_kwargs.get("voices") == {"KIM": "shimmer", "RUBEN": "onyx"}, (
+        "POST /alben muss instance.voices an baue_album durchreichen")
 
 
 def test_post_alben_manifest_url_kind_id_verdrahtung(client):
