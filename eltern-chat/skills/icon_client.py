@@ -1,6 +1,7 @@
 """Eltern-Chat — HTTP-Client zur ICONS-7-Stichwort-Suche (ICONS-7, RPS-4).
 
-Konsument der zentralen Icon-Bibliothek (`router/main.py` ICONS-7).
+Konsument der zentralen Icon-Bibliothek (`seiten/main.py` ICONS-7,
+RAT-31 E6f-B: Icons re-homed vom Router zu seiten, Port 5042).
 Der Eltern-Chat hat keinen eigenen ARASAAC-Bezug (E-RPS-2, CLAUDE.md §6
 „ein Icon-Pfad", ROUTINE-10) — die Suche läuft ausschließlich über
 `GET /api/v1/icons/suche?q=<wort>&max=<n>`.
@@ -45,8 +46,8 @@ class IconClientError(Exception):
 class IconClient:
     """HTTP-Client zur ICONS-7-Stichwort-Suche (RPS-4, RPS-6).
 
-    `origin_url` ist die Basis-Origin des Routers (z. B.
-    `http://127.0.0.1:5000`, PORT-2). `transport` ist die Test-Naht: ein
+    `origin_url` ist die Basis-Origin des seiten-Dienstes (z. B.
+    `http://127.0.0.1:5042`, PORT-2). `transport` ist die Test-Naht: ein
     Callable `(method, path, *, body=None, content_type=None) -> (status, bytes)`,
     das HTTP ersetzt; bleibt der Wert None, nutzen wir `urllib.request`
     (CLIENT-1).
