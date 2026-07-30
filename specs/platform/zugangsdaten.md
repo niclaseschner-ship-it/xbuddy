@@ -77,11 +77,11 @@ Vendor aktiv ist, entscheidet die Komponente in ihrer Konfiguration (z. B.
 Multi-Slot-Schema wird daraus `eltern-chat-<vendor>-api-key`. Migration
 zweistufig analog ONB-5→ZD (#84 + #336):
 
-- **Schritt 1 (#663 Welle A):** Eltern-Chat liest read-both — zuerst den
-  vendor-spezifischen Slot, bei leerem Wert Fallback auf
-  `eltern-chat-provider-api-key`. Schreibt ausschließlich vendor-spezifisch
-  (lazy one-time-Migration: der heutige Single-Slot wird auf den aktiven
-  `provider`-Wert gemappt und unter neuem Namen abgelegt).
+- **Schritt 1 (#663 Welle A):** Eltern-Chat liest vendor-spezifische Slots
+  (`eltern-chat-<vendor>-api-key`). Der Single-Slot `eltern-chat-provider-api-key`
+  bleibt als Fallback lesbar (Rückwärtskompatibilität bei noch
+  nicht migrierten Instanzen), wird aber nicht mehr beschrieben. Schreibt
+  ausschließlich vendor-spezifisch.
 - **Schritt 2 (#663 Welle B):** Single-Slot-Fallback entfernt;
   `eltern-chat-provider-api-key` wird aus dem Store gelöscht. Konsumenten
   lesen nur noch `<konsument>-<vendor>-<purpose>`.

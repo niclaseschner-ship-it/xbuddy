@@ -67,12 +67,12 @@ from tools.zugangsdaten import StoreError
 # zentral in `onboarding_store` — Watchdog B4 / CLAUDE.md §6. Der Skill
 # importiert sie hier nur, statt sie als String-Literale zu wiederholen.
 #
-# T663 Welle A: der Single-Slot bleibt als Fallback (read-both in
-# `OnboardingStore.load`), wird beim Wechsel aber NICHT mehr beschrieben —
-# der Skill schreibt in vendor-spezifische Slots
-# (`eltern-chat-<vendor>-api-key`, Brand-Vendor via `vendor_slug_for_adapter`),
+# T663 Welle A: Laufzeit-Standard sind vendor-spezifische Slots
+# (`eltern-chat-<vendor>-api-key`, Brand-Vendor via `vendor_slug_for_adapter`).
+# Der Single-Slot `ZD_NAME_PROVIDER_API_KEY` bleibt lesbar (Legacy-Fallback),
+# wird beim Wechsel aber NICHT mehr beschrieben. Der Skill schreibt vendor-spezifisch
 # zusammen mit `ZD_NAME_PROVIDER_NAME` in einem atomaren `set_multi`-Aufruf.
-# Welle B entfernt den Single-Slot.
+# Welle B entfernt den Single-Slot ganz.
 
 # ============================================================
 #  Verfügbare Anbieter (ONB-10 / ONB-11)
