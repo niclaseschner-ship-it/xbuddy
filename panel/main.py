@@ -12,6 +12,7 @@ Endpunkte:
   GET  /api/v1/panels/<id>/tiles.json         — tiles-Sicht (PREG-14)
   PUT  /api/v1/panels/<id>/tiles              — tiles schreiben, atomar (PBE-4, #330)
   POST /api/v1/panels/                        — Panel anlegen, atomar (PREG-15)
+  GET  /healthz                              — Health-Check (SVC-1)
 
 Service-Topologie (Lego-Prinzip): die Registry läuft als schlanker
 eigenständiger Flask-Prozess auf Loopback-Port 5041 (PORT-2). nginx-Origin
@@ -382,6 +383,16 @@ def post_panel():
 # braucht — Bind, Log-Level. Datei + ENV laufen über `tools.configloader`,
 # CLI-Flags überschreiben den Loader-Output danach. Familienspezifische Werte
 # (Panels selbst) liegen in `panels.json` (PREG-4).
+
+
+# ── Health-Check (SVC-1) ─────────────────────────────────────────────────
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """SVC-1: Health-Endpoint — liefert immer 200 + OK."""
+    return jsonify({"ok": True}), 200
+
+
 RUNTIME_SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5041,

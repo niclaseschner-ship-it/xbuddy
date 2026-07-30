@@ -78,6 +78,13 @@ def write_client(demo_instanz):
 #  PREG-4 — Datenhaltung: Laden, fehlende Datei, 0600
 # ============================================================
 
+def test_healthz_gibt_200(read_client):
+    """SVC-1: GET /healthz liefert immer 200 + ok."""
+    resp = read_client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+
+
 def test_PREG_4_missing_file_warns_and_empty(tmp_path):
     """Fehlende panels.json → leere Registry, kein Crash."""
     reg = registry_mod.load(str(tmp_path / "gibtsnicht.json"))

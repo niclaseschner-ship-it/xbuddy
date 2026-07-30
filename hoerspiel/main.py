@@ -22,6 +22,8 @@ Daten-Router (HSP-26, URL-3a):
   GET  /display/hoerspiel/<kind_id>/alben            — Alben-View (HTML)
   GET  /display/hoerspiel/<kind_id>/data/<sub>       — Audio-/Cover-Assets
 
+  GET  /healthz                                      — Health-Check (SVC-1)
+
 Port: 5053 (HSP-28). Service-Topologie: schlanke eigenständige Flask-App
 (Geschwister von wetter/, routine/, plan/).
 """
@@ -997,6 +999,14 @@ def display_data(kind_id: str, sub: str):
     if err is not None:
         return err
     return send_from_directory(_data_root(), sub)
+
+
+# ── Health-Check (SVC-1) ─────────────────────────────────────────────────
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """SVC-1: Health-Endpoint — liefert immer 200 + OK."""
+    return jsonify({"ok": True}), 200
 
 
 # ============================================================

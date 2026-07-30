@@ -6,9 +6,10 @@ Buddy-Slug `wetter` (WETTER-1). Er besitzt seine Daten (Ort + Garderoben-Regeln,
 WETTER-21) und seine Funktion (die Open-Meteo-Anbindung, WETTER-16) und stellt
 das Ergebnis über seine Display-View bereit (WETTER-2).
 
-Endpunkt:
+Endpunkte:
   GET /display/wetter/heute              — View `heute`, Diptychon (WETTER-2)
   GET /display/wetter/heute?stage=toddler — Mitwachsen-Stufe (WETTER-4; V1 nur toddler)
+  GET /healthz                           — Health-Check (SVC-1)
 
 Service-Topologie wie plan/main.py: eine schlanke eigenständige Flask-App, ein
 Geschwister von router/, familie/ und plan/.
@@ -279,6 +280,16 @@ logger = logging.getLogger(__name__)
 # Runtime-Konfig-Schema (CONFIG-1): nur die Service-Start-Werte — Bind,
 # Log-Level. Ort/Regeln/Tageszeiten leben in wetter.json (WETTER-21).
 # Listen-Port 5030 (belegt in conventions/ports.md, PORT-2, `xbuddy-wetter`).
+
+
+# ── Health-Check (SVC-1) ─────────────────────────────────────────────────
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """SVC-1: Health-Endpoint — liefert immer 200 + OK."""
+    return jsonify({"ok": True}), 200
+
+
 RUNTIME_SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5030,
