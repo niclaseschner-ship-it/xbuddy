@@ -21,6 +21,11 @@
   <link rel="stylesheet" href="/api/v1/seiten/static/heim-shell.css?v={{ build_id }}">
 </head>
 <body>
+  {# SHELL-12: Device-Fit-Scale — 1920×1200-Design auf beliebige Geraetebreite skalieren.
+     Ein Fit-Wrapper haelt die fixe 1920×1200-Flaeche; ein scale-Script setzt
+     --shell-scale = innerWidth/1920 als CSS-Custom-Property, damit transform: scale()
+     das Ergebnis auf die tatsaechliche Geraetebreite staucht. Refs #1595. #}
+  <div class="shell-fit">
   <div class="shell">
     {# SHELL-3: linke Nav-Rail 280px — Panel bleibt unveraendert (kein 1-Spalten-Nachruestung).
        Panel berechnet Grid-Geometrie adaptiv aus eigener Iframe-Breite (PANEL-12). #}
@@ -45,6 +50,22 @@
       </iframe>
     </div>
   </div>
+  </div>{# /shell-fit #}
+  {# SHELL-12: Device-Fit-Scale-Script — setzt --shell-scale auf documentElement
+     on load + resize. width-basiert (innerWidth/1920). Kiosk 1920px → scale=1.0
+     (verhaltensidentisch); Tablet 1280px → scale≈0.667. #}
+  <script>
+    (function () {
+      'use strict';
+      function updateShellScale() {
+        var scale = window.innerWidth / 1920;
+        document.documentElement.style.setProperty('--shell-scale', scale);
+      }
+      updateShellScale();
+      window.addEventListener('load', updateShellScale);
+      window.addEventListener('resize', updateShellScale);
+    })();
+  </script>
   {# SHELL-4/5 (RAT-31 E2): Empfänger — same-origin SSE + iframe.src-Swap.
      Muster aus display-client/displib.js (SHELL-5: nur der ~30-Zeilen-Swap wird
      nachgezeichnet, KEINE displib-Datei importiert). withCredentials trägt den
