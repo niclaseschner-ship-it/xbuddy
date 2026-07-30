@@ -96,8 +96,16 @@ def buendele(absaetze_list: list[str],
     return bundles
 
 
-def _hash_key(*, titel: str, text: str, voice: str) -> str:
-    payload = (titel.strip() + "\n" + text.strip() + "\n" + voice.strip().lower())
+def _hash_key(*, titel: str, text: str, voice: str,
+              voices: "dict[str, str] | None" = None) -> str:
+    # T1621: voices-Map in den Hash aufnehmen — sonst rebuildet eine Voice-Änderung nicht.
+    # Sortierte Key-Value-Paare als deterministischen Zusatz serialisieren.
+    voices_part = ""
+    if voices:
+        voices_part = "\n" + ",".join(
+            "%s=%s" % (k, voices[k]) for k in sorted(voices))
+    payload = (titel.strip() + "\n" + text.strip() + "\n"
+               + voice.strip().lower() + voices_part)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -171,6 +179,7 @@ def _synthese_bundle_mit_pausen(bundle: str, voice: str, *, tts_engine,
                                 ist_letzter_bundle: bool,
                                 pause_absatz_sek: float = PARAGRAPH_SILENCE_SEK,
                                 pause_titel_sek: float = TITLE_SILENCE_SEK,
+                                voices: "dict[str, str] | None" = None,
                                 ) -> tuple[bytes, int]:
     """Synthetisiert ein Bündel als pro-Absatz-TTS-Calls + Pausen (HSP-14).
 
@@ -184,6 +193,15 @@ def _synthese_bundle_mit_pausen(bundle: str, voice: str, *, tts_engine,
     pause_absatz_sek / pause_titel_sek: aus DataConfig (HSP-14/HSP-27),
     Defaults entsprechen den Modul-Konstanten (0.55 / 1.8).
 
+    T1621 — Multi-Voice:
+      voices ist eine optionale Sprecher→Voice-Map (z. B. {"KIM": "shimmer",
+      "RUBEN": "onyx"}). Ist voices gesetzt und nicht leer:
+        - Absätze der Form `NAME: Text` werden erkannt (Regex ^([A-ZÄÖÜ][A-ZÄÖÜ ]*?):\\s*).
+        - Ist NAME ein Key in voices → die zugehörige Voice wird genutzt UND das
+          Präfix wird aus dem gesprochenen Text gestrichen (Stimme trägt die Zuordnung).
+        - Kein Match ODER Name nicht in voices → Default-`voice`, Text unverändert.
+      voices=None/leer → heutiges Verhalten byte-gleich (Kind-Instanzen unverändert).
+
     Returns (mp3_bytes, dauer_sek) — Dauer als Wort-basierte Schätzung
     plus Anzahl Pausen.
     """
@@ -191,9 +209,22 @@ def _synthese_bundle_mit_pausen(bundle: str, voice: str, *, tts_engine,
     if not parts:
         raise ValueError("Bündel enthält keine Absätze")
 
+    # T1621: Präfix-Regex für Sprecher-Erkennung (nur wenn voices-Map aktiv).
+    _PREFIX_RE = re.compile(r"^([A-ZÄÖÜ][A-ZÄÖÜ ]*?):\s*", re.UNICODE)
+
     chunks: list[tuple[bytes, float]] = []  # (mp3, pause_nach)
     for i, absatz in enumerate(parts):
-        mp3 = tts_engine.synthese(text=absatz, voice=voice)
+        # T1621: Sprecher-Präfix auflösen, wenn voices-Map gesetzt.
+        absatz_voice = voice
+        absatz_text = absatz
+        if voices:
+            m = _PREFIX_RE.match(absatz)
+            if m:
+                sprecher = m.group(1)
+                if sprecher in voices:
+                    absatz_voice = voices[sprecher]
+                    absatz_text = absatz[m.end():]  # Präfix strippen
+        mp3 = tts_engine.synthese(text=absatz_text, voice=absatz_voice)
         ist_letzter_absatz_im_bundle = (i == len(parts) - 1)
         ist_titel_absatz = (
             ist_erster_bundle and i == 0
@@ -301,10 +332,11 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
                pause_absatz_sek: float = PARAGRAPH_SILENCE_SEK,
                pause_titel_sek: float = TITLE_SILENCE_SEK,
                meta: "dict | None" = None,
+               voices: "dict[str, str] | None" = None,
                ) -> BaueErgebnis:
     """Führt die HSP-15-Pipeline atomar aus.
 
-    Idempotenz (Q3): Hash über `(titel, text, voice)` → wenn der Index
+    Idempotenz (Q3): Hash über `(titel, text, voice[, voices])` → wenn der Index
     eine Album-ID dafür kennt, return ohne TTS-Calls. Nach erfolgreichem
     Build wird Index atomar fortgeschrieben.
 
@@ -312,6 +344,9 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
     Temp-Verzeichnis; nach allem TTS wird das Temp-Verzeichnis per
     `os.rename` auf den Ziel-Album-Pfad gehoben. Ein gleichzeitiger
     View-Read sieht das Album entweder vollständig oder noch gar nicht.
+
+    T1621 — Multi-Voice: optionaler `voices`-Parameter (Sprecher→Voice-Map).
+    None/leer → Single-Voice-Pfad, byte-gleich zu heute (Kind-Instanzen unverändert).
     """
     if voice not in album_manifest.VOICES:
         raise ValueError("voice %r ist V1 nicht unterstützt (HSP-13)" % voice)
@@ -322,7 +357,7 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
     os.makedirs(alben_root, exist_ok=True)
 
     index = _load_index(alben_root)
-    key = _hash_key(titel=titel, text=text, voice=voice)
+    key = _hash_key(titel=titel, text=text, voice=voice, voices=voices or None)
     if key in index:
         album_id = index[key]
         manifest_pfad = _manifest_path(data_root, album_id)
@@ -366,6 +401,7 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
                 ist_letzter_bundle=(idx == n_bundles - 1),
                 pause_absatz_sek=pause_absatz_sek,
                 pause_titel_sek=pause_titel_sek,
+                voices=voices or None,
             )
             track_filename = "track-%02d.mp3" % position
             data_io.atomic_write_bytes(os.path.join(audio_tmp, track_filename), mp3)
