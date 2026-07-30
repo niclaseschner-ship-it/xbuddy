@@ -316,3 +316,270 @@ def test_daten_ab_mixed_valid_invalid():
     ]
     result = telemetry_read.daten_ab(events)
     assert result == "2026-06-10"
+
+
+# ---------------------------------------------------------------------------
+# monthly_rollup — T1368
+# ---------------------------------------------------------------------------
+
+
+def _rollup_event(
+    caller: str = "kibuddy",
+    model_id: str = "claude-haiku-4-5",
+    ts: str = "2026-06-20T10:00:00Z",
+    input_tokens: int = 100,
+    output_tokens: int = 50,
+    est_cost_eur: float | None = 0.01,
+    cache_read_tokens: int = 0,
+    modality: str | None = None,
+) -> dict:
+    """Hilfs-Event für monthly_rollup-Tests."""
+    e: dict = {
+        "ts": ts,
+        "caller": caller,
+        "model_id": model_id,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "est_cost_eur": est_cost_eur,
+        "cache_read_tokens": cache_read_tokens,
+    }
+    if modality is not None:
+        e["modality"] = modality
+    return e
+
+
+def test_monthly_rollup_empty():
+    """Leere Event-Liste → leeres rows-Dict, keine Warnungen."""
+    result = telemetry_read.monthly_rollup([], today=date(2026, 7, 1))
+    assert result["rows"] == []
+    assert result["warnings"] == []
+
+
+def test_monthly_rollup_single_month_bucketing():
+    """Alle Events im selben Monat → eine Gruppe pro (caller, model, modality)."""
+    events = [
+        _rollup_event(ts="2026-06-10T10:00:00Z"),
+        _rollup_event(ts="2026-06-20T10:00:00Z"),
+        _rollup_event(ts="2026-06-30T10:00:00Z"),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 1
+    row = result["rows"][0]
+    assert row["month"] == "2026-06"
+    assert row["calls"] == 3
+
+
+def test_monthly_rollup_cross_month_boundary():
+    """Events über Monatsgrenze → je eigene Gruppe."""
+    events = [
+        _rollup_event(ts="2026-05-31T23:59:59Z"),  # Mai
+        _rollup_event(ts="2026-06-01T00:00:00Z"),  # Juni
+        _rollup_event(ts="2026-06-15T10:00:00Z"),  # Juni
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    months = {r["month"] for r in result["rows"]}
+    assert months == {"2026-05", "2026-06"}
+    june_row = next(r for r in result["rows"] if r["month"] == "2026-06")
+    assert june_row["calls"] == 2
+
+
+def test_monthly_rollup_groups_by_caller_model_modality():
+    """Verschiedene caller/model/modality landen in getrennten Gruppen."""
+    events = [
+        _rollup_event(caller="kibuddy", model_id="claude-haiku-4-5", ts="2026-06-10T00:00:00Z"),
+        _rollup_event(caller="eltern-chat", model_id="claude-haiku-4-5", ts="2026-06-10T00:00:00Z"),
+        _rollup_event(caller="kibuddy", model_id="claude-haiku-4-5", ts="2026-06-10T00:00:00Z",
+                      modality="tts"),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 3
+
+
+def test_monthly_rollup_cache_read_ratio():
+    """Cache-Read-Anteil = cache_read_tokens / input_tokens."""
+    events = [
+        _rollup_event(ts="2026-06-10T00:00:00Z", input_tokens=200, cache_read_tokens=50),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    row = result["rows"][0]
+    assert row["cache_read_ratio"] is not None
+    assert abs(row["cache_read_ratio"] - 0.25) < 1e-9
+
+
+def test_monthly_rollup_cache_read_ratio_zero_input():
+    """Wenn input_tokens == 0 → cache_read_ratio ist None (kein Division-durch-Null)."""
+    events = [
+        _rollup_event(ts="2026-06-10T00:00:00Z", input_tokens=0, cache_read_tokens=0,
+                      modality="tts"),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    row = result["rows"][0]
+    assert row["cache_read_ratio"] is None
+
+
+def test_monthly_rollup_calls_per_day():
+    """calls_per_day = calls / distinkte Tage im Monat."""
+    events = [
+        _rollup_event(ts="2026-06-10T08:00:00Z"),
+        _rollup_event(ts="2026-06-10T20:00:00Z"),  # gleicher Tag wie oben
+        _rollup_event(ts="2026-06-15T10:00:00Z"),  # anderer Tag
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    row = result["rows"][0]
+    assert row["calls"] == 3
+    # 3 calls / 2 distinkte Tage (10. + 15. Juni)
+    assert abs(row["calls_per_day"] - 1.5) < 1e-9
+
+
+def test_monthly_rollup_null_cost_semantics():
+    """Null-Preis-Semantik bleibt erhalten (OPEN-LLMP-A): alle None → None."""
+    events = [
+        _rollup_event(ts="2026-06-10T00:00:00Z", est_cost_eur=None),
+        _rollup_event(ts="2026-06-15T00:00:00Z", est_cost_eur=None),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    row = result["rows"][0]
+    assert row["est_cost_eur"] is None
+
+
+def test_monthly_rollup_staleness_warning_fires():
+    """Staleness-Warnung erscheint wenn as_of älter als staleness_days Tage."""
+    # claude-haiku-4-5 as_of = 2026-05-31; today = 2026-09-30 → 122 Tage → > 90.
+    events = [
+        _rollup_event(model_id="claude-haiku-4-5", ts="2026-09-15T00:00:00Z"),
+    ]
+    result = telemetry_read.monthly_rollup(
+        events, today=date(2026, 9, 30), staleness_days=90
+    )
+    assert len(result["warnings"]) == 1
+    w = result["warnings"][0]
+    assert w["model_id"] == "claude-haiku-4-5"
+    assert w["as_of"] == "2026-05-31"
+    assert w["age_days"] > 90
+
+
+def test_monthly_rollup_no_staleness_warning_fresh():
+    """Keine Staleness-Warnung wenn as_of frisch (< staleness_days)."""
+    # claude-haiku-4-5 as_of = 2026-05-31; today = 2026-07-01 → 31 Tage → < 90.
+    events = [
+        _rollup_event(model_id="claude-haiku-4-5", ts="2026-06-20T00:00:00Z"),
+    ]
+    result = telemetry_read.monthly_rollup(
+        events, today=date(2026, 7, 1), staleness_days=90
+    )
+    assert result["warnings"] == []
+
+
+def test_monthly_rollup_staleness_custom_threshold():
+    """Custom staleness_days: Warnung bei 10 Tagen Schwelle."""
+    # claude-haiku-4-5 as_of = 2026-05-31; today = 2026-06-15 → 15 Tage → > 10.
+    events = [
+        _rollup_event(model_id="claude-haiku-4-5", ts="2026-06-10T00:00:00Z"),
+    ]
+    result = telemetry_read.monthly_rollup(
+        events, today=date(2026, 6, 15), staleness_days=10
+    )
+    assert any(w["model_id"] == "claude-haiku-4-5" for w in result["warnings"])
+
+
+def test_monthly_rollup_staleness_unknown_model_no_warning():
+    """Unbekanntes Modell (kein as_of) → keine Staleness-Warnung."""
+    events = [
+        _rollup_event(model_id="some-unknown-model-v99", ts="2026-06-10T00:00:00Z",
+                      est_cost_eur=None),
+    ]
+    result = telemetry_read.monthly_rollup(
+        events, today=date(2026, 12, 31), staleness_days=1
+    )
+    assert result["warnings"] == []
+
+
+def test_monthly_rollup_topf_trennung_documented():
+    """Topf-Trennung: monthly_rollup mischt keine Töpfe selbst.
+
+    Wenn zwei Event-Blöcke (Laufzeit- und Bau-Topf) aus verschiedenen
+    provider_calls.jsonl-Dateien zusammengemischt werden, ist das Sache des
+    Aufrufers — nicht von monthly_rollup. Der Test bestätigt, dass monthly_rollup
+    alle übergebenen Events summiert (und Trennung via Datei/Host laufen muss).
+    """
+    # Simuliert: zwei Töpfe fälschlicherweise zusammengemischt.
+    events = [
+        _rollup_event(caller="kibuddy", ts="2026-06-10T00:00:00Z", est_cost_eur=0.01),
+        _rollup_event(caller="kibuddy", ts="2026-06-15T00:00:00Z", est_cost_eur=0.02),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    row = result["rows"][0]
+    # Beide addiert — Trennung obliegt dem Aufrufer (Datei/Host).
+    assert abs(row["est_cost_eur"] - 0.03) < 1e-9
+
+
+def test_monthly_rollup_events_without_ts_skipped():
+    """Events ohne ts-Feld werden im monthly_rollup übersprungen."""
+    events = [
+        {"caller": "kibuddy", "model_id": "claude-haiku-4-5", "est_cost_eur": 0.01},
+        _rollup_event(ts="2026-06-10T00:00:00Z"),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 1
+    assert result["rows"][0]["calls"] == 1
+
+
+def test_monthly_rollup_warnings_present_in_output():
+    """Warnings-Feld ist immer im Rückgabe-Dict vorhanden (strukturell)."""
+    result = telemetry_read.monthly_rollup([], today=date(2026, 7, 1))
+    assert "warnings" in result
+    assert "rows" in result
+
+
+# ---------------------------------------------------------------------------
+# monthly_rollup — cost_complete (ENTSCHEID-1268:17)
+# ---------------------------------------------------------------------------
+
+
+def test_monthly_rollup_cost_complete_mixed_group_false():
+    """Gemischte Gruppe (ein €-Call + ein None-Call, gleicher group-key):
+    est_cost_eur = Teilsumme, cost_complete == False (Antiberater-Fund 1)."""
+    events = [
+        _rollup_event(caller="hoerspiel", model_id="tts-1", ts="2026-06-10T00:00:00Z",
+                      est_cost_eur=0.05),
+        _rollup_event(caller="hoerspiel", model_id="tts-1", ts="2026-06-11T00:00:00Z",
+                      est_cost_eur=None),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 1
+    row = result["rows"][0]
+    # Teilsumme vorhanden (nur der €-Beitrag).
+    assert abs(row["est_cost_eur"] - 0.05) < 1e-9
+    # Unvollständig → False.
+    assert row["cost_complete"] is False
+
+
+def test_monthly_rollup_cost_complete_pure_eur_group_true():
+    """Reine €-Gruppe (alle Beiträge haben einen Wert) → cost_complete == True."""
+    events = [
+        _rollup_event(caller="kibuddy", model_id="claude-haiku-4-5",
+                      ts="2026-06-10T00:00:00Z", est_cost_eur=0.01),
+        _rollup_event(caller="kibuddy", model_id="claude-haiku-4-5",
+                      ts="2026-06-15T00:00:00Z", est_cost_eur=0.02),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 1
+    row = result["rows"][0]
+    assert abs(row["est_cost_eur"] - 0.03) < 1e-9
+    assert row["cost_complete"] is True
+
+
+def test_monthly_rollup_cost_complete_pure_none_group_true():
+    """Reine None-Gruppe (alle Beiträge None) → est_cost_eur is None UND
+    cost_complete == True (nix zu halbieren, OPEN-LLMP-A)."""
+    events = [
+        _rollup_event(caller="kibuddy", model_id="unbekannt-v99",
+                      ts="2026-06-10T00:00:00Z", est_cost_eur=None),
+        _rollup_event(caller="kibuddy", model_id="unbekannt-v99",
+                      ts="2026-06-15T00:00:00Z", est_cost_eur=None),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 1
+    row = result["rows"][0]
+    assert row["est_cost_eur"] is None
+    assert row["cost_complete"] is True
