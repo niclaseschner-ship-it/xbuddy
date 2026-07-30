@@ -389,16 +389,49 @@ Backend-Komponenten rufen Mini-App-APIs intern (z. B. `PUT
 /api/v1/routine/config` aus dem Eltern-Chat-Konfig-Skill); Identität ist
 hier Backend-Prozess-Identität via Heim-Pi-Loopback, nicht User-Identität.
 
-**Mechanik:** Der Loopback-Bypass lebt **im jeweiligen Buddy-Decorator**
-(`essen/main.py`, `routine/main.py`, …), nicht in einer geteilten Lib —
-heute kopiert je Buddy. AUTH-9 prüft, dass jede AUTH-3-Route den Decorator
-trägt; eine Konsistenz-Prüfung des Loopback-Bypass-Verhaltens (alle Buddys
-verhalten sich gleich) ist Aufgabe einer geteilten Helper-Lib
-(`eltern-chat/init_data.py` als Heimat-Kandidat), deren Auslagerung erst
-beim n=3-Verbrauch (Codex-Kriterium aus `conventions/README.md`)
-ratifiziert wird. **Phase 1** kopiert das Verhalten je Buddy-Decorator
-konsistent; **n=3-Trigger** (z. B. `routine/main.py` + `hoerspiel/main.py`
-folgen) löst die Lib-Auslagerung aus.
+**Mechanik:** Der Loopback-Bypass lebte historisch **je Buddy-Decorator**
+kopiert (`essen/main.py`, `routine/main.py`, …). Der n=3-Verbrauch ist
+**erreicht und die Lib-Auslagerung ratifiziert** (Berater-Runde 2026-07-30,
+`brainstorm/berater-runde/20260730-1900-RATIFIZIERT-auth-decorator-lib.md`,
+Antiberater-geprüft): Heimat ist **`tools/initdata/auth_gate.py`** als Factory
+(nicht `eltern-chat/init_data.py`, der frühere Kandidat) — siehe Abschnitt
+*AUTH-Decorator-Lib* unten. AUTH-9 prüft weiterhin, dass jede AUTH-3-Route den
+Decorator trägt; die schrittweise Migration je Buddy (#1383) hält AUTH-9 pro
+Schritt grün. Der Prosa-Endstand („n=3 eingelöst") wird mit dem letzten
+Migrations-Schritt nachgezogen.
+
+### AUTH-Decorator-Lib (ratifiziert 2026-07-30, Bau via #1383)
+
+Der duplizierte Flask-Auth-Wrapper wird als **Factory** in
+`tools/initdata/auth_gate.py` konsolidiert (die schon bestehende
+Auth-Vendor-rein-Heimat mit `ist_operator_ip`/`hat_gueltigen_cookie`). Die
+Bausteine (`session_cookie.py`, `init_data.py`) liegen schon geteilt; nur die
+Flask-Verdrahtung (request/`g`/`make_response` + AUTH-8-401) war 6-7× kopiert.
+
+**Drei Factories, kein Mode-Flag** — die Semantiken divergieren strukturell,
+nicht nur im Endzweig (Antiberater-Befund: der SOFT-Pfad hat gar keinen
+Cookie-Zweig):
+
+- `make_require_init_data(*, get_bot_token, get_familie_client,
+  get_init_data_config, auth_401)` — **HART** (Loopback → Cookie+Rolling-Refresh
+  → tma-Header → 401). Konsumenten: essen/kibuddy/photo/plan.
+- `make_require_soft_gate(...)` — **SOFT** (Loopback → tma → Pass-through
+  `g.init_data=None`, **kein** Cookie-Zweig). Konsumenten: routine +
+  hoerspiel (`require_mini_app_auth`).
+- `make_require_dual_gate(...)` — **AUTH-7b** (Cookie ODER Operator-IP,
+  observe/hard). Konsument: seiten.
+
+Die Pro-Buddy-Laufzeit kommt als **Getter-Closures** rein (kein `g`-Context,
+keine Registrierung, Import strikt Buddy→Lib). Der `auth_401`-Renderer ist ein
+eigener Injektionspunkt, weil 401-HTML-Text und 403-Shape buddy-variant sind.
+Der plan-Slot-Sonderfall (`auth_familie_client` statt `familie_client`) löst
+sich, weil plans Getter den Slot bereits kapselt — **kein** repo-weites Rename.
+
+**Migration Buddy-für-Buddy** (bisectbar): photo → essen → kibuddy → plan (HART)
+→ routine + hoerspiel (SOFT) → seiten (dual, zuletzt). Pro Schritt AUTH-9-Test
+grün + real-route-Smoke (401-HTML byte-gleich). `test_auth_decorator_copetrage.py`
+ist um routine + hoerspiel zu erweitern (heute in keiner MODULE_MAP → das Netz
+deckt die zwei SOFT-Buddys noch nicht).
 
 Der Decorator-Code (egal in welchem Buddy) prüft zuerst — **verbindlich und
 load-bearing** — BEIDE Bedingungen zusammen:
