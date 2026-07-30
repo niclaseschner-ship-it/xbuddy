@@ -30,10 +30,14 @@
     {# SHELL-3: linke Nav-Rail 280px — Panel bleibt unpetraendert (kein 1-Spalten-Nachruestung).
        Panel berechnet Grid-Geometrie adaptiv aus eigener Iframe-Breite (PANEL-12). #}
     <div class="rail">
-      {# SHELL-4 / E2-Sender (T1519): ingest_url bringt dem Panel die seiten-
-         seitige Ingest-URL als Query-Param mit. app.js liest ihn beim Bootstrap
-         und postet tile_selected an /shell/<panel_id>/events statt an den Router. #}
-      <iframe src="/controller/app-panel/{{ panel_id }}/?ingest_url=/shell/{{ panel_id }}/events"
+      {# SHELL-4 / E2-Sender (T1519) + RAT-35 (#1546): ingest_url bringt dem Panel
+         die seiten-seitige Ingest-URL als Query-Param mit — INKL. der ephemeren
+         `?sid=` dieses Shell-Dokuments. app.js liest ingest_url beim Bootstrap und
+         postet tile_selected an /shell/<panel_id>/events?sid=<sid> statt an den
+         Router. Der src wird bewusst NICHT server-gerendert gesetzt (er trüge dann
+         keine sid) — das SSE-Script unten setzt ihn client-seitig NACH der sid-
+         Erzeugung. #}
+      <iframe id="panel-rail"
               title="Panel-Nav {{ panel_id }}"
               referrerpolicy="same-origin"
               allow="autoplay">
@@ -76,10 +80,35 @@
     (function () {
       'use strict';
       var pane = document.getElementById('buddy-pane');
+      var rail = document.getElementById('panel-rail');
+
+      // RAT-35 (#1546): ephemere, geräte-anonyme sid — EINMAL pro Shell-Dokument.
+      // Sie keyt den Shell-Zustand server-seitig, sodass Pi und Tablet mit
+      // derselben panel_id unabhängige Streams bekommen. Fallback auf einen
+      // simplen Zufallswert, falls crypto.randomUUID fehlt (alte WebViews).
+      var sid;
+      try {
+        sid = (window.crypto && window.crypto.randomUUID)
+          ? window.crypto.randomUUID()
+          : ('sid-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+      } catch (e) {
+        sid = 'sid-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      }
+
+      // RAT-35: Panel-Iframe-src client-seitig setzen — die ingest_url trägt die
+      // sid, damit app.js tile_selected an /shell/<pid>/events?sid=<sid> postet.
+      // encodeURIComponent, weil ingest_url selbst ein Query-Param-Wert ist
+      // (das innere ?sid= darf den äußeren Query-Parser nicht verwirren).
+      if (rail) {
+        var ingestUrl = '/shell/{{ panel_id }}/events?sid=' + encodeURIComponent(sid);
+        rail.src = '/controller/app-panel/{{ panel_id }}/?ingest_url='
+                   + encodeURIComponent(ingestUrl);
+      }
+
       if (!pane || typeof EventSource === 'undefined') return;
       var current;   // zuletzt gesetzte Inhalts-URL oder null (Ruhe-Zustand)
-      var src = new EventSource('/shell/{{ panel_id }}/events', { withCredentials: true });
-      var rail = document.querySelector('.rail iframe');
+      var src = new EventSource('/shell/{{ panel_id }}/events?sid=' + encodeURIComponent(sid),
+                               { withCredentials: true });
       src.onmessage = function (ev) {
         var st;
         try { st = JSON.parse(ev.data); } catch (e) { return; }

@@ -1376,11 +1376,23 @@ def hard_reset_purge():
 # Verdrahtung (queue.Queue, threading.Lock) — kein Broker, keine Topics
 # (E-DC-1 grenzt SSE vom verschobenen MQTT-Transport ab).
 
-# Prozess-weiter Shell-Zustand (Analog ROU-10, aber KEIN display_id-Dict):
-# der zuletzt getriggerte Zustand des einen Panes, oder None (Ruhe-Zustand).
-_shell_state = None
-_shell_subscribers = set()          # set[queue.Queue]
-_shell_subscribers_lock = threading.Lock()
+# RAT-35 (#1576/#1546): Shell-Zustand wird per ephemerer, geräte-anonymer `sid`
+# gekeyed (client crypto.randomUUID() pro Shell-Dokument) — NICHT per panel_id
+# (das bräuchte eine Registry und bräche RAT-31 „registry-frei"). So laufen Pi
+# und Tablet mit derselben panel_id unabhängig: jedes Shell-Dokument hat seine
+# eigene sid → eigene State-Session → eigener SSE-Fanout. Kein display_id-Lookup,
+# kein routing.json — die sid IST der Kanal-Key, rein Intra-Prozess (queue.Queue).
+#
+# Struktur: sid → {'state': <shell_state|None>, 'subscribers': set[queue.Queue]}.
+# Sessions entstehen lazy pro sid und werden GC'd, sobald ihr letzter Subscriber
+# geht (kein Registry-Leak: anonyme sids akkumulieren sonst prozess-weit).
+_shell_sessions: dict[str, dict] = {}
+_shell_sessions_lock = threading.Lock()
+
+# Fallback-sid für gecachte alte Shell-Dokumente OHNE ?sid= (vor #1546). Weicher,
+# additiver Fallback: alle sid-losen Requests teilen sich diese eine Session —
+# funktionsfähig, aber ohne Geräte-Isolation. KEIN Registry-Key (RAT-31).
+_SHELL_LEGACY_SID = "legacy"
 
 # Heartbeat: hält die Verbindung über nginx offen und lässt den Generator
 # abgebrochene Clients erkennen (sonst bliebe die Queue für immer blockiert).
@@ -1394,22 +1406,42 @@ def _shell_now_iso():
             .replace(microsecond=0).isoformat().replace("+00:00", "Z"))
 
 
-def _shell_subscribe():
+def _shell_session_for(sid):
+    """Holt (oder legt lazy an) die State-Session einer sid. Muss unter
+    _shell_sessions_lock aufgerufen werden."""
+    sess = _shell_sessions.get(sid)
+    if sess is None:
+        sess = {"state": None, "subscribers": set()}
+        _shell_sessions[sid] = sess
+    return sess
+
+
+def _shell_subscribe(sid):
+    """Registriert eine neue Queue für die sid-Session (lazy angelegt)."""
     q = queue.Queue()
-    with _shell_subscribers_lock:
-        _shell_subscribers.add(q)
+    with _shell_sessions_lock:
+        _shell_session_for(sid)["subscribers"].add(q)
     return q
 
 
-def _shell_unsubscribe(q):
-    with _shell_subscribers_lock:
-        _shell_subscribers.discard(q)
+def _shell_unsubscribe(sid, q):
+    """Entfernt die Queue aus der sid-Session; GC der Session, sobald ihr
+    letzter Subscriber geht (sonst leaken anonyme sids prozess-weit)."""
+    with _shell_sessions_lock:
+        sess = _shell_sessions.get(sid)
+        if sess is None:
+            return
+        sess["subscribers"].discard(q)
+        if not sess["subscribers"]:
+            del _shell_sessions[sid]
 
 
-def _shell_publish(shell_state):
-    """Legt den neuen Zustand in jede offene Stream-Queue (Analog ROU-22 publish)."""
-    with _shell_subscribers_lock:
-        subs = list(_shell_subscribers)
+def _shell_publish(sid, shell_state):
+    """Legt den neuen Zustand NUR in die Queues DIESER sid (kein Cross-Device-
+    Broadcast — das ist der RAT-35-Kern: Pi und Tablet bleiben getrennt)."""
+    with _shell_sessions_lock:
+        sess = _shell_sessions.get(sid)
+        subs = list(sess["subscribers"]) if sess is not None else []
     for q in subs:
         q.put(shell_state)
 
@@ -1419,25 +1451,28 @@ def _shell_sse_pack(shell_state):
     return "data: " + json.dumps(shell_state, ensure_ascii=False) + "\n\n"
 
 
-def _shell_event_stream():
-    """Generator für den Shell-SSE-Stream (Analog ROU-22 display_event_stream):
-    liefert den aktuellen Zustand beim Verbinden (falls gesetzt), danach jede
-    Änderung. Heartbeats sind data-Events `{"type":"heartbeat"}` statt SSE-
-    Comments, damit Mobile-Browser-EventSource sie als Lebenszeichen sieht
-    (R6 Track-E 2026-06-18). Der Empfänger im Template ignoriert heartbeat-Typ.
+def _shell_event_stream(sid):
+    """Generator für den Shell-SSE-Stream EINER sid (Analog ROU-22
+    display_event_stream): liefert den aktuellen Zustand dieser sid beim
+    Verbinden (falls gesetzt), danach jede Änderung. Heartbeats sind data-Events
+    `{"type":"heartbeat"}` statt SSE-Comments, damit Mobile-Browser-EventSource
+    sie als Lebenszeichen sieht (R6 Track-E 2026-06-18). Der Empfänger im Template
+    ignoriert heartbeat-Typ.
 
     Race-Schluss (#1542 last-state-on-subscribe): Snapshot NACH _shell_subscribe(),
     damit ein POST, der vor dem Connect ins Leere broadcastet hat, beim Connect
     nachgeliefert wird. Snapshot vor der while-Schleife, nicht beim Generator-
     Aufbau — sonst liest man den Zustand vor der Queue-Registrierung (neue Race)."""
-    q = _shell_subscribe()
+    q = _shell_subscribe(sid)
     try:
         # Snapshot NACH Subscribe lesen (load-bearing Reihenfolge):
-        # Ein POST vor dem Connect setzt _shell_state, findet aber keine Queue
+        # Ein POST vor dem Connect setzt den sid-State, findet aber keine Queue
         # (empty set → Broadcast verpufft). Hier lesen wir den bereits gesetzten
         # Zustand nach → Pane lädt beim ersten Tap. Ist der Zustand None (Ruhe),
         # senden wir kein Geister-Event; die Heartbeat-Schleife hält die Leitung.
-        _snapshot = _shell_state
+        with _shell_sessions_lock:
+            sess = _shell_sessions.get(sid)
+            _snapshot = sess["state"] if sess is not None else None
         if _snapshot is not None:
             yield _shell_sse_pack(_snapshot)
         while True:
@@ -1448,7 +1483,7 @@ def _shell_event_stream():
                 continue
             yield _shell_sse_pack(s)
     finally:
-        _shell_unsubscribe(q)
+        _shell_unsubscribe(sid, q)
 
 
 def _adapt_shell_event(event):
@@ -1489,40 +1524,48 @@ def _adapt_shell_event(event):
     return None, 'unbekannter type "%s"' % t
 
 
-def _apply_shell_trigger(descriptor):
-    """SHELL-4: setzt den Shell-Zustand aus dem Descriptor und publiziert ihn
-    an den SSE-Stream. payload.url per Konvention (render.build_panel_url,
-    byte-gleich zum Router). KEIN routing.json/display_id-Lookup — ein Gerät =
-    ein Ziel (Analog router apply_panel_trigger, ohne den panels-Hop)."""
-    global _shell_state
+def _apply_shell_trigger(sid, descriptor):
+    """SHELL-4/RAT-35: setzt den Shell-Zustand DIESER sid aus dem Descriptor und
+    publiziert ihn an deren SSE-Stream. payload.url per Konvention
+    (render.build_panel_url, byte-gleich zum Router). KEIN routing.json/display_id-
+    Lookup — die sid ist der Kanal (Analog router apply_panel_trigger, ohne den
+    panels-Hop)."""
     url = render.build_panel_url(
         descriptor["app"], descriptor["view"], descriptor.get("query"))
-    _shell_state = {
+    shell_state = {
         "descriptor": descriptor,
         "payload": {"url": url},
         "since": _shell_now_iso(),
     }
-    _shell_publish(_shell_state)
+    with _shell_sessions_lock:
+        _shell_session_for(sid)["state"] = shell_state
+    _shell_publish(sid, shell_state)
 
 
-def _apply_shell_end():
-    """SHELL-4: Ruhe-Zustand (panel_cleared) — Zustand auf None, publizieren."""
-    global _shell_state
-    _shell_state = None
-    _shell_publish(None)
+def _apply_shell_end(sid):
+    """SHELL-4/RAT-35: Ruhe-Zustand (panel_cleared) für DIESE sid — Zustand auf
+    None, publizieren."""
+    with _shell_sessions_lock:
+        _shell_session_for(sid)["state"] = None
+    _shell_publish(sid, None)
 
 
 @app.route("/shell/<panel_id>/events", methods=["GET"])
 @require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Mia-LAN) — hard enforced, wie /shell/<panel_id>.
 def shell_events(panel_id):
-    """SHELL-4 (RAT-31 E2): SSE-Zustands-Stream des Ein-Gerät-Panes.
+    """SHELL-4 (RAT-31 E2 / RAT-35): SSE-Zustands-Stream des Shell-Panes, gekeyed
+    per ephemerer `sid` (Query-Param `?sid=`, client crypto.randomUUID()).
 
-    Analog ROU-22, aber OHNE routing.json/display_id-Match — ein Gerät = ein
-    Ziel (RAT-31). `panel_id` ist load-bearing für Auth/URL-Symmetrie zu
-    /shell/<panel_id>, wird aber NICHT als State-Key benutzt (ein prozess-weiter
-    Zustand). same-origin unter der seiten-Origin (kein router-Hop).
+    Analog ROU-22, aber OHNE routing.json/display_id-Match — die sid ist der
+    Kanal (RAT-35): Pi und Tablet mit derselben `panel_id` bekommen dank
+    unterschiedlicher sids getrennte Streams. `panel_id` bleibt load-bearing für
+    Auth/URL-Symmetrie zu /shell/<panel_id>, ist aber NICHT der State-Key.
+    Fehlt `sid` (gecachtes altes Shell-Dokument vor #1546), greift der weiche
+    Fallback auf die "legacy"-sid — funktionsfähig, ohne Geräte-Isolation.
+    same-origin unter der seiten-Origin (kein router-Hop).
     """
-    resp = app.response_class(_shell_event_stream(),
+    sid = request.args.get("sid") or _SHELL_LEGACY_SID
+    resp = app.response_class(_shell_event_stream(sid),
                               mimetype="text/event-stream")
     resp.headers["Cache-Control"] = "no-cache"
     resp.headers["X-Accel-Buffering"] = "no"  # T1542: nginx-Pufferung abschalten (Gürtel)
@@ -1532,15 +1575,17 @@ def shell_events(panel_id):
 @app.route("/shell/<panel_id>/events", methods=["POST"])
 @require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt — hard enforced (Ingest same-origin).
 def shell_ingest(panel_id):
-    """SHELL-4 (RAT-31 E2): tile_selected-Ingest same-origin, publiziert an den
-    Shell-SSE-Stream — OHNE router-Hop (Analog router POST /api/v1/events, aber
-    ohne routing.json). Die linke Panel-Nav postet an die ORIGIN der Seite
-    (app.js:985, #128) → die Nav braucht KEINE Änderung, nur diesen Ingest
-    unter der seiten-Origin.
+    """SHELL-4 (RAT-31 E2 / RAT-35): tile_selected-Ingest same-origin, publiziert
+    an den Shell-SSE-Stream DIESER sid — OHNE router-Hop (Analog router POST
+    /api/v1/events, aber ohne routing.json). Die linke Panel-Nav postet an die
+    ingest_url, die das Shell-Template ihr mitgibt (inkl. `?sid=`) → die Nav
+    braucht KEINE Änderung, sie folgt nur der URL.
 
-    Ein Gerät = ein Ziel: kein source_id/display_id-Match — jedes valide
-    tile_selected trifft den einen Shell-Zustand.
+    RAT-35: kein source_id/display_id-Match — die `sid` (Query-Param, gleicher
+    weicher "legacy"-Fallback wie GET) bestimmt, welche Shell-Session getroffen
+    wird; jedes valide tile_selected trifft genau ihren Zustand.
     """
+    sid = request.args.get("sid") or _SHELL_LEGACY_SID
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({"error": "JSON-Body fehlt oder ungültig"}), 400
@@ -1551,9 +1596,9 @@ def shell_ingest(panel_id):
         return jsonify({"error": err}), 400
     kind, descriptor = adapted
     if kind == "end":
-        _apply_shell_end()
+        _apply_shell_end(sid)
         return "", 204
-    _apply_shell_trigger(descriptor)
+    _apply_shell_trigger(sid, descriptor)
     return "", 204
 
 
