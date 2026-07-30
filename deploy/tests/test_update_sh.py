@@ -20,7 +20,7 @@ UPDATE_SH = os.path.join(REPO_ROOT, "deploy", "update.sh")
 
 # Alle systemd-Services aus deploy/systemd/README.md (SSoT der Mapping-Tabelle).
 ALL_SERVICES = {
-    "xbuddy-router", "xbuddy-plan", "xbuddy-wetter", "xbuddy-routine",
+    "xbuddy-plan", "xbuddy-wetter", "xbuddy-routine",
     "xbuddy-photo", "xbuddy-familie", "xbuddy-geraete", "xbuddy-seiten",
     "xbuddy-panel", "xbuddy-essen", "xbuddy-eltern-chat", "xbuddy-hoerspiel",
     "xbuddy-hoerspiel-finn", "xbuddy-kibuddy",
@@ -45,10 +45,6 @@ def _derive(*paths):
 
 
 # ── --derive: geteilter Mapper ─────────────────────────────────────────────
-
-def test_derive_single_service():
-    assert _derive("router/main.py") == {"xbuddy-router"}
-
 
 def test_derive_hoerspiel_beide_instanzen():
     # RAT-17: hoerspiel/-Repo-Touch trifft Mia UND Finn.
@@ -132,16 +128,10 @@ def test_port_class_service_mit_port():
     assert res.stdout.strip() == "PORT:5052"
 
 
-def test_port_class_router_port():
-    res = _port_class("xbuddy-router")
-    assert res.returncode == 0, res.stderr
-    assert res.stdout.strip() == "PORT:5000"
-
-
 def test_port_class_alle_ports_stimmen_mit_ports_md():
     """Jeder Service mit HTTP-Port kommt exakt mit dem PORT-2-Wert zurück."""
     erwartet = {
-        "xbuddy-router": 5000, "xbuddy-familie": 5010, "xbuddy-plan": 5020,
+        "xbuddy-familie": 5010, "xbuddy-plan": 5020,
         "xbuddy-wetter": 5030, "xbuddy-geraete": 5040, "xbuddy-panel": 5041,
         "xbuddy-seiten": 5042, "xbuddy-routine": 5050, "xbuddy-photo": 5051,
         "xbuddy-essen": 5052, "xbuddy-hoerspiel": 5053, "xbuddy-kibuddy": 5054,

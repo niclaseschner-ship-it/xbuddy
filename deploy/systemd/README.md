@@ -16,7 +16,6 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 
 | Service-Name (SVC-1) | Vorlage im Repo (SVC-2) | Petrantwortung | Bindet auf |
 |---|---|---|---|
-| `xbuddy-router.service` | `router/router.service` | Router (Display, Controller, generisches API) | `127.0.0.1:5000` |
 | `xbuddy-plan.service` | `plan/plan.service` | Plan-Buddy (`/display/plan/`, `/api/v1/plan/`) | `127.0.0.1:5020` |
 | `xbuddy-wetter.service` | `wetter/wetter.service` | Wetter-Buddy (`/display/wetter/`) | `127.0.0.1:5030` |
 | `xbuddy-routine.service` | `routine/routine.service` | Routine-Buddy (`/display/routine/`) | `127.0.0.1:5050` |
@@ -141,7 +140,6 @@ bleibt klar.
 
    ```bash
    declare -A SVC_SRC=(
-     [xbuddy-router]=router/router.service
      [xbuddy-plan]=plan/plan.service
      [xbuddy-wetter]=wetter/wetter.service
      [xbuddy-routine]=routine/routine.service
@@ -176,7 +174,6 @@ bleibt klar.
 
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl enable --now xbuddy-router.service
    sudo systemctl enable --now xbuddy-plan.service
    sudo systemctl enable --now xbuddy-wetter.service
    sudo systemctl enable --now xbuddy-routine.service
@@ -192,7 +189,7 @@ bleibt klar.
 5. **Status prüfen** — alle Services müssen `active (running)` melden:
 
    ```bash
-   systemctl status xbuddy-router xbuddy-plan xbuddy-wetter xbuddy-routine xbuddy-photo xbuddy-familie xbuddy-geraete xbuddy-seiten xbuddy-panel xbuddy-essen xbuddy-eltern-chat
+   systemctl status xbuddy-plan xbuddy-wetter xbuddy-routine xbuddy-photo xbuddy-familie xbuddy-geraete xbuddy-seiten xbuddy-panel xbuddy-essen xbuddy-eltern-chat
    ```
 
 ## Restart nach Code-Update (Pflicht)
@@ -206,7 +203,6 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 
 | Geänderter Repo-Pfad | Restart |
 |---|---|
-| `router/` | `sudo systemctl restart xbuddy-router` |
 | `plan/` | `sudo systemctl restart xbuddy-plan` |
 | `wetter/` | `sudo systemctl restart xbuddy-wetter` |
 | `routine/` | `sudo systemctl restart xbuddy-routine` |
@@ -229,8 +225,7 @@ Eine frühere Idee, anhand des Pfad-Segments (`hoerspiel/config/mia.json`) zwisc
 
 Reihenfolge bei einem Sammel-Pull, der mehrere Komponenten anfasst:
 zuerst die unabhängigen Backends (`xbuddy-familie`, `xbuddy-plan`,
-`xbuddy-eltern-chat`), dann der Router (er fasst die anderen
-über die nginx-Origin zusammen), zuletzt `nginx reload`, falls die Conf mit
+`xbuddy-eltern-chat`), zuletzt `nginx reload`, falls die Conf mit
 angefasst wurde.
 
 Verifikation: `systemctl status <service>` — die `Active: active (running)
