@@ -21,7 +21,7 @@ UPDATE_SH = os.path.join(REPO_ROOT, "deploy", "update.sh")
 # Alle systemd-Services aus deploy/systemd/README.md (SSoT der Mapping-Tabelle).
 ALL_SERVICES = {
     "xbuddy-plan", "xbuddy-wetter", "xbuddy-routine",
-    "xbuddy-photo", "xbuddy-familie", "xbuddy-geraete", "xbuddy-seiten",
+    "xbuddy-photo", "xbuddy-familie", "xbuddy-seiten",
     "xbuddy-panel", "xbuddy-essen", "xbuddy-eltern-chat", "xbuddy-hoerspiel",
     "xbuddy-hoerspiel-neko", "xbuddy-kibuddy",
 }
@@ -132,7 +132,7 @@ def test_port_class_alle_ports_stimmen_mit_ports_md():
     """Jeder Service mit HTTP-Port kommt exakt mit dem PORT-2-Wert zurück."""
     erwartet = {
         "xbuddy-familie": 5010, "xbuddy-plan": 5020,
-        "xbuddy-wetter": 5030, "xbuddy-geraete": 5040, "xbuddy-panel": 5041,
+        "xbuddy-wetter": 5030, "xbuddy-panel": 5041,
         "xbuddy-seiten": 5042, "xbuddy-routine": 5050, "xbuddy-photo": 5051,
         "xbuddy-essen": 5052, "xbuddy-hoerspiel": 5053, "xbuddy-kibuddy": 5054,
         "xbuddy-hoerspiel-neko": 5055,
