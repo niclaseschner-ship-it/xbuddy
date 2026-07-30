@@ -239,10 +239,11 @@ Vorrat. Vertagt bis reale Familie-2-Hardware (berater-Paket
 
 TTS und STT sind **Teil dieser Spec**. Provider wird Config-Sache analog Chat
 (LLMP-5-Slot). Der Buchhalter (`write_call`) bleibt SSoT auch für Audio-Calls
-— LiteLLM-native-Callbacks / `completion_cost()` für Audio werden **nicht**
-genutzt (Zahl-Stabilität bei Rollback, RAT-26 §5). Akzeptierter Gap:
-Dauer-/Kosten-Präzision für Audio-Calls ist weniger streng als für Chat
-(Nic: „Telemetrie sauber nicht so wichtig", RAT-28).
+— die Kosten-QUELLE ist seit dem RAT-26-§5-Amendment (2026-07-30) auch für
+Audio LiteLLM-nativ: `tts-1-hd` trägt `input_cost_per_character`, whisper
+(`azure/whisper-1`) Kosten pro Sekunde (Live-Probe litellm 1.93.0). Der frühere
+„für Audio nicht genutzt"-Ausschluss und der akzeptierte Präzisions-Gap
+entfallen damit (RAT-28 §4 mit-amendiert).
 
 **TTS** (`litellm.speech(text, voice=..., model=...)`): Provider per Slot
 (Azure als Default; ElevenLabs/Groq/OpenAI testbar). Kein Provider-Code mehr
@@ -313,9 +314,16 @@ Fassade — kein neuer API-Vertrag.
 ändert sich durch den Motor-Wechsel (Fassade unverändert). Rückweg: Slot-Segment
 im ZD-Slot-Namen zurück auf Hand-Vendor-Segment, ohne Code-Change.
 
-**Telemetrie bleibt Hand:** `telemetry.write_call` → `provider_calls.jsonl`
-(LLMP-S4/SVC-5) bleibt SSoT — LiteLLM-native-Callbacks / `completion_cost()`
-werden **nicht** genutzt (Zahl-Stabilität bei Rollback, RAT-26 §5).
+**Telemetrie-Schreib-SSoT bleibt Hand, Preis-QUELLE ist LiteLLM-nativ**
+(LLMP-S12, RAT-26 §5 **amendiert 2026-07-30**): `telemetry.write_call` →
+`provider_calls.jsonl` (LLMP-S4/SVC-5) bleibt **Schreib-SSoT**. Die
+Kosten-Quelle wechselt von der Hand-`pricing.py`-Tabelle auf LiteLLMs
+`response_cost` (USD→EUR an der `_emit_*`-Naht); genuine Katalog-Lücken werden
+beim Adapter-Init per `litellm.register_model()` in dieselbe Engine geseedet
+(kein paralleles pricing.py). Zahl-Stabilität bei Rollback + Preis-Drift-Schutz
+(der ursprüngliche RAT-26-§5-Grund) sind jetzt durch einen **gepinnten litellm**
+(RAT-33 pyproject-SSoT) adressiert — neue Preise nur mit bewusstem litellm-Bump.
+Bau via #1620 (Kinder #1634/#1635/#1636).
 
 **LLMP-4-Spannung:** `_vendor/litellm.py` frontet mehrere Anbieter mit
 divergenten Capabilities — die Aufhängung der `CAPABILITIES`-frozenset an einen
