@@ -7,10 +7,11 @@ RAT-31 E3 Umbau #1496). Diese Datei ist die echte Komponente um
 Konsumenten (der Eltern-Chat-Skill `seiten_finden`, SREG-5) reden über HTTP
 (DCOMP-1), nicht über `import seiten`.
 
-Endpunkt:
+Endpunkte:
   GET /api/v1/seiten   — das aggregierte Inventar (SREG-3), IMMER aus
                           `inventar.json`, KEIN Upstream-Call im Request-Pfad,
                           Laufzeit < 50 ms.
+  GET /healthz         — Health-Check (SVC-1)
 
 Service-Topologie (Lego-Prinzip): die Registry läuft als schlanker
 eigenständiger Flask-Prozess auf Loopback-Port 5042 (PORT-2). nginx-Origin
@@ -2319,6 +2320,16 @@ def icons_suche():
 # Familienspezifische Daten gibt es hier keine — das Inventar wird aggregiert,
 # nicht handgepflegt; `inventar.json` ist abgeleiteter Cache, kein Per-Instanz-
 # Stammdatum.
+
+
+# ── Health-Check (SVC-1) ─────────────────────────────────────────────────
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """SVC-1: Health-Endpoint — liefert immer 200 + OK."""
+    return jsonify({"ok": True}), 200
+
+
 RUNTIME_SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5042,

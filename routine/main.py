@@ -12,6 +12,7 @@ Endpunkte:
                                           item_id im Request-Body (JSON oder Form)
 
   PUT  /api/v1/routine/config           — Zeiten setzen (ROUTINE-14, #343)
+  GET  /healthz                         — Health-Check (SVC-1)
 
 Reload-on-Read (ROUTINE-14, DCOMP-3): ab #343 liest der Buddy seine
 Daten-Konfig je Request frisch aus routine.json; Last-Known-Good-Snapshot
@@ -650,6 +651,16 @@ logger = logging.getLogger(__name__)
 
 # Runtime-Konfig-Schema (CONFIG-1): nur Service-Start-Werte.
 # Port 5050 (ROUTINE-15, OPEN-ROUTINE-H — erster freier Buddy-Block-Port).
+
+
+# ── Health-Check (SVC-1) ─────────────────────────────────────────────────
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """SVC-1: Health-Endpoint — liefert immer 200 + OK."""
+    return jsonify({"ok": True}), 200
+
+
 RUNTIME_SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5050,
