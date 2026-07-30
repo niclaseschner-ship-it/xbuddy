@@ -139,19 +139,34 @@ def test_shell4_pane_ohne_statischen_src(client):
 
 
 def test_shell4_panel_iframe_traegt_ingest_url_param(client):
-    """SHELL-4 / E2-Sender (T1519 AC1): Der linke Panel-Nav-Iframe bekommt den
-    Query-Param ingest_url=/shell/<panel_id>/events im src mitgegeben, damit
-    app.js im Shell-Kontext an den seiten-Ingest postet statt an den Router."""
+    """SHELL-4 / E2-Sender (T1519 AC1) + RAT-35 (#1546): Der linke Panel-Nav-Iframe
+    bekommt die ingest_url mit — jetzt CLIENT-SEITIG gesetzt (nicht mehr im
+    server-gerenderten src-Attribut), weil sie die ephemere `?sid=` dieses
+    Dokuments tragen muss. Der server-gerenderte src ist bewusst LEER; das JS baut
+    ihn aus '/controller/app-panel/<panel_id>/?ingest_url=' + encodeURIComponent(
+    '/shell/<panel_id>/events?sid=' + sid). app.js liest ingest_url beim Bootstrap
+    und postet tile_selected an /shell/<panel_id>/events?sid=<sid> statt an den Router.
+    """
     body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
-    expected_ingest = "ingest_url=/shell/" + PANEL_ID + "/events"
-    assert expected_ingest in body, (
-        "Panel-Iframe-src muss ingest_url=/shell/<panel_id>/events als Query-Param enthalten "
-        "(SHELL-4 / E2-Sender, T1519 AC1) — app.js liest diesen Param beim Bootstrap"
+
+    # Der Rail-Iframe hat KEINEN server-gerenderten src mehr (sonst trüge er keine sid):
+    assert 'id="panel-rail"' in body, "Panel-Rail-Iframe (id=panel-rail) fehlt"
+
+    # Das JS baut die ingest_url mit der sid — die Bausteine müssen im Dokument stehen:
+    assert "'/controller/app-panel/" + PANEL_ID + "/?ingest_url='" in body, (
+        "Das Shell-JS muss den Panel-Iframe-src client-seitig aus "
+        "'/controller/app-panel/<panel_id>/?ingest_url=' bauen (RAT-35 #1546)"
     )
-    # Der Param muss im Panel-Iframe-src stehen (nicht irgendwo im Dokument):
-    panel_iframe_src = "/controller/app-panel/" + PANEL_ID + "/?ingest_url=/shell/" + PANEL_ID + "/events"
-    assert panel_iframe_src in body, (
-        "Panel-Iframe-src muss exakt /controller/app-panel/<panel_id>/?ingest_url=... lauten"
+    assert "'/shell/" + PANEL_ID + "/events?sid=' + encodeURIComponent(sid)" in body, (
+        "Das Shell-JS muss die ingest_url als /shell/<panel_id>/events?sid=<sid> bauen "
+        "(SHELL-4 / E2-Sender + RAT-35 #1546)"
+    )
+    assert "rail.src =" in body, (
+        "Das Shell-JS muss den Panel-Iframe-src client-seitig setzen (rail.src = ...)"
+    )
+    # Und die sid selbst wird pro Dokument einmal erzeugt:
+    assert "crypto.randomUUID" in body, (
+        "Das Shell-JS muss eine ephemere sid via crypto.randomUUID() erzeugen (RAT-35 #1546)"
     )
 
 
