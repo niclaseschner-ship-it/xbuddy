@@ -5,7 +5,7 @@
 #   pull --ff-only origin main
 #     → Diff (git diff --name-only <alt> <neu>)
 #     → betroffene Services ableiten: geteilter Mapper
-#       methode/hooks/restart_pending_log.py:services_for_paths PLUS
+#       ~/.claude/hooks/restart_pending_log.py:services_for_paths PLUS
 #       Shared-Pfad-Fan-out (eine Änderung unter tools/ oder conventions/
 #       trifft ALLE Services — geteilter Code / geteilte Konvention, SVC-6)
 #     → deploy/version schreiben (die Datei, die /version jedes Service liest)

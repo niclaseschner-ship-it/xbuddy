@@ -101,7 +101,7 @@ Jeder HTTP-Service exponiert zwei unauthentifizierte Diagnose-Endpunkte:
 
 Der Deploy-Regelkreis (`deploy/update.sh`, Stufe 1) leitet aus dem gemergten Diff
 die betroffenen Services ab — **geteilter Mapper** mit
-`methode/hooks/restart_pending_log.py:services_for_paths`, inklusive
+`~/.claude/hooks/restart_pending_log.py:services_for_paths` (Harness-Deploy aus lotse), inklusive
 **Shared-Pfad-Fan-out**: eine Änderung unter `tools/`, `tools/llm/` oder
 `conventions/` trifft **alle** HTTP-Services —, startet sie neu und verifiziert
 `is-active` **und** Service-Start-TS > Merge-TS **und** `/healthz`==200
