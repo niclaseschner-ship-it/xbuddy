@@ -1525,6 +1525,7 @@ def shell_events(panel_id):
     resp = app.response_class(_shell_event_stream(),
                               mimetype="text/event-stream")
     resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"  # T1542: nginx-Pufferung abschalten (Gürtel)
     return resp
 
 
