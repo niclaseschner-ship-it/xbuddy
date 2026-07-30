@@ -474,18 +474,26 @@ register_version(app)
 @app.route("/display/hoerspiel/<kind_id>/", methods=["GET"])
 @app.route("/display/hoerspiel/<kind_id>", methods=["GET"])
 def display_index_redirect(kind_id: str):
-    """Convenience-Redirect: /display/hoerspiel/<kind_id>/ → /alben.
+    """#1612: /display/hoerspiel/<kind_id>[/] rendert die Alben-View DIREKT (200).
 
-    Browser-Cache-freundlich: 302 (Found) statt 301 (Moved Permanently),
-    damit ein versehentlich abgekürzter URL nicht dauerhaft im Browser-
-    Cache landet (Memory feedback_lief_gestern_geht_heute_nicht_reflex —
-    Cache-Trap auf URL-Ebene).
+    Früher 302-Redirect auf /alben. Der Redirect war die EINZIGE strukturelle
+    Differenz zu funktionierenden Buddy-Tiles (plan/wetter liefern direkt 200):
+    die Heim-Shell lädt diese URL als buddy-pane iframe.src, und über den
+    externen Funnel/HTTP-2 verpuffte der 302 im iframe (ERR_CONNECTION_CLOSED —
+    „keine Hörbücher auf dem Tablet"; Pi via Hairpin unauffällig). alben.html ist
+    eine Single-Page-Splitscreen-View, die ihre Daten über absolute /api/v1/-Pfade
+    holt — die Basis-URL ist egal, direktes Rendern bricht nichts. /alben bleibt
+    als eigene Route erhalten (Direktzugriff/Lesezeichen).
     """
     err = _assert_self_kind(kind_id)
     if err is not None:
         return err
-    from flask import redirect
-    return redirect("/display/hoerspiel/%s/alben" % kind_id, code=302)
+    pille = _pille_vars(kind_id)
+    return render_template(
+        "alben.html",
+        aktives_kind=pille["aktives_kind"],
+        naechstes_kind=pille["naechstes_kind"],
+    )
 
 
 @app.route("/display/hoerspiel/<kind_id>/alben", methods=["GET"])
