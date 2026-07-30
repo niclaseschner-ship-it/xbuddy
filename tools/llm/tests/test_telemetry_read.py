@@ -529,3 +529,57 @@ def test_monthly_rollup_warnings_present_in_output():
     result = telemetry_read.monthly_rollup([], today=date(2026, 7, 1))
     assert "warnings" in result
     assert "rows" in result
+
+
+# ---------------------------------------------------------------------------
+# monthly_rollup — cost_complete (ENTSCHEID-1268:17)
+# ---------------------------------------------------------------------------
+
+
+def test_monthly_rollup_cost_complete_mixed_group_false():
+    """Gemischte Gruppe (ein €-Call + ein None-Call, gleicher group-key):
+    est_cost_eur = Teilsumme, cost_complete == False (Antiberater-Fund 1)."""
+    events = [
+        _rollup_event(caller="hoerspiel", model_id="tts-1", ts="2026-06-10T00:00:00Z",
+                      est_cost_eur=0.05),
+        _rollup_event(caller="hoerspiel", model_id="tts-1", ts="2026-06-11T00:00:00Z",
+                      est_cost_eur=None),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 1
+    row = result["rows"][0]
+    # Teilsumme vorhanden (nur der €-Beitrag).
+    assert abs(row["est_cost_eur"] - 0.05) < 1e-9
+    # Unvollständig → False.
+    assert row["cost_complete"] is False
+
+
+def test_monthly_rollup_cost_complete_pure_eur_group_true():
+    """Reine €-Gruppe (alle Beiträge haben einen Wert) → cost_complete == True."""
+    events = [
+        _rollup_event(caller="kibuddy", model_id="claude-haiku-4-5",
+                      ts="2026-06-10T00:00:00Z", est_cost_eur=0.01),
+        _rollup_event(caller="kibuddy", model_id="claude-haiku-4-5",
+                      ts="2026-06-15T00:00:00Z", est_cost_eur=0.02),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 1
+    row = result["rows"][0]
+    assert abs(row["est_cost_eur"] - 0.03) < 1e-9
+    assert row["cost_complete"] is True
+
+
+def test_monthly_rollup_cost_complete_pure_none_group_true():
+    """Reine None-Gruppe (alle Beiträge None) → est_cost_eur is None UND
+    cost_complete == True (nix zu halbieren, OPEN-LLMP-A)."""
+    events = [
+        _rollup_event(caller="kibuddy", model_id="unbekannt-v99",
+                      ts="2026-06-10T00:00:00Z", est_cost_eur=None),
+        _rollup_event(caller="kibuddy", model_id="unbekannt-v99",
+                      ts="2026-06-15T00:00:00Z", est_cost_eur=None),
+    ]
+    result = telemetry_read.monthly_rollup(events, today=date(2026, 7, 1))
+    assert len(result["rows"]) == 1
+    row = result["rows"][0]
+    assert row["est_cost_eur"] is None
+    assert row["cost_complete"] is True
