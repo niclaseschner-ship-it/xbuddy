@@ -15,6 +15,7 @@ Endpunkte:
   GET  /api/v1/familie/foto/<id>             — Profilfoto, 200/404 (FAM-8)
   POST /api/v1/familie/personen              — Person anlegen (FAM-12)
   POST /api/v1/familie/personen/<id>/foto    — Profilfoto setzen (FAM-13)
+  GET  /healthz                              — Health-Check (SVC-1)
 """
 
 import argparse
@@ -293,6 +294,16 @@ DEFAULTS = {
 # Familienspezifische Werte (Foto-Verzeichnis, Profilbild-Max-Kante) liegen
 # weiter in `familie.json` settings (FAM-9) — das ist eine andere Sache,
 # Registry-Datei statt Runtime-Knöpfe.
+
+
+# ── Health-Check (SVC-1) ─────────────────────────────────────────────────
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """SVC-1: Health-Endpoint — liefert immer 200 + OK."""
+    return jsonify({"ok": True}), 200
+
+
 RUNTIME_SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5010,

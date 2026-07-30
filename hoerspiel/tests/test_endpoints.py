@@ -10,6 +10,13 @@ import pathlib
 from unittest.mock import patch
 
 
+def test_healthz_gibt_200(client):
+    """SVC-1: GET /healthz liefert immer 200 + ok."""
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+
+
 def test_folgen_vorschlag_happy_path(client, fake_llm, data_root):
     """ENTRY-PATH-PROBE: POST /folgen-vorschlag mit FakeLLM → 200 + spec-Form.
 

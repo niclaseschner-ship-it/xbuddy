@@ -452,6 +452,13 @@ def client(demo_config, make_transport):
     return wm.app.test_client()
 
 
+def test_healthz_gibt_200(client):
+    """SVC-1: GET /healthz liefert immer 200 + ok."""
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+
+
 def test_wetter2_beide_karten_eine_canvas(client):
     """WETTER-2: die View zeigt beide Karten — Wetter-Karte und Anziehen-Karte
     — auf einer Canvas (ein Diptychon)."""

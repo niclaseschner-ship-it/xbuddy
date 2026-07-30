@@ -231,6 +231,13 @@ def test_FAM_6_example_file_matches_format(tmp_path):
 #  FAM-7 — Personen-Daten über die Schnittstelle
 # ============================================================
 
+def test_healthz_gibt_200(client):
+    """SVC-1: GET /healthz liefert immer 200 + ok."""
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+
+
 def test_FAM_7_all_persons(client):
     """Schnittstelle: alle Personen, ohne Foto-Binär."""
     r = client.get("/api/v1/familie/personen")
