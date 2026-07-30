@@ -68,6 +68,13 @@ def test_AC3_store_reads_from_env_path(monkeypatch, tmp_path, demo_config):
 #  V2 AC5 — PUT /config: Deprecation-Hinweis (ROUTINE-25)
 # ============================================================
 
+def test_healthz_gibt_200(client):
+    """SVC-1: GET /healthz liefert immer 200 + ok."""
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+
+
 def test_v2_ac5_put_config_setzt_deprecation_header(client, tmp_path, demo_config):
     """V2 AC5: PUT /api/v1/routine/config bleibt funktionsfähig (200),
     setzt aber X-Deprecation-Header und deprecated:true im JSON-Body

@@ -57,6 +57,13 @@ def client(manifest_root, tmp_path):
     return c
 
 
+def test_healthz_gibt_200(client):
+    """SVC-1: GET /healthz liefert immer 200 + ok."""
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+
+
 def test_get_seiten_liefert_manifest_sorten(client):
     # AC-E1 / SREG-3: GET /api/v1/seiten serviert das Inventar.
     resp = client.get("/api/v1/seiten")
