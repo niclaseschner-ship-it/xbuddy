@@ -67,10 +67,10 @@ def zd_name_provider_api_key(adapter_name):
     `vendor_slug_for_adapter` auf den Brand-Vendor aufgelöst — die Spec ZD-2
     bindet den Slot-Namen an den Brand-Vendor.
 
-    Helper ist hier zentral (eine Wahrheitsquelle, CLAUDE.md §6). Konsumenten:
-    die Drift-Sperre (ECP-1) und `anbieter_wechseln`-Tests. Der Laufzeit-Read
-    läuft seit #1510 über den litellm-Slot (`litellm_slot_for_provider`), nicht
-    mehr über diesen Slot.
+    Helper ist hier zentral (eine Wahrheitsquelle, CLAUDE.md §6). Der Slot trägt
+    heute ausschließlich die Drift-Sperre (ECP-1); Laufzeit-Read läuft über den
+    litellm-Slot (`litellm_slot_for_provider`, seit #1510). Tests für
+    `anbieter_wechseln` nutzen diesen Helper zur Validierung.
     """
     vendor = vendor_slug_for_adapter(adapter_name)
     return "eltern-chat-%s-api-key" % vendor
