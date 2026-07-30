@@ -548,3 +548,41 @@ def test_t1543_ac2_reset_redirect_open_redirect_schutz(client):
     resp = client.get("/api/v1/seiten/reset?to=https://evil.example/x")
     body = resp.get_data(as_text=True)
     assert "evil.example" not in body, "Open-Redirect: externes Ziel darf nicht durchreichen"
+
+
+# ============================================================
+#  SHELL-12: Device-Fit-Scale (Refs #1595)
+# ============================================================
+
+def test_shell12_fit_wrapper_in_html(client):
+    """SHELL-12: HTML enthaelt den Fit-Wrapper (.shell-fit) als Eltern-Element von .shell.
+    Das JS-Script setzt --shell-scale = innerWidth/1920 als CSS-Custom-Property."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
+    assert 'class="shell-fit"' in body, (
+        "SHELL-12: Fit-Wrapper <div class=\"shell-fit\"> muss in heim-shell.html vorhanden sein"
+    )
+    # Scale-Script muss innerWidth/1920 berechnen
+    assert "innerWidth / 1920" in body or "innerWidth/1920" in body, (
+        "SHELL-12: Scale-Script muss window.innerWidth / 1920 als Berechnung enthalten"
+    )
+    # Custom-Property muss gesetzt werden
+    assert "--shell-scale" in body, (
+        "SHELL-12: Scale-Script muss --shell-scale als CSS-Custom-Property setzen"
+    )
+
+
+def test_shell12_css_transform_scale(client):
+    """SHELL-12: heim-shell.css definiert .shell-fit mit transform: scale(var(--shell-scale)
+    und transform-origin: top left."""
+    css_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "heim-shell.css",
+    )
+    with open(css_path, encoding="utf-8") as fh:
+        css = fh.read()
+    assert "transform: scale(var(--shell-scale" in css, (
+        "SHELL-12: heim-shell.css muss transform: scale(var(--shell-scale...)) in .shell-fit definieren"
+    )
+    assert "transform-origin: top left" in css, (
+        "SHELL-12: heim-shell.css muss transform-origin: top left in .shell-fit setzen"
+    )

@@ -1,6 +1,9 @@
 /* SHELL-3 / SHELL-8: Split-Layout Heim-Shell (Rail 280px, Ziel 1920x1200).
    Refs #1182. KEIN Overflow, keine Text-Clipping. Panel bleibt unpetraendert
-   (SHELL-3: berechnet Grid-Geometrie adaptiv aus eigener Iframe-Breite). */
+   (SHELL-3: berechnet Grid-Geometrie adaptiv aus eigener Iframe-Breite).
+   SHELL-12: Device-Fit-Scale (Refs #1595) — scale(var(--shell-scale)) im
+   Fit-Wrapper skaliert das 1920×1200-Design auf die tatsaechliche Geraetebreite.
+   Kiosk 1920px → scale=1.0 (unpetraendert); Tablet 1280px → scale≈0.667. */
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -11,6 +14,18 @@ html, body {
   height: 100%;
   overflow: hidden;          /* SHELL-8: kein Overflow auf 1920x1200 */
   background: #F5F1E8;
+}
+
+/* SHELL-12: Fit-Wrapper — haelt die fixe 1920×1200-Flaeche und skaliert per
+   CSS-Custom-Property --shell-scale (gesetzt via JS) auf die Geraetebreite.
+   transform-origin: top left sichert, dass die Skalierung von oben links aus
+   erfolgt (kein Zentrums-Offset). Bei scale=1.0 (1920px-Kiosk) kein visueller
+   Unterschied zu vorher. */
+.shell-fit {
+  width: 1920px;
+  height: 1200px;
+  transform: scale(var(--shell-scale, 1));
+  transform-origin: top left;
 }
 
 /* SHELL-3: zweispaltiges Layout, Rail links + Buddy-Pane rechts */
