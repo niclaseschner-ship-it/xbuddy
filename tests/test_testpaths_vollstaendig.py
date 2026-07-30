@@ -29,13 +29,10 @@ _PRUNE = {".git", "__pycache__", "node_modules", ".venv", ".claude", "venv"}
 
 # Dokumentierte Nicht-pytest-Suiten (Skript-Stil, eigener Runner) — bewusst
 # NICHT in testpaths. Begründung pro Eintrag.
-KEIN_PYTEST_SUITE = {
-    # Skript-Stil: Modul-Ebene führt die Checks aus und ruft sys.exit(1) bei
-    # Fehlschlag (Aufruf: `python3 test_membran_gate_pw82_pw83.py`). In
-    # testpaths würde pytest 0 Tests sammeln und der Modul-Code liefe beim
-    # Import — deshalb ausgenommen (T1310).
-    "methode/hooks/tests",
-}
+# Der frühere Eintrag `methode/hooks/tests` (Skript-Stil-Suite der Harness) ist
+# mit dem Lotse-Cutover (RAT-23 Stufe 2) ins public lotse-Repo gezogen und wird
+# dort von lotse' eigener CI getestet — hier kein Skript-Stil-Testverzeichnis mehr.
+KEIN_PYTEST_SUITE: set[str] = set()
 
 
 def _testpaths() -> set[str]:

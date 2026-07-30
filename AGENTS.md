@@ -15,7 +15,7 @@ auf die etablierten Quellen.
 2. `specs/constitution.md` — operative **Prinzipien**
 3. `specs/README.md` — das **Spec-Modell**
 4. `WORKFLOW.md` — der **Ticket-/PR-Workflow**
-5. `methode/README.md` — **wie wir arbeiten** (die Methode)
+5. Repo **`lotse`** (`~/repos/lotse`, `README.md`) — **wie wir arbeiten** (die Methode)
 
 Dann je nach Aufgabe gezielt unten weiterspringen.
 
@@ -23,7 +23,7 @@ Dann je nach Aufgabe gezielt unten weiterspringen.
 
 | Du willst… | Lies |
 |---|---|
-| die **Arbeits-Methode** (wie wir arbeiten: `/werft`, `/arbeitstag`, `/berater-runde`, Subagents, Contracts, Hooks) | `methode/` — Einstieg `methode/README.md` |
+| die **Arbeits-Methode** (wie wir arbeiten: `/werft`, `/arbeitstag`, `/berater-runde`, Subagents, Contracts, Hooks) | Repo **`lotse`** (`~/repos/lotse`) — Einstieg `README.md` |
 | die **Repo-Arbeitsregeln** (Code, Sprache, Git, Safety) | `CLAUDE.md` |
 | den **Ticket-/PR-Workflow** | `WORKFLOW.md` |
 | das Soll-**Verhalten** der Komponenten | `specs/` (Modell: `specs/README.md`) |
@@ -33,10 +33,11 @@ Dann je nach Aufgabe gezielt unten weiterspringen.
 
 ## Die Methode in einem Satz
 
-Die Methoden-Glue ist SSoT unter `methode/` versioniert und wird per
-`methode/deploy-methode.sh` nach `~/.claude/` gespiegelt, dem Laufzeit-Ort, den
-der Claude-Code-Harness liest (decisions/RAT-23). Bearbeitet wird im Repo (PR +
-Review + Action-Sicht), ausgeführt aus `~/.claude/`.
+Die Methoden-Glue lebt seit dem Lotse-Cutover (decisions/RAT-23, Stufe 2) im
+**eigenen Repo `lotse`** (`~/repos/lotse`) — nicht mehr unter `methode/` in
+diesem Repo. Sie wird per `lotse/deploy.sh` nach `~/.claude/` gespiegelt, dem
+Laufzeit-Ort, den der Claude-Code-Harness liest. Bearbeitet wird im lotse-Repo
+(PR + Review + CI-Sicht), ausgeführt aus `~/.claude/`.
 
 ## Mitarbeit
 

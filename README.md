@@ -15,8 +15,9 @@ dort.
 ## Aufbau
 
 - **[`AGENTS.md`](AGENTS.md)** — Einstiegs-Karte (Map aller Quellen)
-- **[`methode/`](methode/)** — die versionierte Arbeits-Methode (Commands,
-  Subagents, Contracts, Hooks); SSoT, `~/.claude` ist Deploy-Ziel
+- **Repo `lotse`** (`~/repos/lotse`) — die versionierte Arbeits-Methode (Commands,
+  Subagents, Contracts, Hooks); SSoT im eigenen Repo, `~/.claude` ist Deploy-Ziel
+  (Lotse-Cutover, RAT-23 Stufe 2)
 - **[`specs/`](specs/)** — lebende Specs, Quelle der Wahrheit fürs Verhalten
   - [`specs/constitution.md`](specs/constitution.md) — Prinzipien
   - [`specs/README.md`](specs/README.md) — Spec-Modell + die eine Sync-Regel
