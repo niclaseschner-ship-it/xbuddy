@@ -208,6 +208,26 @@ diese weiter (Doppelschreibung)
 (`__XBUDDY_DATA__/llm/provider_calls.jsonl` in der Repo-Form;
 `services.md` SVC-5). Rotation: siehe `OPEN-LLMP-E`.
 
+### LLMP-S14 — Monats-Roll-up + Preis-Staleness-Warnung (Telemetrie C, #1368)
+Eine wiederholbare Pro-Familie-Kosten-Auswertung über die bereits gebaute
+`tools/llm/telemetry_read.aggregate(events, group_keys)`-Mechanik: der
+**Monats-Roll-up** gruppiert die `provider_calls.jsonl`-Events nach
+`(caller, modality, month)` — `month` als `YYYY-MM` aus dem `ts`-Feld abgeleitet —
+und liefert pro Gruppe `calls`, `input_tokens`, `output_tokens`, `est_cost_eur`
+(LLMP-S4-Schema, Null-Preis-Semantik `OPEN-LLMP-A`). Die Gruppierung IST die
+Topf-Trennung — kein separater Topf-Schlüssel.
+
+**Staleness-Warnung:** Trägt eine Gruppe `est_cost_eur: None`-Beiträge (Preiszeile
+fehlt/petraltet) ODER stützt sie sich auf eine Preiszeile mit altem `as_of`, wird die
+Gruppe als **„Preis unvollständig/petraltet"** markiert — der Roll-up meldet nie eine
+scheinbar vollständige Summe über einer lückenhaften Preisbasis.
+
+**Bewusst NICHT jetzt (n=1, RAT-17-Disziplin):** KEIN `instance_id`-/Familien-Feld —
+solange nur eine Familie/Instanz läuft, ist die Instanz-Achse ein Lego-Bruch auf
+Vorrat. Vertagt bis reale Familie-2-Hardware (berater-Paket
+`20260706-2140-telemetrie-1268`); bis dahin gruppiert der Roll-up nur nach
+`caller × modality × month`.
+
 ## 3. TTS/STT — in Scope via LiteLLM (RAT-28)
 
 ### LLMP-S6 — TTS und STT via LiteLLM in Scope (Umkehr RAT-20)
