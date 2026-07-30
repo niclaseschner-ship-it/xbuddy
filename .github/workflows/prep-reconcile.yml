@@ -45,6 +45,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # verdict_check ist Harness-Logik (Ticket-Verdikt-Membran), kein
+      # xbuddy-Projektcode — lebt seit RAT-23 Stufe 2 im public lotse-Repo.
+      - name: Lotse-Harness auschecken (verdict_check)
+        uses: actions/checkout@v4
+        with:
+          repository: niclaseschner-ship-it/lotse
+          path: _lotse
+
       - name: status-ready validieren (State + Verdikt-Membran)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -77,7 +85,7 @@ jobs:
           # verdict_check.py prueft: prep_verdict ODER werft_verdict am Issue.
           # Volle mechanische Validierung: Hash-Match + verdict:ready + Issue-Bindung
           # + Drift-Check (identisch zu status_rollback_guard.py, PW-30/PW-43).
-          if python3 methode/hooks/verdict_check.py; then
+          if python3 _lotse/hooks/verdict_check.py; then
             echo "Verdikt gueltig (prep_verdict oder werft_verdict) — status:ready bleibt."
             exit 0
           fi

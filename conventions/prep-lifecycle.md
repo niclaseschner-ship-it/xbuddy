@@ -538,15 +538,15 @@ Cross-Spec/Wahl-Probe kein Spec-Merge.
 ## Implementations-Anker
 
 Die Konvention beschreibt die Bauregel; die Implementation lebt im
-Skill-Harness — SSoT repo-versioniert unter `methode/`, Laufzeit-Deploy-Ziel
-`~/.claude/` (RAT-23):
+Skill-Harness — SSoT im public Repo `lotse` (`~/repos/lotse`, RAT-23 Stufe 2),
+Laufzeit-Deploy-Ziel `~/.claude/`:
 
-- `methode/commands/arbeitstag-prep.md` (deployt nach
+- `lotse/commands/arbeitstag-prep.md` (deployt nach
   `~/.claude/commands/arbeitstag-prep.md`) — Skill-Sequenz, Karten-Render,
   Maturation-Berater-Mechanik (PREP-12)
-- `methode/agents/xbuddy-watchdog-prep.md` (deployt nach `~/.claude/agents/`)
+- `lotse/agents/watchdog-prep.md` (deployt nach `~/.claude/agents/`)
   — Verdikt-Schema (PREP-2/3/4/5)
-- `methode/hooks/status_rollback_guard.py` (deployt nach `~/.claude/hooks/`)
+- `lotse/hooks/status_rollback_guard.py` (deployt nach `~/.claude/hooks/`)
   — vier Hook-Sperren (PREP-6)
 
 Spur:
