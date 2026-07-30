@@ -586,6 +586,82 @@ def test_shell12_fit_wrapper_in_html(client):
     )
 
 
+# ============================================================
+#  T1603 — SW-Update-on-Boot + clients.claim
+# ============================================================
+
+def test_t1603_reg_update_bei_registrierung(client):
+    """T1603: Shell-HTML ruft reg.update() nach erfolgreicher SW-Registrierung auf.
+
+    Erzwingt eine SW-Update-Prüfung bei jedem Shell-Boot — ein einziger Reload
+    nach Deploy reicht, um die neue SW-Version zu ziehen (update-on-boot).
+    """
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
+    assert "reg.update()" in body, (
+        "T1603: reg.update() muss nach der SW-Registrierung aufgerufen werden "
+        "(update-on-boot — zieht neuen SW bei jedem Shell-Load)"
+    )
+
+
+def test_t1603_sw_clients_claim_in_activate():
+    """T1603: shell/sw.js enthält self.clients.claim() im activate-Event.
+
+    Sichert, dass der neue SW nach dem activate sofort alle offenen Clients
+    übernimmt (kein Warten auf den nächsten Navigate-Request).
+    """
+    sw_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "shell", "sw.js",
+    )
+    with open(sw_path, encoding="utf-8") as fh:
+        sw_src = fh.read()
+    # clients.claim() muss im activate-Event stehen (nach 'activate'-Listener-Registrierung)
+    activate_pos = sw_src.find("'activate'")
+    assert activate_pos != -1, "T1603: 'activate'-Event-Listener fehlt in sw.js"
+    claim_pos = sw_src.find("clients.claim()", activate_pos)
+    assert claim_pos != -1, (
+        "T1603: self.clients.claim() muss im activate-Event-Handler von sw.js stehen "
+        "(sofortige Übernahme aller Clients nach SW-Aktivierung)"
+    )
+
+
+def test_t1603_shell_build_id_deckt_alle_quellen(monkeypatch, client):
+    """T1603: shell-build_id aus ALLEN Shell-Assets — CSS + platform.js + sw.js + Template.
+
+    Ein heim-shell.html-Bump (ohne CSS-Änderung) erzeugt eine andere build_id
+    im gerenderten HTML — der Browser bekommt eine andere sw.js-URL und erkennt
+    den neuen SW.
+    """
+    import seiten.pwa_mantel as _pm
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+    templates_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
+
+    # Baseline: alle Quellen = mtime 100
+    def fake_mtime_baseline(path):
+        return 100.0
+
+    monkeypatch.setattr(_pm.os.path, "getmtime", fake_mtime_baseline)
+    build_id_baseline = _pm.build_id_for("shell", static_dir)
+
+    # HTML-Template gebumpt: heim-shell.html neuer
+    def fake_mtime_html_bumped(path):
+        if path == os.path.join(templates_dir, "heim-shell.html"):
+            return 500.0
+        return 100.0
+
+    monkeypatch.setattr(_pm.os.path, "getmtime", fake_mtime_html_bumped)
+    build_id_bumped = _pm.build_id_for("shell", static_dir)
+
+    assert build_id_bumped != build_id_baseline, (
+        "T1603: heim-shell.html-Bump muss shell-build_id ändern — "
+        f"baseline={build_id_baseline!r}, bumped={build_id_bumped!r}. "
+        "REGISTRY['shell'].template_source_set muss 'heim-shell.html' tragen."
+    )
+    assert build_id_bumped == "500", (
+        f"T1603: build_id nach HTML-Bump muss '500' sein, erhalten {build_id_bumped!r}"
+    )
+
+
 def test_shell12_css_transform_scale(client):
     """SHELL-12: heim-shell.css definiert .shell-fit mit transform: scale(var(--shell-scale)
     und transform-origin: top left."""
