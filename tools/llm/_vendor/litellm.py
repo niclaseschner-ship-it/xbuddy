@@ -100,6 +100,85 @@ CAPABILITIES = frozenset({
 DEFAULT_MODEL = "claude-haiku-4-5"
 DEFAULT_MAX_TOKENS = 2048
 
+# --------------------------------------------------------------------------
+#  register_model-Seed (T1634/U3, RAT-26-§5-Amendment)
+# --------------------------------------------------------------------------
+# Nach diesem Seed ist `litellm.model_cost` die EINE Kosten-SSoT (#1620): die
+# `_emit_*`-Naht (#1635) liest dann `response_cost` statt der Hand-`pricing.py`-
+# Tabelle. Dieser Schritt füllt nur GENUINE Katalog-Lücken — Modelle, die
+# litellm NATIV korrekt kennt (claude-*, mistral/mistral-medium-2508, tts-1-hd,
+# whisper-1) werden NICHT überschrieben (Live-Probe litellm 1.93.0). Die eine
+# reale Lücke heute ist `mistral/mistral-medium-3504` (Multimodal-Mistral, HSP-27
+# — weder blank noch `mistral/`-präfixt im Katalog). Die Kosten kommen aus den
+# heutigen `pricing.py`-Zahlen (USD/1M → litellm-Token-Schema); `as_of` fährt als
+# Metadatum mit (monthly_rollup-Staleness-Konsument, U3).
+#
+# Prozess-weit idempotent geguarded: der Seed läuft beim ERSTEN `LitellmVendor`-
+# Init einmal, alle Folge-Inits sind no-op (Modul-Flag). `register_model`
+# akzeptiert das native `model_cost`-Schema; wir schreiben nur Lücken, nie
+# Overrides (Stop-Ventil: native korrekte Einträge unberührt).
+
+_SEED_DONE = False
+
+
+def _pricing_to_litellm_entry(prices, as_of):
+    """USD/1M-Tripel (input, cached_input, output) → litellm-`model_cost`-Eintrag.
+
+    litellm rechnet Kosten pro EINZEL-Token (`input_cost_per_token` /
+    `output_cost_per_token`), pricing.py führt USD pro 1 Million Tokens — also
+    `/ 1_000_000`. `cache_read_input_token_cost` trägt den (niedrigeren)
+    Cached-Input-Preis (Anthropic-Prompt-Caching-Bucket, Spiegel pricing.py).
+    `as_of` wandert als reines Metadatum mit (monthly_rollup-Staleness, U3) —
+    litellm ignoriert unbekannte Keys.
+    """
+    input_usd_1m, cached_usd_1m, output_usd_1m = prices
+    return {
+        "input_cost_per_token": input_usd_1m / 1_000_000.0,
+        "output_cost_per_token": output_usd_1m / 1_000_000.0,
+        "cache_read_input_token_cost": cached_usd_1m / 1_000_000.0,
+        "mode": "chat",
+        "as_of": as_of,
+    }
+
+
+def _seed_model_cost(litellm) -> None:
+    """Seedet genuine `litellm.model_cost`-Lücken aus `pricing.py` (U3, idempotent).
+
+    Iteriert die Hand-`pricing.py`-Tabelle, normalisiert jeden Modellnamen auf
+    den litellm-Routing-Namen (`normalize_model` — dieselbe Kanonik, mit der der
+    Vendor tatsächlich routet, z. B. `mistral-medium-3504` →
+    `mistral/mistral-medium-3504`) und registriert NUR die Namen, die litellm
+    noch NICHT (oder mit reinen Null-Token-Kosten) kennt. Modelle mit bereits
+    nativ gesetzten ≠0-Token-Kosten bleiben unberührt (kein Override — Stop-
+    Ventil). Prozess-weit einmalig über das Modul-Flag `_SEED_DONE`.
+    """
+    global _SEED_DONE
+    if _SEED_DONE:
+        return
+
+    from .. import pricing
+    from .._resolver import normalize_model
+
+    catalog = getattr(litellm, "model_cost", {}) or {}
+    to_register: dict[str, Any] = {}
+    for bare_name, prices in pricing._PRICES_USD_PER_MILLION.items():
+        routing_name = normalize_model(bare_name)
+        existing = catalog.get(routing_name) or {}
+        native_in = existing.get("input_cost_per_token")
+        native_out = existing.get("output_cost_per_token")
+        # Nur GENUINE Lücke seeden: kein Eintrag ODER Token-Kosten fehlen/0
+        # (native korrekte ≠0-Einträge NICHT überschreiben — Stop-Ventil).
+        if native_in and native_out:
+            continue
+        as_of = pricing.as_of_for(bare_name)
+        to_register[routing_name] = _pricing_to_litellm_entry(prices, as_of)
+
+    if to_register:
+        litellm.register_model(to_register)
+
+    _SEED_DONE = True
+
+
 class LitellmVendor(VendorBase):
     """LiteLLM-Messages-Adapter — `chat_multiturn` + `agent_step` + singleshot + Audio.
 
@@ -126,6 +205,16 @@ class LitellmVendor(VendorBase):
         # Telemetrie, Pricing), brauchen `litellm` nicht als Test-Dependency;
         # die Vendor-Tests mocken `litellm.completion` über sys.modules.
         import litellm
+
+        # T1634/U3: genuine litellm.model_cost-Lücken aus pricing.py seeden
+        # (prozess-weit einmalig, idempotent). Danach ist model_cost die eine
+        # Kosten-SSoT für die #1635-Naht. Best-effort — ein register_model-
+        # Fehler darf den Vendor-Boot nicht killen (Kosten sind Diagnose-Substrat,
+        # kein Wire-Pfad; die #1635-Naht hält bis dahin ohnehin pricing.py).
+        try:
+            _seed_model_cost(litellm)
+        except Exception:  # Seed ist Best-effort, nie boot-fatal
+            logger.warning("litellm-vendor: model_cost-Seed fehlgeschlagen", exc_info=True)
 
         self._litellm = litellm
         self._api_key = api_key
