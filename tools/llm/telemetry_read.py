@@ -111,25 +111,32 @@ def aggregate(
     """Aggregiert Events pro Gruppe der `group_keys`.
 
     Summiert pro Gruppe: `calls` (Anzahl), `input_tokens`, `output_tokens`,
-    `est_cost_eur`. Null-Preis-Semantik (OPEN-LLMP-A):
+    `est_cost_eur`, `cache_read_tokens`. Null-Preis-Semantik (OPEN-LLMP-A):
     - Wenn **alle** Beiträge einer Gruppe `est_cost_eur: None` haben → None (nicht 0).
     - Wenn mindestens ein Beitrag eine Zahl hat → Summe der Zahlen (None-Werte werden
       wie 0 behandelt).
 
-    Fehlende Felder (`input_tokens`, `output_tokens`, `est_cost_eur` fehlen im Dict)
-    werden als 0 bzw. None betrachtet (LLMP-S4 defensiv).
+    Fehlende Felder (`input_tokens`, `output_tokens`, `est_cost_eur`,
+    `cache_read_tokens` fehlen im Dict) werden als 0 bzw. None betrachtet
+    (LLMP-S4 defensiv).
 
     Rückgabe: Liste von Dicts mit den group_keys-Feldern + calls, input_tokens,
-    output_tokens, est_cost_eur.
+    output_tokens, est_cost_eur, cache_read_tokens, saw_none_cost.
+    `saw_none_cost` (bool): True wenn mindestens ein Event in der Gruppe
+    est_cost_eur=None hatte — ermöglicht cost_complete-Auswertung in Consumern
+    ohne erneute Duplizierung (ENTSCHEID-1268:17).
     """
-    # Pro Gruppe: {calls, input_tokens, output_tokens, cost_sum, cost_has_value}
+    # Pro Gruppe: {calls, input_tokens, output_tokens, cache_read_tokens,
+    #              cost_sum, cost_has_value, saw_none_cost}
     groups: dict[tuple, dict] = defaultdict(
         lambda: {
             "calls": 0,
             "input_tokens": 0,
             "output_tokens": 0,
+            "cache_read_tokens": 0,
             "cost_sum": 0.0,
             "cost_has_value": False,
+            "saw_none_cost": False,
         }
     )
 
@@ -139,10 +146,13 @@ def aggregate(
         bucket["calls"] += 1
         bucket["input_tokens"] += int(event.get("input_tokens") or 0)
         bucket["output_tokens"] += int(event.get("output_tokens") or 0)
+        bucket["cache_read_tokens"] += int(event.get("cache_read_tokens") or 0)
         cost = event.get("est_cost_eur")
         if cost is not None:
             bucket["cost_sum"] += float(cost)
             bucket["cost_has_value"] = True
+        else:
+            bucket["saw_none_cost"] = True
 
     result = []
     for key, bucket in groups.items():
@@ -152,8 +162,10 @@ def aggregate(
         row["calls"] = bucket["calls"]
         row["input_tokens"] = bucket["input_tokens"]
         row["output_tokens"] = bucket["output_tokens"]
+        row["cache_read_tokens"] = bucket["cache_read_tokens"]
         # Null-Preis: None wenn kein einziger Wert vorhanden (OPEN-LLMP-A).
         row["est_cost_eur"] = bucket["cost_sum"] if bucket["cost_has_value"] else None
+        row["saw_none_cost"] = bucket["saw_none_cost"]
         result.append(row)
     return result
 
@@ -250,25 +262,19 @@ def monthly_rollup(
     `instance_id` VERTAGT (n=1, ENTSCHEID-1268): Nicht nach instance_id
     gruppiert. Bei n>1 Instanzen kommt die Trennung aus dem Datei-/Host-Schnitt
     (Hardware-Trennung, SVC-5), nicht aus einem Feld im Event.
+
+    Implementierung: delegiert Kern-Summen + Null-Preis-Semantik an `aggregate()`.
+    Rollup-spezifische Felder (cache_read_ratio, calls_per_day, cost_complete)
+    werden in einem zweiten Pass aus den aggregate()-Ergebnissen + einem
+    Hilfsdurchlauf für distinct_days abgeleitet (T1616, #1368).
     """
     ref_today = today if today is not None else date.today()
 
-    # -- Pass 1: pro Gruppe akkumulieren ------------------------------------
-    # Gruppen-Key: (month, caller, model_id, modality)
-    GroupKey = tuple  # (month: str, caller: str|None, model_id: str|None, modality: str|None)
-
-    buckets: dict[GroupKey, dict] = defaultdict(
-        lambda: {
-            "calls": 0,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "cache_read_tokens": 0,
-            "cost_sum": 0.0,
-            "cost_has_value": False,
-            "saw_none_cost": False,
-            "distinct_days": set(),
-        }
-    )
+    # -- Pass 1: Events mit synthetischem `month`-Feld anreichern -----------
+    # Events ohne gültigen ts werden übersprungen (gleiche Semantik wie vorher).
+    # Gleichzeitig distinct_days pro Gruppe für calls_per_day sammeln.
+    enriched: list[dict] = []
+    distinct_days_map: dict[tuple, set[date]] = defaultdict(set)
 
     for event in events:
         ts_str = event.get("ts")
@@ -280,56 +286,57 @@ def monthly_rollup(
             continue
 
         month = entry_date.strftime("%Y-%m")
-        caller = event.get("caller")
-        model_id = event.get("model_id")
-        modality = event.get("modality")  # None wenn nicht gesetzt (Chat/Text)
-        key: GroupKey = (month, caller, model_id, modality)
+        enriched_event = dict(event)
+        enriched_event["month"] = month
+        enriched.append(enriched_event)
 
-        bucket = buckets[key]
-        bucket["calls"] += 1
-        bucket["input_tokens"] += int(event.get("input_tokens") or 0)
-        bucket["output_tokens"] += int(event.get("output_tokens") or 0)
-        bucket["cache_read_tokens"] += int(event.get("cache_read_tokens") or 0)
-        bucket["distinct_days"].add(entry_date)
+        key = (month, event.get("caller"), event.get("model_id"), event.get("modality"))
+        distinct_days_map[key].add(entry_date)
 
-        cost = event.get("est_cost_eur")
-        if cost is not None:
-            bucket["cost_sum"] += float(cost)
-            bucket["cost_has_value"] = True
-        else:
-            bucket["saw_none_cost"] = True
+    # -- Pass 2: Kern-Summen + Null-Preis-Semantik via aggregate() -----------
+    # aggregate() liefert: calls, input_tokens, output_tokens, est_cost_eur,
+    # cache_read_tokens, saw_none_cost (alle nach T1616 additiv erweitert).
+    agg_rows = aggregate(
+        enriched,
+        group_keys=("month", "caller", "model_id", "modality"),
+    )
 
-    # -- Pass 2: Rows bauen -------------------------------------------------
+    # -- Pass 3: Rollup-spezifische Felder obendrauf ------------------------
     rows = []
     seen_models: set[str] = set()
 
-    for key, bucket in buckets.items():
-        month, caller, model_id, modality = key
+    for agg_row in agg_rows:
+        month = agg_row["month"]
+        caller = agg_row["caller"]
+        model_id = agg_row["model_id"]
+        modality = agg_row["modality"]
 
-        input_tok = bucket["input_tokens"]
-        cache_read = bucket["cache_read_tokens"]
+        input_tok = agg_row["input_tokens"]
+        cache_read = agg_row["cache_read_tokens"]
         if input_tok > 0:
             cache_read_ratio: float | None = cache_read / input_tok
         else:
             cache_read_ratio = None
 
-        n_days = len(bucket["distinct_days"])
-        calls_per_day = bucket["calls"] / n_days if n_days > 0 else 0.0
+        key = (month, caller, model_id, modality)
+        n_days = len(distinct_days_map[key])
+        calls_per_day = agg_row["calls"] / n_days if n_days > 0 else 0.0
 
         # cost_complete: False wenn €-tragende Gruppe mindestens einen None-Beitrag hat
         # (still-halbierte Summe, Antiberater-Fund 1, ENTSCHEID-1268:17).
         # True wenn alle Beiträge €-Werte haben ODER alle None sind (nix zu halbieren).
-        cost_complete: bool = not (bucket["cost_has_value"] and bucket["saw_none_cost"])
+        cost_has_value = agg_row["est_cost_eur"] is not None
+        cost_complete: bool = not (cost_has_value and agg_row["saw_none_cost"])
 
         row: dict = {
             "month": month,
             "caller": caller,
             "model": model_id,  # Feld heißt im Roll-up "model" (kürzer)
             "modality": modality,
-            "calls": bucket["calls"],
+            "calls": agg_row["calls"],
             "input_tokens": input_tok,
-            "output_tokens": bucket["output_tokens"],
-            "est_cost_eur": bucket["cost_sum"] if bucket["cost_has_value"] else None,
+            "output_tokens": agg_row["output_tokens"],
+            "est_cost_eur": agg_row["est_cost_eur"],
             "cost_complete": cost_complete,
             "cache_read_ratio": cache_read_ratio,
             "calls_per_day": calls_per_day,
@@ -339,7 +346,7 @@ def monthly_rollup(
         if model_id is not None:
             seen_models.add(model_id)
 
-    # -- Pass 3: Staleness-Warnungen ----------------------------------------
+    # -- Pass 4: Staleness-Warnungen ----------------------------------------
     warnings = []
     for model_id in sorted(seen_models):
         as_of_str = as_of_for(model_id)
