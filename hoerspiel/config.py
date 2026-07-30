@@ -97,6 +97,9 @@ class InstanceConfig:
     - ton          — Erzähl-Ton der Serie (HSP-45, Story-Prompt-Kontext)
     - perspektive  — Erzähl-Perspektive (HSP-45, Story-Prompt-Kontext)
     - serien_name  — Serien-Rahmung dieser Instanz (HSP-45, Name-Drift-Fix)
+    - voices       — Sprecher→Voice-Map für Multi-Voice-TTS (T1621, optional);
+                     None/leer → Single-Voice-Pfad (Kind-Instanzen unverändert).
+                     Jede gemappte Voice muss in VALID_VOICES sein (ValueError sonst).
 
     zielgruppe/ton/perspektive/serien_name kommen aus instance.json (HSP-27); leer
     → keine Serien-Zeile im Prompt (DEFAULT_SERIEN_RAHMEN='' neutral, T1336/OPEN-HSP-W).
@@ -105,7 +108,8 @@ class InstanceConfig:
     def __init__(self, kind_id: str, name: str, alter: int,
                  themen_je_alter: dict[str, list[str]] | None = None,
                  zielgruppe: str = "kind", ton: str = "",
-                 perspektive: str = "", serien_name: str = ""):
+                 perspektive: str = "", serien_name: str = "",
+                 voices: "dict[str, str] | None" = None):
         self.kind_id = kind_id
         self.name = name
         self.alter = alter
@@ -115,6 +119,7 @@ class InstanceConfig:
         self.ton = ton
         self.perspektive = perspektive
         self.serien_name = serien_name
+        self.voices = voices or None
 
 
 def load_instance(data_root: str, kind_id: str,
@@ -159,6 +164,22 @@ def load_instance(data_root: str, kind_id: str,
 
         # HSP-45 / #1263: Erwachsenen-Achse + Name-Drift-Kontext rein aus Daten.
         # Leer → keine „Serie:"-Zeile (DEFAULT_SERIEN_RAHMEN='' neutral, T1336/OPEN-HSP-W).
+
+        # T1621: Sprecher→Voice-Map für Multi-Voice-TTS (optional, nur niclas-Instanz).
+        # None/leer → Single-Voice-Pfad (Kind-Instanzen unverändert, byte-gleich).
+        voices_raw = raw.get("voices")
+        voices: dict[str, str] | None = None
+        if isinstance(voices_raw, dict) and voices_raw:
+            validated: dict[str, str] = {}
+            for sprecher, v in voices_raw.items():
+                v_str = str(v).strip().lower()
+                if v_str not in VALID_VOICES:
+                    raise ValueError(
+                        "instance.json voices[%r]=%r ist V1 nicht unterstützt — "
+                        "erlaubt: %s (T1621)" % (sprecher, v, ", ".join(VALID_VOICES)))
+                validated[str(sprecher)] = v_str
+            voices = validated if validated else None
+
         return InstanceConfig(
             kind_id=kind_id,
             name=name,
@@ -168,6 +189,7 @@ def load_instance(data_root: str, kind_id: str,
             ton=str(raw.get("ton") or "").strip(),
             perspektive=str(raw.get("perspektive") or "").strip(),
             serien_name=str(raw.get("serien_name") or "").strip(),
+            voices=voices,
         )
 
     # Fallback: instance.json fehlt oder für andere kind_id — ENV-Overgangs-Werte.
