@@ -146,3 +146,53 @@ def test_heim_shell_build_id_nutzt_shell_registry(monkeypatch, client):
         "?v=777 (heim-shell.css-mtime via REGISTRY['shell']) fehlt in HTML — "
         "T1284-AC1 Entry-Path-Probe heim_shell"
     )
+
+
+# ── T1603 — Shell-build_id aus ALLEN Shell-Assets (CSS + template + JS) ───────
+
+def test_shell_build_id_aendert_sich_bei_html_template_bump(monkeypatch):
+    """T1603: shell-build_id bumpt, wenn heim-shell.html (template) neuer ist als CSS.
+
+    Beweist, dass build_id_for('shell', static_dir) die Template-mtime
+    (template_source_set=('heim-shell.html',)) einbezieht — eine reine
+    HTML-Template-Änderung ohne CSS-Änderung erzeugt eine neue build_id.
+    """
+    static_dir = os.path.join(_SEITEN_DIR, "static")
+    templates_dir = os.path.join(_SEITEN_DIR, "templates")
+
+    def fake_getmtime(path):
+        # heim-shell.html hat die höchste mtime — nur die soll die build_id bestimmen.
+        if path == os.path.join(templates_dir, "heim-shell.html"):
+            return 9999.0
+        return 1.0  # alle anderen Quellen (CSS, platform.js, sw.js) sind älter
+
+    monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
+
+    result = pwa_mantel.build_id_for("shell", static_dir)
+
+    assert result == "9999", (
+        f"T1603: heim-shell.html-Bump (9999) nicht in shell-build_id sichtbar: {result!r}. "
+        "REGISTRY['shell'].template_source_set muss 'heim-shell.html' enthalten und "
+        "build_id_for() muss Template-mtimes einbeziehen."
+    )
+
+
+def test_shell_registry_enthaelt_alle_shell_quellen():
+    """T1603: REGISTRY['shell'] deklariert build_id_source_set + template_source_set vollständig.
+
+    Prueft, dass die drei statischen Quellen (CSS, platform.js, SW-Datei) und die
+    Template-Quelle (heim-shell.html) alle eingetragen sind — kein stilles Auslassen.
+    """
+    cfg = pwa_mantel.REGISTRY["shell"]
+    assert "heim-shell.css" in cfg.build_id_source_set, (
+        "T1603: 'heim-shell.css' fehlt in REGISTRY['shell'].build_id_source_set"
+    )
+    assert "platform.js" in cfg.build_id_source_set, (
+        "T1603: 'platform.js' fehlt in REGISTRY['shell'].build_id_source_set"
+    )
+    assert "shell/sw.js" in cfg.build_id_source_set, (
+        "T1603: 'shell/sw.js' fehlt in REGISTRY['shell'].build_id_source_set"
+    )
+    assert "heim-shell.html" in cfg.template_source_set, (
+        "T1603: 'heim-shell.html' fehlt in REGISTRY['shell'].template_source_set"
+    )
