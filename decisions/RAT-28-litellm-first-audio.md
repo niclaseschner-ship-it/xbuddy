@@ -20,7 +20,7 @@ Die berater-runde #1268 hatte STT mit „NOCH NICHT" empfohlen (thin benefit, Da
 
 3. **LLMP-S6 umgekehrt:** TTS + STT werden Teil der `specs/platform/llm-providers.md`. Spec-Delta erforderlich: LLMP-S6-Ausschluss-Paragraph entfernen, stattdessen TTS/STT-Absatz mit je einem `litellm.speech()`-/`litellm.transcription()`-Verweis. Nicht-LiteLLM-Anteile (kibuddy-speed-Cache, hoerspiel-Asset-Lifecycle) bleiben in ihren Buddy-Specs — sie wohnen UM den LiteLLM-Call herum, ersetzen ihn aber nicht.
 
-4. **Telemetrie-SSoT bleibt `write_call`** — auch für Audio. LiteLLM-native-Callbacks / `completion_cost()` für Audio-Calls NICHT nutzen (Zahl-Stabilität bei Rollback, Preis-Drift-Schutz wie RAT-26 §5). Akzeptierter Gap: Dauer-/Kosten-Präzision für Audio-Calls ist weniger streng als für Chat (Nic: „Telemetrie sauber nicht so wichtig").
+4. **Telemetrie-SSoT bleibt `write_call`** — auch für Audio. ~~LiteLLM-native-Callbacks / `completion_cost()` für Audio-Calls NICHT nutzen~~ **[AMENDIERT 2026-07-30 — kohärent mit RAT-26 §5-Amendment]:** die Kosten-QUELLE ist jetzt auch für Audio LiteLLM-nativ — `tts-1-hd` trägt `input_cost_per_character`, `azure/whisper-1` Kosten pro Sekunde (Live-Probe 2026-07-30). Der frühere „für Audio nicht nutzen"-Ausschluss und der akzeptierte Präzisions-Gap entfallen damit. `write_call` bleibt Schreib-SSoT.
 
 5. **Auto-Fallback weiter deferred** — RAT-26 §4 gilt weiter für Audio. Provider-Wahl je Schnittstelle (LLMP-5-Slot) ist das Modell, kein automatisches Überlaufen.
 
