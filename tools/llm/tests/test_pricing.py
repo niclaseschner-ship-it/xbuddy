@@ -72,3 +72,46 @@ def test_eur_per_usd_conversion():
     cost = pricing.compute_eur("claude-haiku-4-5", input_tokens=1_000_000, output_tokens=0)
     assert cost is not None
     assert abs(cost - 1.00 * 0.92) < 0.001
+
+
+# ---------------------------------------------------------------------------
+# as_of_for — T1368 as_of-Substrat
+# ---------------------------------------------------------------------------
+
+
+def test_as_of_for_known_anthropic_models():
+    """Alle bekannten Anthropic-Modelle haben as_of == '2026-05-31'."""
+    for model in ("claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"):
+        result = pricing.as_of_for(model)
+        assert result == "2026-05-31", f"{model}: erwartet '2026-05-31', got {result!r}"
+
+
+def test_as_of_for_mistral_models():
+    """Mistral-Modelle haben as_of == '2026-07-07' (korrigiertes Datum)."""
+    for model in ("mistral-medium-2508", "mistral-medium-3504"):
+        result = pricing.as_of_for(model)
+        assert result == "2026-07-07", f"{model}: erwartet '2026-07-07', got {result!r}"
+
+
+def test_as_of_for_unknown_model_returns_none():
+    """Unbekanntes Modell → None (kein as_of bekannt)."""
+    assert pricing.as_of_for("some-unknown-model-99") is None
+
+
+def test_as_of_for_format_is_iso():
+    """as_of-Datum ist ein valides ISO-8601-Datum (YYYY-MM-DD)."""
+    from datetime import date
+    for model in ("claude-haiku-4-5", "mistral-medium-2508"):
+        as_of = pricing.as_of_for(model)
+        assert as_of is not None
+        # Parsen muss klappen, kein ValueError.
+        parsed = date.fromisoformat(as_of)
+        assert isinstance(parsed, date)
+
+
+def test_compute_eur_still_works_after_as_of_substrat():
+    """Bestehende compute_eur-Funktion bleibt durch das as_of-Substrat unberührt."""
+    # Sanity: compute_eur liefert weiterhin korrekte Werte.
+    eur = pricing.compute_eur("claude-haiku-4-5", input_tokens=1000, output_tokens=500)
+    assert eur is not None
+    assert eur > 0
