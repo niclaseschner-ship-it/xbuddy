@@ -74,6 +74,10 @@ class MantelConfig:
 
     # PWAM-4 — aktiv konsumiert (build_id_for)
     build_id_source_set: tuple[str, ...]
+    # T1603: optionale Template-Quellen (Dateinamen relativ zu <base_dir>/../templates/).
+    # build_id_for() berechnet max(mtime) über build_id_source_set + template_source_set
+    # gemeinsam, sodass eine reine HTML-Template-Änderung die build_id bumpt.
+    template_source_set: tuple[str, ...] = ()
 
     # ── ab hier: konsumiert im Manifest-/Skelett-Share-Folgetrack ──
     name: str | None = None                    # PWAM-2 Manifest-Name
@@ -379,7 +383,12 @@ REGISTRY: dict[str, MantelConfig] = {
         sw_scope="/api/v1/seiten/connector/",
     ),
     "shell": MantelConfig(
-        build_id_source_set=("heim-shell.css",),
+        # T1603: build_id aus ALLEN Shell-Assets — CSS + platform.js + sw.js
+        # (static/) + heim-shell.html (templates/ via template_source_set).
+        # Jede Änderung an Shell-Logik/Style/Template bumpt die build_id und
+        # macht den SW-Byte-Fingerprint ungültig → Browser zieht neuen SW.
+        build_id_source_set=("heim-shell.css", "platform.js", "shell/sw.js"),
+        template_source_set=("heim-shell.html",),
         name="Heim-Shell · XBuddy",
         start_url="/shell/<panel_id>",         # dynamisch je panel_id (PWAM-5 offene Frage 3)
         icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
@@ -433,7 +442,14 @@ def build_id_for(component: str, base_dir: str) -> str:
     Test-/Override-Naht (`runtime[..._asset_dir]`, z. B. connector) erhalten
     bleibt. Das ist die „(component)"-Ebene aus PWAM-4 — die eigentliche
     mtime-Rechnung passiert in `build_id_from_mtimes`.
+
+    T1603: `template_source_set` (Dateinamen relativ zu `<base_dir>/../templates/`)
+    wird ebenfalls in die max(mtime)-Rechnung einbezogen. Ändert sich eine
+    Template-Datei ohne zugehörige Static-Datei, bumpt build_id trotzdem.
     """
     cfg = REGISTRY[component]
     paths = [os.path.join(base_dir, name) for name in cfg.build_id_source_set]
+    if cfg.template_source_set:
+        templates_dir = os.path.join(os.path.dirname(base_dir), "templates")
+        paths += [os.path.join(templates_dir, name) for name in cfg.template_source_set]
     return build_id_from_mtimes(paths)
