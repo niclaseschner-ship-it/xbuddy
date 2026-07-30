@@ -18,6 +18,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import date, timedelta
 
+from tools.llm.pricing import as_of_for
 from tools.llm.telemetry import resolve_jsonl_path
 
 logger = logging.getLogger(__name__)
@@ -217,6 +218,141 @@ def daily_series(
         result[key] = series
 
     return result
+
+
+def monthly_rollup(
+    events: list[dict],
+    *,
+    today: date | None = None,
+    staleness_days: int = 90,
+) -> dict:
+    """Monats-Roll-up: Gruppiert Events nach month × caller × model × modality.
+
+    Rückgabe-Dict mit den Schlüsseln:
+    - `rows`: Liste von Dicts (analog `aggregate`), zusätzlich pro Gruppe:
+      - `month` (str, „YYYY-MM")
+      - `caller`, `model` (aus dem Event-Feld `model_id`), `modality`
+      - `calls`, `input_tokens`, `output_tokens`, `est_cost_eur`
+      - `cache_read_ratio`: cache_read_tokens / input_tokens (float 0..1)
+        oder None wenn input_tokens == 0 oder das Feld im Event fehlt.
+      - `calls_per_day`: calls / Anzahl distinkter Tage im Monat (float)
+    - `warnings`: Liste von Staleness-Warnungen (sichtbar oben, ENTSCHEID-1268).
+      Jede Warnung: {"model_id": str, "as_of": str, "age_days": int}.
+      Nur Modelle, die in den Rows vorkommen und deren as_of älter als
+      `staleness_days` Tage (relativ zu `today`) ist, tauchen auf.
+
+    Topf-Trennung (ENTSCHEID-1268, xbuddy-prozess#73): Dieser Roll-up summiert
+    NUR Laufzeit-/Produkt-Kosten. Die Trennung zwischen Laufzeit- und Bau-/
+    Handoff-Topf läuft über die Log-Datei/den Host: ein Pi = eine
+    provider_calls.jsonl = ein Laufzeit-Topf. `monthly_rollup` mischt keine
+    fremden Töpfe — wer zwei Dateien zusammenwirft, bricht die Trennung selbst.
+
+    `instance_id` VERTAGT (n=1, ENTSCHEID-1268): Nicht nach instance_id
+    gruppiert. Bei n>1 Instanzen kommt die Trennung aus dem Datei-/Host-Schnitt
+    (Hardware-Trennung, SVC-5), nicht aus einem Feld im Event.
+    """
+    ref_today = today if today is not None else date.today()
+
+    # -- Pass 1: pro Gruppe akkumulieren ------------------------------------
+    # Gruppen-Key: (month, caller, model_id, modality)
+    GroupKey = tuple  # (month: str, caller: str|None, model_id: str|None, modality: str|None)
+
+    buckets: dict[GroupKey, dict] = defaultdict(
+        lambda: {
+            "calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cost_sum": 0.0,
+            "cost_has_value": False,
+            "distinct_days": set(),
+        }
+    )
+
+    for event in events:
+        ts_str = event.get("ts")
+        if not ts_str:
+            continue
+        try:
+            entry_date = date.fromisoformat(str(ts_str)[:10])
+        except (ValueError, TypeError):
+            continue
+
+        month = entry_date.strftime("%Y-%m")
+        caller = event.get("caller")
+        model_id = event.get("model_id")
+        modality = event.get("modality")  # None wenn nicht gesetzt (Chat/Text)
+        key: GroupKey = (month, caller, model_id, modality)
+
+        bucket = buckets[key]
+        bucket["calls"] += 1
+        bucket["input_tokens"] += int(event.get("input_tokens") or 0)
+        bucket["output_tokens"] += int(event.get("output_tokens") or 0)
+        bucket["cache_read_tokens"] += int(event.get("cache_read_tokens") or 0)
+        bucket["distinct_days"].add(entry_date)
+
+        cost = event.get("est_cost_eur")
+        if cost is not None:
+            bucket["cost_sum"] += float(cost)
+            bucket["cost_has_value"] = True
+
+    # -- Pass 2: Rows bauen -------------------------------------------------
+    rows = []
+    seen_models: set[str] = set()
+
+    for key, bucket in buckets.items():
+        month, caller, model_id, modality = key
+
+        input_tok = bucket["input_tokens"]
+        cache_read = bucket["cache_read_tokens"]
+        if input_tok > 0:
+            cache_read_ratio: float | None = cache_read / input_tok
+        else:
+            cache_read_ratio = None
+
+        n_days = len(bucket["distinct_days"])
+        calls_per_day = bucket["calls"] / n_days if n_days > 0 else 0.0
+
+        row: dict = {
+            "month": month,
+            "caller": caller,
+            "model": model_id,  # Feld heißt im Roll-up "model" (kürzer)
+            "modality": modality,
+            "calls": bucket["calls"],
+            "input_tokens": input_tok,
+            "output_tokens": bucket["output_tokens"],
+            "est_cost_eur": bucket["cost_sum"] if bucket["cost_has_value"] else None,
+            "cache_read_ratio": cache_read_ratio,
+            "calls_per_day": calls_per_day,
+        }
+        rows.append(row)
+
+        if model_id is not None:
+            seen_models.add(model_id)
+
+    # -- Pass 3: Staleness-Warnungen ----------------------------------------
+    warnings = []
+    for model_id in sorted(seen_models):
+        as_of_str = as_of_for(model_id)
+        if as_of_str is None:
+            continue  # Kein bekanntes Datum → keine Warnung möglich.
+        try:
+            as_of_date = date.fromisoformat(as_of_str)
+        except ValueError:
+            continue
+        age_days = (ref_today - as_of_date).days
+        if age_days > staleness_days:
+            warnings.append({
+                "model_id": model_id,
+                "as_of": as_of_str,
+                "age_days": age_days,
+            })
+
+    # Rückgabe: warnings oben (ENTSCHEID-1268: sichtbar oben, nicht im Log versickern).
+    return {
+        "warnings": warnings,
+        "rows": rows,
+    }
 
 
 def daten_ab(events: list[dict]) -> str | None:
