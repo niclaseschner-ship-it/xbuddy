@@ -27,7 +27,7 @@ import sys
 from datetime import UTC, datetime
 
 LOG_PATH = "/home/buddy/.claude/logs/restart_pending.jsonl"
-XBUDDY_REPO = "/home/buddy/repos/xbuddy"
+XBUDDY_REPO = os.environ.get("XBUDDY_REPO", "/home/buddy/repos/xbuddy")
 SSOT_FILE = os.path.join(XBUDDY_REPO, "deploy/systemd/README.md")
 
 # Pattern: erkennt `git pull origin main` (mit oder ohne `-C <repo>` oder cwd-Wechsel).

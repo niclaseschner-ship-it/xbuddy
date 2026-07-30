@@ -21,7 +21,6 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 | `xbuddy-routine.service` | `routine/routine.service` | Routine-Buddy (`/display/routine/`) | `127.0.0.1:5050` |
 | `xbuddy-photo.service` | `photo/photo.service` | Photo-Buddy (`/display/photo/`, `/api/v1/photo/`) | `127.0.0.1:5051` |
 | `xbuddy-familie.service` | `familie/familie.service` | Familien-Mit-Host (FAM-7/FAM-8, `/api/v1/familie/`) | `127.0.0.1:5010` |
-| `xbuddy-geraete.service` | `geraete/geraete.service` | Geräte-Registry (GER-5/GER-6/GER-15) | `127.0.0.1:5040` |
 | `xbuddy-seiten.service` | `seiten/seiten.service` | Seiten-Registry (SREG-3, `GET /api/v1/seiten`) | `127.0.0.1:5042` |
 | `xbuddy-panel.service` | `panel/panel.service` | Panel-Registry (PREG-13/PREG-14/PREG-15, `GET /api/v1/panels`) | `127.0.0.1:5041` |
 | `xbuddy-essen.service` | `essen/essen.service` | Essens-Buddy (`/display/essen/`, `/api/v1/essen/`, ESSEN-23) | `127.0.0.1:5052` |
@@ -145,7 +144,6 @@ bleibt klar.
      [xbuddy-routine]=routine/routine.service
      [xbuddy-photo]=photo/photo.service
      [xbuddy-familie]=familie/familie.service
-     [xbuddy-geraete]=geraete/geraete.service
      [xbuddy-seiten]=seiten/seiten.service
      [xbuddy-panel]=panel/panel.service
      [xbuddy-essen]=essen/essen.service
@@ -179,7 +177,6 @@ bleibt klar.
    sudo systemctl enable --now xbuddy-routine.service
    sudo systemctl enable --now xbuddy-photo.service
    sudo systemctl enable --now xbuddy-familie.service
-   sudo systemctl enable --now xbuddy-geraete.service
    sudo systemctl enable --now xbuddy-seiten.service
    sudo systemctl enable --now xbuddy-panel.service
    sudo systemctl enable --now xbuddy-essen.service
@@ -189,7 +186,7 @@ bleibt klar.
 5. **Status prüfen** — alle Services müssen `active (running)` melden:
 
    ```bash
-   systemctl status xbuddy-plan xbuddy-wetter xbuddy-routine xbuddy-photo xbuddy-familie xbuddy-geraete xbuddy-seiten xbuddy-panel xbuddy-essen xbuddy-eltern-chat
+   systemctl status xbuddy-plan xbuddy-wetter xbuddy-routine xbuddy-photo xbuddy-familie xbuddy-seiten xbuddy-panel xbuddy-essen xbuddy-eltern-chat
    ```
 
 ## Restart nach Code-Update (Pflicht)
@@ -208,7 +205,6 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `routine/` | `sudo systemctl restart xbuddy-routine` |
 | `photo/` | `sudo systemctl restart xbuddy-photo` |
 | `familie/` | `sudo systemctl restart xbuddy-familie` |
-| `geraete/` | `sudo systemctl restart xbuddy-geraete` |
 | `seiten/` oder ein `views.json`-Manifest | `sudo systemctl restart xbuddy-seiten` |
 | `panel/` oder ein `panels.json`-Manifest | `sudo systemctl restart xbuddy-panel` |
 | `essen/` | `sudo systemctl restart xbuddy-essen` |
