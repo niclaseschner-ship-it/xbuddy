@@ -21,7 +21,6 @@ Icon-Lookup: clientseitig via Browser-Fetch-API (KIBUDDY-17 Buzzword-Render, T86
 """
 
 import argparse
-import functools
 import json
 import logging
 import os
@@ -48,7 +47,7 @@ from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools import logsetup  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
-from tools.initdata import session_cookie as _session_cookie  # noqa: E402
+from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
 from tools.llm import LLMProvider  # noqa: E402 — LLMP-S8 Migration (T1082)
 from tools.service_diagnostics import register_version  # noqa: E402
 
@@ -282,6 +281,20 @@ def _get_familie_client():
     return _familie_client_mod.FamilieClient(origin_url=origin)
 
 
+def _get_init_data_config():
+    """Tma-Config (``max_age_seconds``) — gecacht im runtime-Dict oder frisch.
+
+    Wörtlich der vormals inline im Decorator gelesene Pfad
+    (``runtime.get("init_data_config")`` → ``_init_data_mod.load_config()`` + Cache).
+    Getter-Naht für die AUTH-Decorator-Lib-Factory (#1626).
+    """
+    cfg = runtime.get("init_data_config")
+    if cfg is None:
+        cfg = _init_data_mod.load_config()
+        runtime["init_data_config"] = cfg
+    return cfg
+
+
 # AUTH-8: 401 rendert eine Anweisungsseite statt eines rohen Status-Codes.
 _AUTH_401_HTML = (
     "<!doctype html>\n"
@@ -305,81 +318,20 @@ def _auth_401():
     return resp
 
 
-def require_init_data(fn):
-    """Decorator: HART-AUTH (T948/T1321, auth.md AUTH-2/3/5/8).
-
-    Eine valide Quelle reicht (AUTH-2, additive Akzeptanz); fehlt jede,
-    antwortet die Route HART mit 401 + AUTH-8-Anweisungsseite:
-
-    - **AUTH-5 Loopback** (127.0.0.1/::1, kein X-Forwarded-For): Server-zu-
-      Server → pass-through, g.init_data = None.
-    - **AUTH-2 Cookie `xbuddy_session`**: valide HMAC-Signatur reicht;
-      Rolling-Refresh mit frischem `exp` (auth.md AUTH-2:78). g.init_data = None.
-      `make_response` wrappt auch die NDJSON-Streaming-Response von /frage
-      (stream_with_context) korrekt — der Set-Cookie-Header steht vor dem Body.
-    - **AUTH-2 tma-Header** (MAD-7): valide + Familien-Mitglied → g.init_data;
-      valide + Nicht-Mitglied → 403; ungültig → 401.
-    - **Sonst**: HART 401 (AUTH-8).
-    """
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        # AUTH-5: Loopback-Bypass für Internal-Service-Calls.
-        if (not request.headers.get("X-Forwarded-For")
-                and request.remote_addr in ("127.0.0.1", "::1")):
-            g.init_data = None
-            return fn(*args, **kwargs)
-
-        bot_token = _get_bot_token()
-        if not bot_token:
-            logger.error("AUTH: %s nicht gesetzt — Route nicht nutzbar.", _ENV_BOT_TOKEN)
-            return ("", 500)
-
-        # AUTH-2: Session-Cookie. Valide Signatur (+ nicht abgelaufen) reicht.
-        cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
-        if cookie_val:
-            subject = _session_cookie.verify_session(cookie_val, bot_token)
-            if subject is not None:
-                g.init_data = None
-                # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen.
-                resp = make_response(fn(*args, **kwargs))
-                resp.set_cookie(
-                    _session_cookie.COOKIE_NAME,
-                    _session_cookie.sign_session(subject, bot_token),
-                    **_session_cookie.session_cookie_kwargs(),
-                )
-                return resp
-
-        # AUTH-2: tma-Header (MAD-7). Leerer/fehlender "tma "-Wert zählt als
-        # „keine tma-Quelle" (Mini-App-JS außerhalb Telegram sendet "tma " leer).
-        auth_header = request.headers.get("Authorization", "").strip()
-        tma_leer = (
-            not auth_header
-            or auth_header.lower() in ("tma", "tma ")
-            or (auth_header.lower().startswith("tma ") and not auth_header[4:].strip())
-        )
-        if not tma_leer:
-            cfg = runtime.get("init_data_config")
-            if cfg is None:
-                cfg = _init_data_mod.load_config()
-                runtime["init_data_config"] = cfg
-            try:
-                init_data = _init_data_mod.validate_header(
-                    auth_header, bot_token, cfg["max_age_seconds"])
-            except _init_data_mod.InitDataError:
-                return _auth_401()
-
-            # FAM-7/8: User-ID gegen Familien-Registry prüfen (HTTP-Pfad, T1015).
-            familie_ids = _get_familie_client().get_telegram_ids()
-            if familie_ids is not None and init_data.user_id not in familie_ids:
-                logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
-                return ("", 403)
-
-            g.init_data = init_data
-            return fn(*args, **kwargs)
-
-        # AUTH-3: weder Loopback noch Cookie noch tma → HART 401 (AUTH-8).
-        return _auth_401()
-    return wrapper
+# Decorator: HART-AUTH (T948/T1321, auth.md AUTH-2/3/5/8). Der hand-kopierte
+# Wrapper-Body ist mit #1626 auf die AUTH-Decorator-Lib-Factory geflippt
+# (tools/initdata/auth_gate.py::make_require_init_data, #1625). Der Name
+# `require_init_data` BLEIBT (AUTH-9-Coverage-Test trägt per AST-Namen); die
+# Buddy-eigenen Getter + `_auth_401` gehen WÖRTLICH als Closures rein — die
+# Factory ruft genau diesen `_auth_401`, 401/403/500-Shape bleibt byte-gleich.
+# `make_response` in der Factory wrappt auch die NDJSON-Streaming-Response von
+# /frage (stream_with_context) korrekt (Set-Cookie steht vor dem Body).
+require_init_data = make_require_init_data(
+    get_bot_token=_get_bot_token,
+    get_familie_client=_get_familie_client,
+    get_init_data_config=_get_init_data_config,
+    auth_401=_auth_401,
+)
 
 
 # ============================================================
