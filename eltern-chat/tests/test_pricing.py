@@ -67,6 +67,27 @@ def test_zero_tokens_yields_zero_cost():
     assert cost_eur == 0.0
 
 
-def test_eur_per_usd_is_one_v1():
-    """V1-Vereinfachung (E-EC-11): EUR_PER_USD = 1.0."""
-    assert EUR_PER_USD == 1.0
+def test_mistral_medium_2508_pricing_matches_table():
+    """mistral-medium-2508: 0.40/0.40/2.00 USD per 1M Tokens
+    (Stand 2026-06-10, korrigiert 2026-07-07, T1366)."""
+    cost_usd, cost_eur = estimate_cost("mistral-medium-2508",
+                                       input_tokens=1_000_000,
+                                       cached_input_tokens=0,
+                                       output_tokens=1_000_000)
+    assert cost_usd == pytest.approx(0.40 + 2.00)
+    assert cost_eur == pytest.approx((0.40 + 2.00) * EUR_PER_USD)
+
+
+def test_mistral_medium_3504_pricing_matches_table():
+    """mistral-medium-3504: 0.40/0.40/2.00 USD per 1M Tokens
+    (Stand 2026-06-10, korrigiert 2026-07-07, T1366)."""
+    cost_usd, _ = estimate_cost("mistral-medium-3504",
+                                input_tokens=1_000_000,
+                                cached_input_tokens=0,
+                                output_tokens=1_000_000)
+    assert cost_usd == pytest.approx(0.40 + 2.00)
+
+
+def test_eur_per_usd_is_092_v1():
+    """V1-Vereinfachung (E-EC-11): EUR_PER_USD = 0.92 (korrigiert 2026-07-07, T1366)."""
+    assert EUR_PER_USD == 0.92

@@ -23,20 +23,22 @@ _PRICES_USD_PER_MILLION = {
     # claude-haiku-4-5: Stand Anthropic-Pricing 2026-05-31
     "claude-haiku-4-5":  (1.00,  0.10, 5.00),
     # mistral-medium-2508: Mistral Medium 3.1 — Konversations-Adapter (#508).
-    # Stand Mistral-Pricing 2026-06-10 (docs.mistral.ai/pricing).
+    # Stand Mistral-Pricing 2026-06-10 (docs.mistral.ai/pricing),
+    # korrigiert 2026-07-07 (T1366).
     # Mistral hat kein Prompt-Caching → cached_input-Slot auf Input-Preis gesetzt.
-    "mistral-medium-2508": (1.50, 1.50, 7.50),
+    "mistral-medium-2508": (0.40, 0.40, 2.00),
     # mistral-medium-3504: Mistral Medium 3.5 — Multimodal-Adapter (#508).
-    # Stand Mistral-Pricing 2026-06-10 (docs.mistral.ai/pricing).
-    "mistral-medium-3504": (1.50, 1.50, 7.50),
+    # Stand Mistral-Pricing 2026-06-10 (docs.mistral.ai/pricing),
+    # korrigiert 2026-07-07 (T1366).
+    "mistral-medium-3504": (0.40, 0.40, 2.00),
 }
 
 
-# V1-Vereinfachung, siehe E-EC-11: fester EUR-Wechselkurs 1.0. Die Telemetrie
+# V1-Vereinfachung, siehe E-EC-11: fester EUR-Wechselkurs 0.92. Die Telemetrie
 # ist Diagnose-Werkzeug für die Bewertungsphase — eine schwankende Live-Rate
-# wäre Bau ohne belegte Notwendigkeit. Eine spätere Iteration kann hier ohne
-# Schnittstellen-Bruch eine echte Rate einziehen.
-EUR_PER_USD = 1.0
+# wäre Bau ohne belegte Notwendigkeit (korrigiert 2026-07-07, T1366).
+# Eine spätere Iteration kann hier ohne Schnittstellen-Bruch eine echte Rate einziehen.
+EUR_PER_USD = 0.92
 
 
 def estimate_cost(model_id, input_tokens, cached_input_tokens, output_tokens):
