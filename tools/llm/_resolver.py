@@ -150,6 +150,16 @@ def parse_slot(slot: str) -> tuple[str, str, str]:
 # und bleiben ebenfalls unberührt.
 _MISTRAL_MODEL_PREFIXES = ("mistral-", "magistral-", "codestral-", "pixtral-", "ministral-")
 
+# LLMP-S13 (T1634/U2): litellm-kanonische Modell-Alias-Fixes. Der Alt-Azure-STT-
+# Adapter fährt das Deployment blank als `azure/whisper`; der litellm-Katalog
+# (`litellm.model_cost`) kennt aber nur den kanonischen Snapshot-Namen
+# `azure/whisper-1` (mit Kosten). Ohne diese Kanonik fiele der STT-Call aus der
+# Kosten-SSoT (response_cost=None, #1635). Erweiterbare Map statt if-Kette —
+# n=1 heute, additiv, falls weitere Provider-Aliasse auftauchen.
+_MODEL_ALIASES: dict[str, str] = {
+    "azure/whisper": "azure/whisper-1",
+}
+
 
 def normalize_model(model: str) -> str:
     """Ergänzt das LiteLLM-Anbieter-Präfix am Modellnamen (LLMP-S13, #1463).
@@ -158,6 +168,8 @@ def normalize_model(model: str) -> str:
     genau EINEM Ort für alle Anbieter — keine Pro-Vendor-Verzweigung. Regeln:
 
       - leerer Name (Vendor-Default greift) → unverändert leer zurück.
+      - kanonischer Alias-Fix (`azure/whisper` → `azure/whisper-1`, T1634/U2) —
+        der litellm-Katalog kennt nur den `-1`-Snapshot-Namen.
       - Name trägt bereits ein `provider/`-Präfix (`azure/…`, `mistral/…`) →
         unverändert (nicht doppelt präfixen).
       - blanker Mistral-Modellname (`mistral-…`, `magistral-…`, …) →
@@ -165,7 +177,11 @@ def normalize_model(model: str) -> str:
       - alles andere (Claude `claude-…` u. a.) → unverändert; LiteLLM erkennt es
         am blanken Namen.
     """
-    if not model or "/" in model:
+    if not model:
+        return model
+    if model in _MODEL_ALIASES:
+        return _MODEL_ALIASES[model]
+    if "/" in model:
         return model
     if model.startswith(_MISTRAL_MODEL_PREFIXES):
         return "mistral/" + model
