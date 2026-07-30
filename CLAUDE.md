@@ -14,9 +14,10 @@
   wie es gebaut wird.
 - den **Implementierungscode**
 - den **Ticket-Workflow** (GitHub Issues + Projects)
-- den **Methoden-Korpus** (`methode/`) — die versionierte Arbeits-Methode
-  (Commands, Subagents, Contracts, Hooks). SSoT; `~/.claude` ist Deploy-Ziel
-  (`methode/deploy-methode.sh`). Modell: `methode/README.md`, decisions/RAT-23.
+- den **Methoden-Korpus** — die versionierte Arbeits-Methode (Commands,
+  Subagents, Contracts, Hooks). SSoT lebt seit dem Lotse-Cutover (RAT-23 Stufe 2)
+  im **eigenen Repo `lotse`** (`~/repos/lotse`), NICHT mehr unter `methode/` hier;
+  `~/.claude` ist Deploy-Ziel (`lotse/deploy.sh`). Modell: `~/repos/lotse/README.md`.
   Tool-neutraler Einstieg: `AGENTS.md` (Repo-Root).
 
 Das *Warum* — Vision, Kontext, Begründung — lebt im Repo `xbuddy-knowledge`
