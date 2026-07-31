@@ -108,6 +108,16 @@ die betroffenen Services ab — **geteilter Mapper** mit
 (Falsch-grün-Schutz). Der Release-Worktree (RAT-14-b2) bleibt außerhalb Stufe 1;
 Runner-Health (#1113) ist eine eigene Autonomie-Zeile mit 48h-Dry-Run.
 
+**Ergänzung — Bot-Services ohne HTTP (T1666):** Telegram-Polling-Bots (eltern-chat)
+haben keinen HTTP-Stack und können deshalb kein `/healthz` exponieren. Sie werden
+stattdessen per **Heartbeat-Datei** überwacht: Der Bot schreibt nach jedem
+erfolgreichen `getUpdates`-Poll (auch bei leerer Update-Liste) den aktuellen
+Unix-Timestamp als einzeiligen Integer atomar in
+`<XBUDDY_DATA_DIR>/eltern-chat/heartbeat`. Ein externer Alerting-Poller
+(`#1646`) liest diese Datei und schlägt Alarm, wenn der Timestamp zu alt wird.
+Das ist eine **Ergänzung** von SVC-6 (Grundsatz „jeder Service ist überwachbar"
+bleibt unverändert), keine Ausnahme.
+
 ### SVC-7 — Startup-Secret-Preflight: fehlende Secrets brechen sichtbar, nicht still
 
 Jeder Service, der zum Betrieb bestimmte Secrets/Zugangsdaten braucht (Bot-Token,
