@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   set-default-status:
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     # Epics (langlebige Initiativen) leben ausserhalb des status:*-Lebenslaufs
     # und duerfen kein Auto-status:spec bekommen. Siehe conventions/epics.md.
     # Greift nur, wenn `epic` schon beim opened-Event gesetzt ist.
