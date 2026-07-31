@@ -135,7 +135,6 @@ def test_heim_shell_build_id_nutzt_shell_registry(monkeypatch, client):
         return 1.0
 
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
-    monkeypatch.setattr(seiten_main, "_lookup_display_id", lambda panel_id: None)
 
     # RAT-32: /shell/ ist Cookie-only-hart (Operator-IP gestrichen) — via Cookie auth.
     client.set_cookie(_sc.COOKIE_NAME, _sc.sign_session("testpanel-display", "testtoken-t1284"))

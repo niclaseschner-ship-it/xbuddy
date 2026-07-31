@@ -95,10 +95,8 @@ def test_auth_mode_env_seam_default_observe():
 
 
 @pytest.fixture
-def seiten_client(monkeypatch):
-    seiten_main.configure(bot_token=BOT_TOKEN, router_url="http://router.test:5000")
-    # SHELL-2-Lookup deterministisch stubben (kein Live-Router).
-    monkeypatch.setattr(seiten_main, "_lookup_display_id", lambda pid: DISPLAY_ID)
+def seiten_client():
+    seiten_main.configure(bot_token=BOT_TOKEN)
     seiten_main.app.testing = True
     return seiten_main.app.test_client()
 
@@ -298,7 +296,7 @@ def test_auth_pair_e6c_kein_geraete_write(tmp_path):
     `geraete_registry_path` in configure() belegt, dass die Naht entfernt
     wurde (RAT-31 E6c, geraete/ gelöscht #1565).
     """
-    seiten_main.configure(bot_token=BOT_TOKEN, router_url="http://router.test:5000")
+    seiten_main.configure(bot_token=BOT_TOKEN)
     client = seiten_main.app.test_client()
     token = sc.sign_pairing(DISPLAY_ID, BOT_TOKEN)
     resp = client.get("/auth/pair?token=%s" % token)
