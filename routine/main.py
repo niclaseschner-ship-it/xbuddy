@@ -24,7 +24,6 @@ Port: 5050 (ROUTINE-15).
 import argparse
 import contextlib
 import dataclasses
-import functools
 import json
 import logging
 import os
@@ -38,7 +37,15 @@ if __package__:
 else:
     from routine._jsonio import read_json_or_empty
 
-from flask import Flask, g, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -51,6 +58,7 @@ from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 
 if __package__:
@@ -268,67 +276,57 @@ def _get_familie_client():
     return _familie_client_mod.FamilieClient(origin_url=origin)
 
 
-def require_init_data(fn):
-    """Decorator: SOFT-AUTH (V3, #898) — Header optional.
+def _get_init_data_config():
+    """Tma-Config (``max_age_seconds``) — gecacht im runtime-Dict oder frisch.
 
-    Verhalten:
-    - Fehlt Authorization-Header: pass-through, g.init_data = None.
-      Grund: Kind-Tablet-Calls (Display-View-JS) haben kein initData, rufen
-      aber dieselben /api/v1/routine/*-Routen wie die Eltern-Mini-App.
-    - Header vorhanden, ungültig: 401.
-    - Header vorhanden, gültig + Mitglied: g.init_data gesetzt.
-    - Header vorhanden, gültig + Nicht-Mitglied: 403.
-    - Localhost-Bypass (Server-zu-Server): pass-through.
-
-    Routes, die Eltern-only-Verhalten brauchen, prüfen explizit g.init_data.
+    Wörtlich der vormals inline im SOFT-Decorator gelesene Pfad
+    (``runtime.get("init_data_config")`` → ``_init_data_mod.load_config()`` +
+    Cache). Getter-Naht für die AUTH-Decorator-Lib-Factory (#1639).
     """
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        # Localhost-Bypass für Internal-Service-Calls.
-        if (not request.headers.get("X-Forwarded-For")
-                and request.remote_addr in ("127.0.0.1", "::1")):
-            g.init_data = None
-            return fn(*args, **kwargs)
+    cfg = runtime.get("init_data_config")
+    if cfg is None:
+        cfg = _init_data_mod.load_config()
+        runtime["init_data_config"] = cfg
+    return cfg
 
-        # V3 Soft-Auth: Header optional. Fehlt ODER leerer "tma "-Wert
-        # (Mini-App-JS außerhalb Telegram-Kontext) → pass-through.
-        auth_header = (request.headers.get("Authorization") or "").strip()
-        if not auth_header or auth_header.lower() in ("tma", "tma "):
-            g.init_data = None
-            return fn(*args, **kwargs)
-        if auth_header.lower().startswith("tma ") and not auth_header[4:].strip():
-            g.init_data = None
-            return fn(*args, **kwargs)
 
-        # Header da → validieren.
-        bot_token = _get_bot_token()
-        if not bot_token:
-            logger.error("MAD-7: %s nicht gesetzt — Mini-App-Route nicht nutzbar.", _ENV_BOT_TOKEN)
-            return ("", 500)
+# AUTH-8: 401 rendert eine Anweisungsseite statt eines rohen Status-Codes
+# (kanonisches Re-Pair-HTML analog photo/essen — routine hatte unter SOFT
+# keins, weil der SOFT-Pfad nie 401 auf fehlende Quelle warf).
+_AUTH_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
 
-        cfg = runtime.get("init_data_config")
-        if cfg is None:
-            cfg = _init_data_mod.load_config()
-            runtime["init_data_config"] = cfg
 
-        try:
-            init_data = _init_data_mod.validate_header(
-                auth_header,
-                bot_token,
-                cfg["max_age_seconds"],
-            )
-        except _init_data_mod.InitDataError:
-            return ("", 401)
+def _auth_401():
+    """AUTH-8: 401 mit HTML-Anweisungsseite (nicht roher Status-Code)."""
+    resp = make_response(_AUTH_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
 
-        # FAM-7/8: User-ID gegen Familien-Registry prüfen (HTTP-Pfad, T1015).
-        familie_ids = _get_familie_client().get_telegram_ids()
-        if familie_ids is not None and init_data.user_id not in familie_ids:
-            logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
-            return ("", 403)
 
-        g.init_data = init_data
-        return fn(*args, **kwargs)
-    return wrapper
+# Decorator: HART-AUTH (auth.md AUTH-2/3/5/8, #1639 Phase-2-Migration). Der
+# frühere hand-inline SOFT-Wrapper (V3 #898, pass-through ohne Cookie) ist auf
+# die AUTH-Decorator-Lib-HART-Factory geflippt — SOFT-Pass-through stoppte den
+# PII-Leak nicht (Spec auth.md „AUTH-Decorator-Lib": routine migriert auf
+# HART-Cookie). Der Name `require_init_data` BLEIBT (AUTH-9-Coverage-Test trägt
+# per AST-Namen); die Buddy-eigenen Getter + `_auth_401` gehen als Closures rein.
+require_init_data = make_require_init_data(
+    get_bot_token=_get_bot_token,
+    get_familie_client=_get_familie_client,
+    get_init_data_config=_get_init_data_config,
+    auth_401=_auth_401,
+)
 
 
 # ============================================================
@@ -434,6 +432,7 @@ def index():
 
 
 @app.route("/api/v1/routine/config", methods=["GET"])
+@require_init_data
 def api_config_get():
     """Zeiten-Lese-API (ROUTINE-14, #728, URL-14).
 
@@ -465,6 +464,7 @@ def api_config_get():
 
 
 @app.route("/api/v1/routine/config", methods=["PUT"])
+@require_init_data
 def api_config():
     """Zeiten-Schreib-API (ROUTINE-14, #343, URL-14).
 
@@ -522,6 +522,7 @@ def _items_zeitzone():
 
 
 @app.route("/api/v1/routine/items", methods=["GET"])
+@require_init_data
 def api_items_get():
     """Aktuelle Items-Liste lesen (ROUTINE-14, V1.2, #469).
 
@@ -559,6 +560,7 @@ def api_items_get():
 
 
 @app.route("/api/v1/routine/items", methods=["POST"])
+@require_init_data
 def api_items_post():
     """Punkt anlegen (ROUTINE-14, #354, URL-14).
 
@@ -593,6 +595,7 @@ def api_items_post():
 
 
 @app.route("/api/v1/routine/items", methods=["PUT"])
+@require_init_data
 def api_items_put():
     """Geordnete default-Liste ersetzen (ROUTINE-14, #354, URL-14).
 
@@ -618,6 +621,7 @@ def api_items_put():
 
 
 @app.route("/api/v1/routine/items/<item_id>", methods=["DELETE"])
+@require_init_data
 def api_items_delete(item_id):
     """Punkt entfernen (ROUTINE-14, #354, URL-14).
 
