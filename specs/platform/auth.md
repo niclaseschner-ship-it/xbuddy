@@ -405,8 +405,14 @@ Antiberater-geprüft): Heimat ist **`tools/initdata/auth_gate.py`** als Factory
 (nicht `eltern-chat/init_data.py`, der frühere Kandidat) — siehe Abschnitt
 *AUTH-Decorator-Lib* unten. AUTH-9 prüft weiterhin, dass jede AUTH-3-Route den
 Decorator trägt; die schrittweise Migration je Buddy (#1383) hält AUTH-9 pro
-Schritt grün. Der Prosa-Endstand („n=3 eingelöst") wird mit dem letzten
-Migrations-Schritt nachgezogen.
+Schritt grün. **n=3 eingelöst (2026-07-31):** Die Lib-Auslagerung ist vollzogen — alle
+AUTH-3/AUTH-5-Buddies tragen den Decorator aus der Factory
+`tools/initdata/auth_gate.py`; keine buddy-eigene `require_*`-Definition
+existiert mehr in `*/main.py`. Ledger-Spur: #1626 (essen/kibuddy/photo/plan),
+#1628 (seiten-dual), #1639 (routine), #1640 (hoerspiel), #1655 (SOFT-Cleanup).
+**Kill-Kriterium erfüllt (verifiziert 2026-07-31):**
+`grep -rn "def require_init_data\|def require_mini_app_auth\|def require_dual_gate" --include=main.py`
+= 0 Treffer auf origin/main.
 
 ### AUTH-Decorator-Lib (ratifiziert 2026-07-30, Bau via #1383)
 
@@ -440,6 +446,8 @@ sich, weil plans Getter den Slot bereits kapselt — **kein** repo-weites Rename
 (#1639/#1640) auf dieselbe HART-Factory. Pro Schritt AUTH-9-Test grün +
 real-route-Smoke (401-HTML byte-gleich). `test_auth_decorator_coverage.py` ist um
 routine + hoerspiel zu erweitern (heute in keiner MODULE_MAP).
+✓ eingelöst 2026-07-31 — vollständige Migration abgeschlossen (#1626/#1628/#1639/#1640/#1655);
+`test_auth_decorator_coverage.py` deckt jetzt alle MODULE_MAP-Einträge ab.
 
 Der Decorator-Code (egal in welchem Buddy) prüft zuerst — **verbindlich und
 load-bearing** — BEIDE Bedingungen zusammen:
