@@ -159,6 +159,21 @@ nicht_automatisiert: Live-SSE-Verhalten hinter nginx-Proxy · manuelle_probe:
 Shell öffnen, 50 Tile-Taps + Netz-Cut/-Wiederkehr; Active-Tile bleibt konsistent,
 keine Doppel-Reloads, EventSource-Zahl wächst nach Reconnects nicht (Kill-Kriterium).
 
+> **RAT-35 n=3-Abnahme (#1602):** Nics realer Betrieb ist **Pi + 2 Tablets = n=3**
+> am selben Link (`/shell/mias-panel-01`) — die RAT-35-Isolation muss über die
+> 2-Shell-Probe hinaus bei drei Geräten halten. Der **Server-Anteil** ist
+> automatisiert (`test_t1602_publish_n3_erreicht_nur_eigene_sid` — Trigger auf A
+> erreicht B **und** C nicht; `test_t1602_reconnect_zyklus_n3_leakt_keine_sessions`
+> — fünf Cut/Reconnect-Runden lassen die Session-Zahl nicht wachsen). Der
+> **Geräte-Anteil** bleibt manuelle_probe (nicht headless automatisierbar):
+> alle drei Geräte installieren die PWA vom selben Link, jedes an seiner
+> Auflösung (Pi 1920, zwei Tablet-Breiten). Nachweise: (1) **Render** — jedes
+> Gerät ohne Overflow/Überlappung (SHELL-12 Device-Fit-Scale `innerWidth/1920`);
+> (2) **Isolation** — Tap auf Gerät A ändert B **und** C nicht; (3) **Kein Leak** —
+> nach Netz-Cut/Reconnect auf allen dreien wächst die EventSource-/`sid`-Zahl nicht.
+Test-Anker (n=3-Server): seiten/tests/test_shell_sse.py::test_t1602_publish_n3_erreicht_nur_eigene_sid,
+seiten/tests/test_shell_sse.py::test_t1602_reconnect_zyklus_n3_leakt_keine_sessions
+
 ### SHELL-5 — Rechtes Pane swappt nur `iframe.src`, keine Codekopie
 > **RAT-31 E2 (2026-07-27, #1495):** Das rechte Pane bettet keinen fremden
 > Display-Client-Iframe mehr ein — es swappt den `src` seines eigenen

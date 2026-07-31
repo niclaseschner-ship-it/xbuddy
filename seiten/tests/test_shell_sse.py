@@ -242,6 +242,74 @@ def test_rat35_leerer_subscriber_set_gc_loescht_session():
         )
 
 
+def test_t1602_publish_n3_erreicht_nur_eigene_sid():
+    """T1602 (RAT-35, n=3-Abnahme): Nics realer Betrieb ist Pi + 2 Tablets = DREI
+    Geräte am selben Panel-Link, jedes mit eigener ephemerer `sid`. Server-seitiger
+    Beweis der Isolations-Invariante bei n=3: ein Trigger auf Gerät A landet NUR bei
+    A — B UND C bleiben beide leer (nicht nur „das eine andere" wie im n=2-Test).
+
+    Das ist der Server-Anteil der #1602-Abnahme; der Tap-Isolations-Nachweis auf
+    echter Hardware bleibt manuelle_probe (heim-shell.md SHELL-4, nicht headless
+    automatisierbar)."""
+    import queue as _queue
+
+    sid_pi = "sid-pi-1920"
+    sid_tab_a = "sid-tablet-a"
+    sid_tab_b = "sid-tablet-b"
+
+    q_pi = seiten_main._shell_subscribe(sid_pi)
+    q_a = seiten_main._shell_subscribe(sid_tab_a)
+    q_b = seiten_main._shell_subscribe(sid_tab_b)
+    try:
+        # Trigger NUR auf dem Pi.
+        seiten_main._apply_shell_trigger(sid_pi, {"app": "hoerspiel", "view": "player"})
+
+        # Pi-Subscriber bekommt das Event ...
+        published_pi = q_pi.get(timeout=1.0)
+        assert published_pi is not None
+        assert published_pi["payload"]["url"] == "/display/hoerspiel/player"
+
+        # ... BEIDE Tablets bekommen NICHTS (n=3-Isolations-Beweis: kein Leak auf
+        # ein weiteres Gerät, nicht nur auf „das eine andere").
+        with pytest.raises(_queue.Empty):
+            q_a.get(timeout=0.2)
+        with pytest.raises(_queue.Empty):
+            q_b.get(timeout=0.2)
+
+        # State ist pro sid getrennt — nur der Pi trägt Zustand.
+        assert _shell_state_for(sid_pi) is not None
+        assert _shell_state_for(sid_tab_a) is None
+        assert _shell_state_for(sid_tab_b) is None
+    finally:
+        seiten_main._shell_unsubscribe(sid_pi, q_pi)
+        seiten_main._shell_unsubscribe(sid_tab_a, q_a)
+        seiten_main._shell_unsubscribe(sid_tab_b, q_b)
+
+
+def test_t1602_reconnect_zyklus_n3_leakt_keine_sessions():
+    """T1602 (RAT-35 SHELL-4-Kill-Kriterium auf n=3): Wiederholte Netz-Cut/
+    Reconnect-Zyklen mit drei Geräten dürfen die Session-Zahl NICHT wachsen
+    lassen (Geister-`sid`-Leak). Nach jedem vollständigen Disconnect-Zyklus ist
+    die Session-Menge wieder auf dem Ausgangsstand — der Server-Beweis für das
+    „EventSource-/`sid`-Zahl wächst nicht"-Kriterium des #1602-Gates."""
+    with seiten_main._shell_sessions_lock:
+        baseline = len(seiten_main._shell_sessions)
+
+    sids = ["sid-pi-1920", "sid-tablet-a", "sid-tablet-b"]
+    for _ in range(5):  # fünf Cut/Reconnect-Runden
+        queues = [(s, seiten_main._shell_subscribe(s)) for s in sids]
+        with seiten_main._shell_sessions_lock:
+            assert len(seiten_main._shell_sessions) == baseline + 3
+        # Netz-Cut: alle drei Geräte verlieren die Verbindung.
+        for s, q in queues:
+            seiten_main._shell_unsubscribe(s, q)
+        with seiten_main._shell_sessions_lock:
+            assert len(seiten_main._shell_sessions) == baseline, (
+                "Nach Reconnect-Zyklus dürfen keine Geister-Sessions bleiben "
+                "(SHELL-4-Kill-Kriterium, n=3)"
+            )
+
+
 def test_rat35_events_ohne_sid_fallen_auf_legacy():
     """RAT-35 (#1546): Ein POST OHNE ?sid= (gecachtes altes Shell-Dokument) trifft
     die weiche "legacy"-Session — funktionsfähig, additiv, kein 400/Registry."""
