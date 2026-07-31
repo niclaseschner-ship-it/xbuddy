@@ -1,16 +1,24 @@
 <!DOCTYPE html>
-<!-- HSP-33: Hörspiel-Eltern-Mini-App. Wohnort hoerspiel/templates/eltern.html;
+<!-- HSP-33 / T1681: Hörspiel-Eltern-PWA. Wohnort hoerspiel/templates/eltern.html;
      seiten-Service liefert aus (analog routine-anpassen.html).
-     Auth: Authorization: tma <initData>-Header (MAD-7). Tab-Form: 2 Top-Tabs.
-     Tab-Deeplink via URL-Hash #einstellungen/#folgen (HSP-33). -->
+     ESB-1: PWA-Mantel via pwa_mantel.REGISTRY['hoerspiel-eltern'] (PWAM-5).
+     Auth: HTML-Shell public (MAD-7), ensureAuth() im JS; Daten AUTH-3-hart (ESB-2).
+     Tab-Form: 2 Top-Tabs. Tab-Deeplink via URL-Hash #einstellungen/#folgen (HSP-33). -->
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#47503C">
   <!-- Cache-Buster: Telegram cached Mini-App-Assets aggressiv -->
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <title>Hörspiel · XBuddy</title>
+
+  <!-- PWA-Mantel (T1681 / ESB-1 / PWAM-5): manifest + Icons (absoluter Pfad je kind_id) -->
+  <link rel="manifest" href="/seiten/hoerspiel/{{ kind_id }}/eltern/manifest.json">
+  <link rel="icon" href="/seiten/hoerspiel/{{ kind_id }}/eltern/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/seiten/hoerspiel/{{ kind_id }}/eltern/icon-192.png">
+
   <!-- eltern.{css,js} leben in hoerspiel/static/ (HSP-33), ausgeliefert vom
        hoerspiel-Service unter /display/hoerspiel/static/*. platform.js bleibt
        beim seiten-Service (zentral). -->
@@ -54,5 +62,25 @@
 
   <!-- Toast-Hinweis für transiente Meldungen (MAD-Toast-Pattern) -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- PWA-Naht: Service-Worker (T1681 / ESB-1 / PWAM-5) -->
+  <script>
+    (function () {
+      'use strict';
+
+      // ── Service-Worker registrieren (T1681 / hoerspiel-eltern / PWAM-5) ──────
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/seiten/hoerspiel/{{ kind_id }}/eltern/sw.js', { scope: '{{ sw_scope }}' })
+            .catch(function (err) {
+              console.warn('[pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
+            });
+        });
+      } else {
+        console.warn('[pwa] Service-Worker nicht unterstuetzt.');
+      }
+    })();
+  </script>
 </body>
 </html>

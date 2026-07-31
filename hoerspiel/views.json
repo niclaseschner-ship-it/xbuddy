@@ -1,6 +1,21 @@
 {
   "views": [
     {
+      "slug": "hoerspiel-eltern",
+      "typ": "pwa",
+      "pfad": "/seiten/hoerspiel/mia/eltern",
+      "label": "Hörspiel verwalten",
+      "synonyme": ["hörspiel", "einstellungen", "folgen", "alben verwalten", "hoerspiel verwalten"],
+      "zeigt": "Hörspiel-Einstellungen und Folgen für ein Kind verwalten (Eltern-Ansicht).",
+      "zielgruppe": "eltern",
+      "pwa": {
+        "manifest": "/seiten/hoerspiel/mia/eltern/manifest.json",
+        "start_url": "/seiten/hoerspiel/mia/eltern",
+        "service_worker": "/seiten/hoerspiel/mia/eltern/sw.js"
+      },
+      "auth": "tma"
+    },
+    {
       "slug": "alben-mia",
       "pfad": "/display/hoerspiel/mia/alben",
       "label": "Mias Hörspiele",

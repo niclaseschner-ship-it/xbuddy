@@ -1131,13 +1131,66 @@ def routine_anpassen_asset_view(asset):
     return send_from_directory(root, asset, mimetype=mimetype)
 
 
+# ============================================================
+#  HSP-33 / T1681 — Hörspiel-Eltern-PWA (ESB-1..4 / PWAM-5)
+# ============================================================
+#
+# Spec-Anker: specs/buddies/hoerspiel.md HSP-33 + conventions/eltern-seite.md ESB-1..4.
+# Surface:
+#   GET /seiten/hoerspiel/<kind_id>/eltern          — HTML-Shell (Template hoerspiel/)
+#   GET /seiten/hoerspiel/<kind_id>/eltern/manifest.json — build_manifest() aus Lib
+#   GET /seiten/hoerspiel/<kind_id>/eltern/sw.js         — render_sw() aus Lib
+#   GET /seiten/hoerspiel/<kind_id>/eltern/icon-*.png    — aus hoerspiel/static/
+#
+# ESB-1 (PWAM-5): pwa_mantel.REGISTRY['hoerspiel-eltern'] — scope: /seiten/hoerspiel/.
+# ESB-2: Datenrouten (config/alben/resume/themen) sind AUTH-3-hart (@require_init_data).
+# ESB-3: hoerspiel/views.json traegt Eintrag mit zielgruppe: eltern (T1681).
+# ESB-4: eltern.css traegt kein body-overflow:hidden (scrollbar, nicht Kiosk-Sorte).
+#
+# scope-Entscheidung (T1681): /seiten/hoerspiel/ deckt ALLE kind_id-Instanzen;
+# start_url ist /seiten/hoerspiel/mia/eltern (repraesentativer kanonischer Pfad).
+# eltern.js laedt kind_id aus location.pathname — kein Mantel-Fork pro Kind.
+# Auth: HTML-Shell public (MAD-7: ensureAuth() im JS). SW/manifest: credential-los.
+#
+# Icons: hoerspiel/static/ (192/512/maskable, geteilt mit hoerspiel-player).
+# Manifest + sw.js lib-generiert — KEIN manifest.json/sw.js auf Platte.
+
+_HOERSPIEL_ELTERN_COMPONENT = "hoerspiel-eltern"
+
+_HOERSPIEL_ELTERN_MIME = {
+    ".json": "application/manifest+json",
+    ".js":   "application/javascript",
+    ".png":  "image/png",
+}
+
+
+def _hoerspiel_eltern_asset_root():
+    """Asset-Wurzel fuer hoerspiel-eltern-Mantel-Icons (hoerspiel/static/).
+
+    Geteilt mit hoerspiel-player (gleiche Icons). Test-Naht:
+    runtime['hoerspiel_eltern_asset_dir'].
+    """
+    override = (runtime.get("hoerspiel_eltern_asset_dir")
+                if isinstance(runtime, dict) else None)
+    if override:
+        return override
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, "hoerspiel", "static")
+
+
+def _hoerspiel_eltern_build_id():
+    """build_id fuer den hoerspiel-eltern-SW aus [eltern.js, eltern.css]
+    (PWAM-4/5, pwa_mantel.REGISTRY['hoerspiel-eltern']).
+    """
+    return pwa_mantel.build_id_for(_HOERSPIEL_ELTERN_COMPONENT, _hoerspiel_eltern_asset_root())
+
+
 @app.route("/seiten/hoerspiel/<kind_id>/eltern", methods=["GET"])
 def hoerspiel_eltern_view(kind_id: str):
-    """HSP-33: Hörspiel-Eltern-Mini-App-View (kind_id-tragend, HSP-26 / URL-3a).
+    """HSP-33 / T1681: Hörspiel-Eltern-PWA-Shell (kind_id-tragend, ESB-1, PWAM-5).
 
-    Auth (MAD-7 / HSP-39): Authorization: tma <initData>-Header Pflicht.
-    Fehlender oder ungültiger Header → 401 + Klartext.
-    Nicht-Familienmitglied → 403.
+    Auth (MAD-7): HTML-Skeleton ohne Auth, JS macht ensureAuth().
+    Datenrouten sind AUTH-3-hart (@require_init_data, ESB-2).
 
     Template liegt in hoerspiel/templates/eltern.html (HSP-33: Wohnort im
     hoerspiel/-Modul). Rendered via absoluten Pfad analog anderen Mini-Apps.
@@ -1148,17 +1201,11 @@ def hoerspiel_eltern_view(kind_id: str):
     nginx routet /api/v1/hoerspiel/... zum hoerspiel-Buddy (Port 5053).
     kind_id kommt aus location.pathname (eltern.js, T970).
 
-    Cache-Buster: build_id aus mtime von hoerspiel/static/eltern.js.
-    response-Header no-store, damit jeder Open das HTML neu holt.
+    Cache-Buster: build_id aus pwa_mantel (eltern.js + eltern.css, PWAM-4/5).
     """
-    # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth. JS macht ensureAuth().
-    # build_id aus mtime von eltern.js in hoerspiel/static/
-    _REPO_ROOT_SEITEN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    hoerspiel_static = os.path.join(_REPO_ROOT_SEITEN, "hoerspiel", "static")
-    try:
-        build_id = str(int(os.path.getmtime(os.path.join(hoerspiel_static, "eltern.js"))))
-    except OSError:
-        build_id = "0"
+    # MAD-7-konform: HTML-Render-Route laed Skeleton OHNE Auth. JS macht ensureAuth().
+    build_id = _hoerspiel_eltern_build_id()
+    sw_scope = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT].sw_scope
 
     # INST-1 (#1670): Instanz-Liste server-injiziert (analog hoerspiel_player_view).
     # </script>-Guard analog CONN-7.
@@ -1169,17 +1216,64 @@ def hoerspiel_eltern_view(kind_id: str):
     instanzen_json = Markup(_instanzen_blob)
 
     # Template aus hoerspiel/templates/ via absolutem Pfad.
-    hoerspiel_templates = os.path.join(_REPO_ROOT_SEITEN, "hoerspiel", "templates")
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    hoerspiel_templates = os.path.join(repo_root, "hoerspiel", "templates")
     from jinja2 import Environment, FileSystemLoader
     env = Environment(loader=FileSystemLoader(hoerspiel_templates), autoescape=True)
     tmpl = env.get_template("eltern.html")
-    html = tmpl.render(build_id=build_id, instanzen_json=instanzen_json)
+    html = tmpl.render(build_id=build_id, instanzen_json=instanzen_json, sw_scope=sw_scope,
+                       kind_id=kind_id)
 
     resp = make_response(html, 200)
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+@app.route("/seiten/hoerspiel/<kind_id>/eltern/<path:asset>", methods=["GET"])
+def hoerspiel_eltern_asset_view(kind_id: str, asset: str):
+    """T1681 / ESB-1: PWA-Mantel-Asset-Auslieferung fuer hoerspiel-eltern (PWML-1/2).
+
+    - manifest.json → pwa_mantel.build_manifest(REGISTRY['hoerspiel-eltern']) (PWML-1).
+    - sw.js         → pwa_mantel.render_sw('hoerspiel-eltern', build_id) (PWML-2), no-store.
+    - icon-*.png    → statisch aus hoerspiel/static/ mit realpath-Traversal-Guard.
+
+    Auth: public (HTML-Shell public, MAD-7). SW/manifest: credential-los (Browser-Fetch).
+    """
+    from flask import abort, send_from_directory
+
+    cfg = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT]
+
+    if asset == "manifest.json":
+        resp = make_response(json.dumps(pwa_mantel.build_manifest(cfg)), 200)
+        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    if asset == "sw.js":
+        build_id = _hoerspiel_eltern_build_id()
+        body = pwa_mantel.render_sw(_HOERSPIEL_ELTERN_COMPONENT, build_id=build_id)
+        resp = make_response(body, 200)
+        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        # Service-Worker-Allowed: sw_scope (/seiten/hoerspiel/) deckt alle kind_id-Pfade.
+        resp.headers["Service-Worker-Allowed"] = cfg.sw_scope
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    # Statische Icons aus hoerspiel/static/ mit Traversal-Guard.
+    root = os.path.realpath(_hoerspiel_eltern_asset_root())
+    target = os.path.realpath(os.path.join(root, asset))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    if os.path.basename(target).startswith("_"):
+        abort(404)
+
+    ext = os.path.splitext(target)[1].lower()
+    mimetype = _HOERSPIEL_ELTERN_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(root, asset, mimetype=mimetype)
 
 
 # ============================================================

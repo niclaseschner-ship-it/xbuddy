@@ -426,6 +426,30 @@ REGISTRY: dict[str, MantelConfig] = {
         sw_script_route="/seiten/routine/anpassen/sw.js",
         sw_scope="/seiten/routine/anpassen/",
     ),
+    # ── Hörspiel-Eltern (T1681 / ESB-1) — eltern-facing PWA-Mantel ──
+    #    Eigenstaendiger Mantel NEBEN hoerspiel-player (Kind-Sorte).
+    #    Route: /seiten/hoerspiel/<kind_id>/eltern (per-kind_id).
+    #    Manifest via build_manifest(), sw.js via render_sw() — kein Platte-Fork.
+    #    Icons: wiederverwendet aus hoerspiel/static/ (192/512/maskable, Motiv-Folge offen).
+    #    start_url/scope kanonisch ohne kind_id-Segment: der Mantel gilt fuer alle
+    #    Eltern-Instanzen — eltern.js laedt kind_id aus location.pathname.
+    #    Auth: HTML-Shell public (MAD-7); Datenrouten AUTH-3-hart (@require_init_data, ESB-2).
+    "hoerspiel-eltern": MantelConfig(
+        build_id_source_set=("eltern.js", "eltern.css"),
+        name="Hörspiel verwalten · XBuddy",
+        short_name="Hörspiel",
+        start_url="/seiten/hoerspiel/mia/eltern",
+        icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
+        display="fullscreen",
+        theme_color="#47503C",
+        background_color="#F5F1E8",
+        # network-first: HTML frisch vom Server (Stale-Cache-Haertung analog routine/plan);
+        # Offline-Fallback bleibt ueber den Cache erhalten.
+        html_cache_mode="network-first",
+        stop_prefixes=("/api/v1/hoerspiel/",),
+        sw_script_route="/seiten/hoerspiel/mia/eltern/sw.js",
+        sw_scope="/seiten/hoerspiel/",
+    ),
     # ── Hörspiel-Player (HSP-47) — erster Voll-Konsument ÜBER die Lib ──
     #    Manifest via build_manifest(), sw.js via render_sw() (kein sw.js/
     #    manifest.json auf Platte). Assets (player.{css,js} + Icons) liefert
