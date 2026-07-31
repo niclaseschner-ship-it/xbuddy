@@ -23,11 +23,17 @@ const KIND_ID = (() => {
   return m ? m[1] : 'mia';
 })();
 
-// ── KIND_IDS_V1: hörspiel-lokale Instanz-Liste (HSP-35 / HSP-43, #973 / #1263) ──
-// Treibt Folgen-Tab-Aggregation. Kopie der Instanz-Liste (kind_id-Only) —
-// Muster seiten `_HSP_INSTANZEN`, keine Registry, kein API-Endpoint (in-file, HSP-43).
-// FAM-7-Generalisierung bleibt Folge-Ticket.
-const KIND_IDS_V1 = ["mia", "finn", "emil"]; // +emil #1263 (HSP-43)
+// ── KIND_IDS_V1: Instanz-Liste aus window.__HSP_INSTANZEN__ (INST-1, #1670) ──
+// Treibt Folgen-Tab-Aggregation. Quelle: server-injizierter Blob (seiten-View,
+// analog player.js HSP-49). Kein Hardcode mehr — letzte HSP-Slug-Kopie entfernt.
+// Shape: window.__HSP_INSTANZEN__ = [{kind_id, name, foto_url}] (volle Objekte,
+// gleiche Form wie player.js); eltern.js braucht nur Slugs → .map(e=>e.kind_id).
+// Fallback ["mia","finn","emil"] greift wenn Injektion fehlt (Dev/Standalone).
+const KIND_IDS_V1 = (
+  Array.isArray(window.__HSP_INSTANZEN__) && window.__HSP_INSTANZEN__.length > 0
+    ? window.__HSP_INSTANZEN__.map(e => e.kind_id)
+    : ["mia", "finn", "emil"]
+);
 
 // ── MAD-7 Auth-Header ────────────────────────────────────────────────────────
 // initData aus Telegram-WebApp — bei jedem fetch()-Call als Header gesendet.
