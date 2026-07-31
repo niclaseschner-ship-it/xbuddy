@@ -1032,3 +1032,35 @@ def test_t1662_plan_einstellungen_css_kein_body_overflow_hidden():
                 f"plan-einstellungen.css: '{selektor}'-Block enthaelt overflow:hidden "
                 f"— T1662 Scroll-Guard verletzt:\n{block}"
             )
+
+
+# ── T1696: Scroll-Container-Guard (body traegt height:100dvh + overflow-y:auto) ──
+
+def test_t1696_plan_einstellungen_css_body_scroll_container():
+    """T1696: plan-einstellungen.css body-Block traegt height:100dvh + overflow-y:auto.
+
+    Telegram-Desktop/Android-WebView scrollt den frei wachsenden Body NICHT
+    zuverlaessig (iOS schon). Der gebundene Scroll-Container (height:100dvh,
+    overflow-y:auto) ist der verifizierte Fix (T1662-Muster, Nic-Verifikation
+    #1662 Windows). plan-einstellungen.css nutzt einen kombinierten html,body-Block
+    plus separaten body-Block — der body-Block traegt den Scroll-Container-Fix.
+    """
+    import re
+    css_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.css")
+    with open(css_path, encoding="utf-8") as f:
+        content = f.read()
+
+    # Pruefe body-Block (auch den separaten, nach html,body-Kombinationsblock) auf
+    # gebundenen Scroll-Container. Alle body-Bloecke kombinieren.
+    body_blocks = re.findall(r'body\s*\{[^}]*\}', content, re.DOTALL)
+    assert body_blocks, "plan-einstellungen.css enthaelt keinen body-Block"
+
+    combined = "\n".join(body_blocks)
+    assert "height: 100dvh" in combined, (
+        "plan-einstellungen.css body-Block enthaelt kein 'height: 100dvh' "
+        "— T1696 Scroll-Container-Guard verletzt"
+    )
+    assert "overflow-y: auto" in combined, (
+        "plan-einstellungen.css body-Block enthaelt kein 'overflow-y: auto' "
+        "— T1696 Scroll-Container-Guard verletzt"
+    )
