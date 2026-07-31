@@ -5,6 +5,13 @@ braucht. Das Modul baut den JSON-Kontext für die Connector-PWA aus dem
 Track-A-Aggregator (``tools.llm.telemetry_read``) plus dem ZD-Slot-Inventar
 (nur Existenz/Status, CONN-7 — nie ein Key-Wert, nie ein Slot-Klartext-Name).
 
+3-Block-Sicht (#1669): Der Kontext trägt die Daten für die drei View-Blöcke —
+``gesamt_llm_eur`` + ``gesamt_7t_eur`` (Block ① Gesamtkosten, CONN-4),
+``je_buddy`` (Block ② „Welche App nutzt was", CONN-2), ``schnittstellen``
+(Block ③ Anbieter-Status/LiteLLM-Gateway, CONN-1). Die Datenform ändert sich
+gegenüber der Zwei-Sektionen-Fassung NICHT bis auf das ergänzte
+``gesamt_7t_eur``-Feld; die 3-Block-Gliederung ist rein clientseitig.
+
 Datenquellen:
   - ``var/llm/provider_calls.jsonl`` (LLMP-S4) via ``telemetry_read`` — Verbrauch
     und Kosten, Tail-Fenster 30 Tage (CONN-4).
@@ -339,6 +346,15 @@ def baue_context(jsonl_source="", *, today=None, slot_names=None, store_path=Non
     je_buddy = _je_buddy(events, today)
     gesamt = sum(r["kosten_eur"] for r in je_buddy if r.get("kosten_eur"))
 
+    # Block ① (CONN-4): 7-Tage-Summe für die prominente Gesamtkosten-Karte.
+    # Aus den bereits gerechneten daily-Serien der LLM-Zeilen (CHART_DAYS=7) —
+    # kein zusätzlicher Telemetrie-Lesevorgang, read-only.
+    gesamt_7t = sum(
+        p["est_cost_eur"] or 0.0
+        for r in je_buddy
+        for p in r.get("daily", [])
+    )
+
     return {
         "daten_ab": daten_ab(events),
         "fenster_tage": TAIL_DAYS,
@@ -346,5 +362,6 @@ def baue_context(jsonl_source="", *, today=None, slot_names=None, store_path=Non
         "schnittstellen": _schnittstellen(events, today, slots),
         "je_buddy": je_buddy,
         "gesamt_llm_eur": _round_eur(gesamt) if gesamt else (gesamt or None),
+        "gesamt_7t_eur": _round_eur(gesamt_7t) if gesamt_7t else (gesamt_7t or None),
         "zd_inventar": _zd_inventar(slots),
     }
