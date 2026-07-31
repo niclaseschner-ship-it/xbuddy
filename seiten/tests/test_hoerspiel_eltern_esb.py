@@ -247,7 +247,8 @@ def test_esb4_kein_body_overflow_hidden():
     import re
     body_blocks = re.findall(r'body\s*\{[^}]*\}', content, re.DOTALL)
     for block in body_blocks:
-        assert "overflow: hidden" not in block and "overflow:hidden" not in block, (
+        normalisiert = block.replace("overflow: hidden", "overflow:hidden")
+        assert "overflow:hidden" not in normalisiert, (
             f"eltern.css: body-Block enthaelt overflow:hidden — ESB-4 verletzt (Kiosk-Sorte):\n{block}"
         )
 
