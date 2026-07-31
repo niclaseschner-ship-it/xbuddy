@@ -1000,9 +1000,19 @@ def mini_app_uebersicht_view():
     return resp
 
 
+@app.route("/seiten/routine/anpassen/", methods=["GET"])
+def routine_anpassen_view_trailing_slash():
+    """ROUTINE-23 Trailing-Slash-Alias: GET /seiten/routine/anpassen/ → HTML (T1665).
+
+    manifest.json traegt start_url: "/seiten/routine/anpassen/" — der PWA-Open
+    nach Install laedt diese URL. Ohne diese Route landet der Nutzer in 404.
+    """
+    return routine_anpassen_view()
+
+
 @app.route("/seiten/routine/anpassen", methods=["GET"])
 def routine_anpassen_view():
-    """ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View.
+    """ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View (T1665: PWA-Mantel).
 
     Auth (MAD-7 / T708-C): Authorization: tma <initData>-Header Pflicht.
     Fehlender oder ungültiger Header → 401. Nicht-Familienmitglied → 403.
@@ -1017,14 +1027,108 @@ def routine_anpassen_view():
     und Iterationen werden im Phone nicht sichtbar (Befund Nic 2026-06-12).
     response-Header no-store zusaetzlich, damit jeder Open das HTML neu
     holt.
+
+    PWA-Mantel (T1665 / ROUTINE-23): manifest.json + sw.js werden DYNAMISCH
+    aus der Lib erzeugt (pwa_mantel.build_manifest / render_sw) — kein
+    statisches manifest.json/sw.js auf Platte.
     """
     # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth. JS macht ensureAuth().
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     build_id = pwa_mantel.build_id_for("routine", static_dir)
-    resp = make_response(render_template("routine-anpassen.html", build_id=build_id))
+    # T1665: sw_scope aus REGISTRY — Template nutzt {{ sw_scope }} (analog plan).
+    sw_scope = pwa_mantel.REGISTRY["routine"].sw_scope
+    resp = make_response(render_template("routine-anpassen.html", build_id=build_id, sw_scope=sw_scope))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+# ============================================================
+#  ROUTINE-23 (T1665) — PWA-Mantel-Asset-Auslieferung
+# ============================================================
+#
+# Spec-Anker: specs/buddies/routine.md ROUTINE-20/23 (T1665 reduzierter Sweep).
+# Surface:
+#   GET /seiten/routine/anpassen/manifest.json — build_manifest() aus Lib.
+#   GET /seiten/routine/anpassen/sw.js         — render_sw() aus Lib.
+#   GET /seiten/routine/anpassen/icon-*.png    — statisch aus seiten/static/routine/.
+#
+# Auth: Route selbst ist public (HTML-Skeleton ohne Auth, MAD-7). SW + manifest
+# sind technisch-public (Browser-Fetch credential-los wie bei plan).
+# Icon-Assets: public (analog plan / einkauf).
+#
+# Manifest + sw.js kommen aus der Lib (pwa_mantel.REGISTRY['routine']) —
+# KEIN manifest.json/sw.js auf Platte. Icons in seiten/static/routine/
+# (V1-Platzhalter aus plan-Icons, eigenes Motiv als Mini-Folge-Ticket).
+
+_ROUTINE_ANPASSEN_MIME = {
+    ".json": "application/manifest+json",
+    ".js":   "application/javascript",
+    ".png":  "image/png",
+}
+
+
+def _routine_anpassen_asset_root():
+    """Wurzelverzeichnis fuer Routine-Anpassen-PWA-Mantel-Icons (T1665).
+
+    Liegt unter seiten/static/routine/ (nur Icons — manifest.json/sw.js sind
+    Lib-generiert). Test-Naht: ueberschreibbar via runtime['routine_anpassen_asset_dir'].
+    """
+    override = runtime.get("routine_anpassen_asset_dir") if isinstance(runtime, dict) else None
+    if override:
+        return override
+    return os.path.join(os.path.dirname(__file__), "static", "routine")
+
+
+def _routine_anpassen_build_id():
+    """build_id fuer den routine-SW aus [routine-anpassen.js, platform.js]
+    (PWAM-4/5, pwa_mantel.REGISTRY['routine']).
+    """
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    return pwa_mantel.build_id_for("routine", static_dir)
+
+
+@app.route("/seiten/routine/anpassen/<path:asset>", methods=["GET"])
+def routine_anpassen_asset_view(asset):
+    """ROUTINE-23 / T1665: PWA-Mantel-Asset-Auslieferung ueber die Lib (PWML-1/2).
+
+    - manifest.json → pwa_mantel.build_manifest(REGISTRY['routine']) (PWML-1).
+    - sw.js         → pwa_mantel.render_sw('routine', build_id) (PWML-2), no-store.
+    - icon-*.png    → statisch aus seiten/static/routine/ mit realpath-Traversal-Guard.
+    """
+    from flask import abort, send_from_directory
+
+    cfg = pwa_mantel.REGISTRY["routine"]
+
+    if asset == "manifest.json":
+        resp = make_response(json.dumps(pwa_mantel.build_manifest(cfg)), 200)
+        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    if asset == "sw.js":
+        build_id = _routine_anpassen_build_id()
+        body = pwa_mantel.render_sw("routine", build_id=build_id)
+        resp = make_response(body, 200)
+        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        # Service-Worker-Allowed: sw_scope aus REGISTRY ueberdeckt die start_url.
+        resp.headers["Service-Worker-Allowed"] = cfg.sw_scope
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    # Statische Icons aus seiten/static/routine/ mit Traversal-Guard.
+    root = os.path.realpath(_routine_anpassen_asset_root())
+    target = os.path.realpath(os.path.join(root, asset))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    if os.path.basename(target).startswith("_"):
+        abort(404)
+
+    ext = os.path.splitext(target)[1].lower()
+    mimetype = _ROUTINE_ANPASSEN_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(root, asset, mimetype=mimetype)
 
 
 @app.route("/seiten/hoerspiel/<kind_id>/eltern", methods=["GET"])

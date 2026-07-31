@@ -73,6 +73,21 @@
         "service_worker": "/seiten/hoerspiel/player/sw.js"
       },
       "auth": "public"
+    },
+    {
+      "slug": "routine-anpassen",
+      "typ": "pwa",
+      "pfad": "/seiten/routine/anpassen",
+      "label": "Morgenroutine anpassen",
+      "synonyme": ["routine", "morgenroutine", "anpassen", "aufgaben", "reihenfolge"],
+      "zeigt": "Morgenroutine der Kinder anpassen: Items umordnen, hinzufügen, entfernen.",
+      "zielgruppe": "eltern",
+      "pwa": {
+        "manifest": "/seiten/routine/anpassen/manifest.json",
+        "start_url": "/seiten/routine/anpassen/",
+        "service_worker": "/seiten/routine/anpassen/sw.js"
+      },
+      "auth": "tma"
     }
   ]
 }
