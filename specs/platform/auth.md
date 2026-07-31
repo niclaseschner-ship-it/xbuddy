@@ -198,6 +198,12 @@ schreibbar, KiBuddy-Prompt überschreibbar) IST der in AUTH-6 geforderte
 - **plan:** die `/api/v1/plan/*`-Routen (aus AUTH-6 hierher gewandert):
   `admin/aktivitaeten[/<art>]`, `admin/kalender`, `admin/reload`, `aktivitaet`,
   `aktivitaeten`, `defaults`, `slot-modell`, `termine[/bulk]`, `zuteilung`.
+- **routine:** die `/api/v1/routine/*`-Datenrouten (aus AUTH-6 hierher gewandert,
+  **Phase-2-Trigger gefeuert 2026-07-30**, Bau #1639): `config`, `items`.
+- **hoerspiel:** die `/api/v1/hoerspiel/<kind_id>/*`-Datenrouten (aus AUTH-6
+  hierher gewandert, **Phase-3-Trigger gefeuert 2026-07-30**, Bau #1640):
+  `config`, `alben`, `alben/<id>/manifest`, `resume`, `themen`,
+  `folgen-vorschlag`. (`audio-stream` bleibt AUTH-6/Phase-4.)
 
 Die **method-explizite** Endliste (GET/POST/PATCH/DELETE je Pfad) enumeriert der
 **#1321-Bau** gegen die realen Routen; der AUTH-9-Copetrage-Test
@@ -215,8 +221,10 @@ Methode — keine Sammel-Zeilen mehr (eine Zeile pro tatsächlich registrierter
 Route, sonst kann der AUTH-9-Test den Decorator-Anwendungs-Stand nicht
 eindeutig prüfen).
 
-Weitere Routen kommen mit jeder Power-Flow-Migration (Phase 2: routine,
-Phase 3: hörspiel-eltern). Bis dahin sind sie in AUTH-6 dokumentiert.
+Die Phase-2- (routine) und Phase-3-Migration (hörspiel-eltern) sind **2026-07-30
+gefeuert** — ihre Datenrouten stehen jetzt oben in AUTH-3 (Bau #1639/#1640), der
+hoerspiel-Player-Cookie ist gebaut (#1292). Weitere Routen kommen mit künftigen
+Power-Flow-Migrationen; bis dahin sind sie in AUTH-6 dokumentiert.
 
 **#1321-Endliste (method-explizit, photo/kibuddy/plan).** Der #1321-Bau
 enumeriert die oben klassifizierten Routen byte-gleich gegen die realen
@@ -408,16 +416,16 @@ Auth-Vendor-rein-Heimat mit `ist_operator_ip`/`hat_gueltigen_cookie`). Die
 Bausteine (`session_cookie.py`, `init_data.py`) liegen schon geteilt; nur die
 Flask-Verdrahtung (request/`g`/`make_response` + AUTH-8-401) war 6-7× kopiert.
 
-**Drei Factories, kein Mode-Flag** — die Semantiken divergieren strukturell,
-nicht nur im Endzweig (Antiberater-Befund: der SOFT-Pfad hat gar keinen
-Cookie-Zweig):
+**Zwei Factories** (HART + dual). Die früher geplante SOFT-Variante **entfiel
+2026-07-30** (Nic-Setzung „Cookie wie alle anderen"): sie hätte nur routine +
+hoerspiel getragen, die aber auf HART-Cookie migrieren (SOFT-Pass-through stoppt
+den PII-Leak gar nicht — er bedient die Route ohne Header trotzdem). Damit hat
+die SOFT-Factory keinen Konsumenten:
 
 - `make_require_init_data(*, get_bot_token, get_familie_client,
   get_init_data_config, auth_401)` — **HART** (Loopback → Cookie+Rolling-Refresh
-  → tma-Header → 401). Konsumenten: essen/kibuddy/photo/plan.
-- `make_require_soft_gate(...)` — **SOFT** (Loopback → tma → Pass-through
-  `g.init_data=None`, **kein** Cookie-Zweig). Konsumenten: routine +
-  hoerspiel (`require_mini_app_auth`).
+  → tma-Header → 401). Konsumenten: essen/kibuddy/photo/plan + (per Phase-2/3-
+  Migration, #1639/#1640) routine + hoerspiel.
 - `make_require_dual_gate(...)` — **AUTH-7b** (Cookie ODER Operator-IP,
   observe/hard). Konsument: seiten.
 
@@ -428,10 +436,10 @@ Der plan-Slot-Sonderfall (`auth_familie_client` statt `familie_client`) löst
 sich, weil plans Getter den Slot bereits kapselt — **kein** repo-weites Rename.
 
 **Migration Buddy-für-Buddy** (bisectbar): photo → essen → kibuddy → plan (HART)
-→ routine + hoerspiel (SOFT) → seiten (dual, zuletzt). Pro Schritt AUTH-9-Test
-grün + real-route-Smoke (401-HTML byte-gleich). `test_auth_decorator_copetrage.py`
-ist um routine + hoerspiel zu erweitern (heute in keiner MODULE_MAP → das Netz
-deckt die zwei SOFT-Buddys noch nicht).
+→ seiten (dual). routine + hoerspiel migrieren mit ihrem Phase-2/3-Cookie-Schritt
+(#1639/#1640) auf dieselbe HART-Factory. Pro Schritt AUTH-9-Test grün +
+real-route-Smoke (401-HTML byte-gleich). `test_auth_decorator_copetrage.py` ist um
+routine + hoerspiel zu erweitern (heute in keiner MODULE_MAP).
 
 Der Decorator-Code (egal in welchem Buddy) prüft zuerst — **verbindlich und
 load-bearing** — BEIDE Bedingungen zusammen:
@@ -486,15 +494,8 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 **V1-Stand:**
 
 ```
-/api/v1/routine/items                         (Trigger: Phase 2 routine-anpassen-PWA)
-/api/v1/routine/config                        (Trigger: Phase 2)
-/api/v1/hoerspiel/<kind_id>/config            (Trigger: Phase 3 hörspiel-eltern-PWA)
-/api/v1/hoerspiel/<kind_id>/alben             (Trigger: Phase 3)
-/api/v1/hoerspiel/<kind_id>/alben/<id>/manifest  (Trigger: Phase 3)
-/api/v1/hoerspiel/<kind_id>/resume            (Trigger: Phase 3)
-/api/v1/hoerspiel/<kind_id>/themen            (Trigger: Phase 3)
-/api/v1/hoerspiel/<kind_id>/folgen-vorschlag  (Trigger: Phase 3)
 /api/v1/hoerspiel/<kind_id>/audio-stream      (Trigger: Phase 4 HSP-Audio-Routing — PANEL-13-Naht; Infrastruktur erhalten (app-panel/app.js:819-966), audio_play-Producer ruht bis #1471/HSP-44)
+# routine/{items,config} + hoerspiel/{config,alben,alben/<id>/manifest,resume,themen,folgen-vorschlag}: Phase-2/3-Trigger 2026-07-30 gefeuert → jetzt in AUTH-3 (Bau #1639/#1640)
 /api/v1/seiten                                (Trigger: Phase 2/3, mini-app-uebersicht-Migration)
 /api/v1/seiten/uebersicht                     (Trigger: Phase 2/3)
 /api/v1/seiten/mini-app-uebersicht            (Trigger: Phase 2/3)

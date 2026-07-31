@@ -26,7 +26,14 @@ Notwendigkeit für die Operator-IP-Route mehr.
   `/api/v1/displays/<id>/events`. Die decorator-freien Services
   (wetter/familie/geraete/panel/hoerspiel) bleiben **ausgeklammert** — Multi-
   Geräte-Wirbelsäule, mit RAT-31-Abriss (Epic #1339) geschnitten statt hier
-  decorator-nachgerüstet.
+  decorator-nachgerüstet. **[AMENDIERT 2026-07-30]** hoerspiel fällt aus dieser
+  Ausklammerung **heraus**: der Hörspiel-Player ist eine **lebende PWA**
+  (iOS+Android bestätigt) mit gebautem Player-Cookie (#1292), kein sterbender
+  Wirbelsäulen-Teil — die „stirbt"-Annahme war überholt (Nic „Cookie wie alle
+  anderen", 2026-07-30). Seine Datenrouten migrieren regulär AUTH-6→AUTH-3
+  (HART-Cookie, Phase 3, #1640). Ausgeklammert bleiben nur
+  wetter/familie/geraete/panel (echte RAT-31-Abriss-Ziele; familie zusätzlich
+  extern per nginx-403 abgeschaltet, #1638).
 
 ## Rollout (Nic: aggressiv, Schmerz reaktiv auffangen)
 Kein Vollprävention-Gate. Zwei Nicht-Verhandelbare bleiben (sicher-bekannte
