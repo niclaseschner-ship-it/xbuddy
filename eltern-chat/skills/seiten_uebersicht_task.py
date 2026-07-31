@@ -4,7 +4,14 @@ eltern-chat.md EC-8/EC-9/EC-29.
 
 Diese Aufgabe ist der Adapter der trigger-agnostischen Funktion
 `seiten_uebersicht` (SREG-5 Pivot): versteht der Agent eine Bitte nach
-einer Übersicht aller Apps/Seiten, ruft er sie auf.
+einer Übersicht aller Apps/Seiten oder nach Panel-/Kachel-Bearbeitung,
+ruft er sie auf.
+
+**ESB-3 (conventions/eltern-seite.md): Panel-Edit-Intent → Verweis auf
+Übersichtsseite.** Der Chat macht kein Pro-Panel-Matching (PBE-2-Pivot);
+die Übersichtsseite (SREG-12) listet je Panel-Instanz den Editor-Link.
+Trigger: "Kachel entfernen", "Kachel hinzufügen", "Kachel umsortieren",
+"Panel bearbeiten", "Kacheln ändern", "Panel-Editor öffnen".
 
 **SREG-5 Pivot:** Statt eines Text-Links liefert der Skill jetzt einen
 Inline-Button auf die Mini-App-Übersicht (MAU). SREG-5b (zweistufiges
@@ -66,6 +73,19 @@ class SeitenUebersichtTask(ReadTask):
                 "kombiniert: Mini-Apps · App-Übersicht · alle Apps · Übersicht · "
                 "Seiten. Beispiele: 'gib mir die App-Übersicht', "
                 "'alle Mini-Apps öffnen', 'zeig mir alle Apps', 'Seiten-Optionen'. "
+                "PANEL-EDIT-INTENT (ESB-3, conventions/eltern-seite.md): Sofort "
+                "aufrufen, wenn die Eltern-Nachricht Panel- oder Kachel-Bearbeitung "
+                "meint — der Chat macht kein Pro-Panel-Matching (PBE-2), der Link "
+                "zur Übersichtsseite (SREG-12) zeigt den Panel-Editor je Instanz. "
+                "Trigger Panel-Edit: \"Kachel entfernen\", \"Kachel rausnehmen\", "
+                "\"Kachel hinzufügen\", \"Kachel hinzufügen\", "
+                "\"Kacheln umsortieren\", \"Kacheln ändern\", "
+                "\"Panel bearbeiten\", \"Panel ändern\", \"Panel-Editor öffnen\", "
+                "\"Kacheln bearbeiten\", \"Kacheln rausnehmen\", "
+                "\"App-Kachel entfernen\", \"App-Kachel hinzufügen\". "
+                "Antwort-Formulierung bei Panel-Edit-Intent: 'Du kannst Kacheln "
+                "über die Übersichtsseite ändern — dort siehst du je Panel-Instanz "
+                "den Editor-Link.' Dann den Übersichtsseiten-Button schicken. "
                 "Schreibe in deiner Antwort NIEMALS einen Knopf als Markdown-Text "
                 "(z. B. '[**…öffnen**]') und versprich keinen 'Knopf unten' — "
                 "der Inline-Knopf kommt automatisch über den Tool-Call dieses Skills, "
