@@ -38,11 +38,12 @@ ephemeral`. LiteLLM reicht `cache_control`-Marker auf Content-Blöcken zum
 Anthropic-Backend durch (offizielles LiteLLM-Prompt-Caching-Passthrough); der
 Marker sitzt am stabilen System-Block, damit er über Turns trägt.
 
-Telemetrie bleibt Hand (LLMP-S12): `telemetry.write_call` →
-`provider_calls.jsonl` bleibt SSoT; LiteLLM-native `completion_cost()` wird
-NICHT genutzt (Zahl-Stabilität bei Rollback). LiteLLM liefert Usage OpenAI-
-förmig (`prompt_tokens`/`completion_tokens`); diese werden auf das interne
-`input`/`output`-Schema gemappt, `pricing.compute_eur` rechnet mit `self.model`.
+Telemetrie (#1635): `telemetry.write_call` → `provider_calls.jsonl` bleibt
+SSoT. Kosten kommen jetzt aus LiteLLM-native `response._hidden_params
+["response_cost"]` (Primärpfad) oder `litellm.completion_cost()` (Fallback) —
+`pricing.compute_eur` ist damit in diesem Vendor pensioniert (LLMP-S12
+überholt). LiteLLM liefert Usage OpenAI-förmig (`prompt_tokens`/
+`completion_tokens`); diese werden auf das interne `input`/`output`-Schema gemappt.
 """
 
 import base64
@@ -141,6 +142,49 @@ def _pricing_to_litellm_entry(prices, as_of):
     }
 
 
+def _litellm_response_cost_eur(response: Any, litellm_sdk: Any) -> float | None:
+    """Liest `est_cost_eur` aus einer LiteLLM-Response (litellm-native, #1635).
+
+    Reihenfolge:
+    1. `response._hidden_params.get("response_cost")` (USD, LiteLLM-native) → EUR.
+    2. Fallback: `litellm.completion_cost(completion_response=response)` → EUR.
+    3. Ist beides None/0/Fehler → None (z. B. Audio ohne LiteLLM-Kosten-Wissen).
+
+    USD→EUR-Kurs: `pricing.EUR_PER_USD` (0.92, fest wie bisher, E-EC-11).
+    `litellm_sdk` wird als Parameter übergeben, damit Tests den Mock nutzen können.
+    """
+    if response is None:
+        return None
+
+    # 1. Primär: _hidden_params.response_cost (USD)
+    hidden = getattr(response, "_hidden_params", None)
+    cost_usd: float | None = None
+    try:
+        if hidden is not None and isinstance(hidden, dict):
+            raw = hidden.get("response_cost")
+            if raw is not None:
+                fval = float(raw)
+                if fval > 0:
+                    cost_usd = fval
+    except Exception:
+        pass  # Defensiv: kein Absturz bei unerwartetem hidden_params-Typ
+
+    # 2. Fallback: litellm.completion_cost()
+    if cost_usd is None:
+        try:
+            fb = litellm_sdk.completion_cost(completion_response=response)
+            if fb is not None:
+                fval_fb = float(fb)
+                if fval_fb > 0:
+                    cost_usd = fval_fb
+        except Exception:
+            pass  # Best-effort; Audio/unbekannte Modelle können hier 0/Exception geben
+
+    if cost_usd is None:
+        return None
+    return cost_usd * pricing.EUR_PER_USD
+
+
 def _seed_model_cost(litellm) -> None:
     """Seedet genuine `litellm.model_cost`-Lücken aus `pricing.py` (U3, idempotent).
 
@@ -156,7 +200,6 @@ def _seed_model_cost(litellm) -> None:
     if _SEED_DONE:
         return
 
-    from .. import pricing
     from .._resolver import normalize_model
 
     catalog = getattr(litellm, "model_cost", {}) or {}
@@ -352,6 +395,7 @@ class LitellmVendor(VendorBase):
             slot=slot,
             correlation_id=correlation_id,
             wall_ms=wall_ms,
+            response=response,
         )
         return audio_bytes
 
@@ -409,6 +453,7 @@ class LitellmVendor(VendorBase):
             slot=slot,
             correlation_id=correlation_id,
             wall_ms=wall_ms,
+            response=response,
         )
         return text
 
@@ -853,15 +898,19 @@ class LitellmVendor(VendorBase):
         wall_ms: int,
     ) -> None:
         """Baut den `ProviderCallEvent` aus der LiteLLM-Response und reicht ihn
-        an `tools.llm.telemetry.write_call` weiter (LLMP-S4, LLMP-S12).
+        an `tools.llm.telemetry.write_call` weiter (LLMP-S4, #1635).
+
+        Kosten-Quelle: LiteLLM-native `response._hidden_params["response_cost"]`
+        (USD, von LiteLLM aus dem nativ geseedeten model_cost berechnet), dann
+        USD→EUR mit `pricing.EUR_PER_USD` (0.92, fester Kurs wie bisher).
+        Ist `response_cost` None/0 → Fallback auf `litellm.completion_cost()`
+        (ebenfalls USD→EUR). Beide Pfade sind LiteLLM-native (LLMP-S12 überholt).
 
         LiteLLM liefert Usage OpenAI-förmig (`prompt_tokens`/`completion_tokens`);
         gemappt auf das interne `input`/`output`-Schema. Anthropic-Cache-Zahlen
         (`cache_read_input_tokens`/`cache_creation_input_tokens`) hängt LiteLLM
         bei Anthropic-Routing an das Usage-Objekt (Prompt-Caching-Passthrough) —
-        wo vorhanden, werden sie mitgeschrieben; wo nicht (0). Pricing rechnet
-        mit `self.model` (Hand-Telemetrie, KEIN litellm.completion_cost —
-        Zahl-Stabilität bei Rollback, LLMP-S12).
+        wo vorhanden, werden sie mitgeschrieben; wo nicht (0).
 
         Bei fehlendem `usage`-Feld (älterer Test-Mock) bleiben die Token-Counts
         auf 0 — der JSONL-Eintrag entsteht trotzdem (gleiche Defensive wie
@@ -873,13 +922,7 @@ class LitellmVendor(VendorBase):
         cache_read_tokens = int(getattr(usage, "cache_read_input_tokens", 0) or 0) if usage else 0
         cache_creation_tokens = int(getattr(usage, "cache_creation_input_tokens", 0) or 0) if usage else 0
 
-        est_cost_eur = pricing.compute_eur(
-            self.model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cache_read_tokens=cache_read_tokens,
-            cache_creation_tokens=cache_creation_tokens,
-        )
+        est_cost_eur = _litellm_response_cost_eur(response, self._litellm)
 
         event = {
             "ts": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -948,16 +991,22 @@ class LitellmVendor(VendorBase):
         slot: str,
         correlation_id: str | None,
         wall_ms: int,
+        response: Any = None,
     ) -> None:
-        """Schreibt einen Audio-`ProviderCallEvent` (LLMP-S4/LLMP-S6, RAT-28).
+        """Schreibt einen Audio-`ProviderCallEvent` (LLMP-S4/LLMP-S6, RAT-28, #1635).
 
         Eigener Pfad neben `_emit_telemetry` (NICHT geteilt): Audio-Responses
-        tragen KEINE `usage.prompt_tokens` — input/output_tokens bleiben 0,
-        `est_cost_eur` ist `None` (die Pricing-Tabelle kennt keine Audio-Modelle,
-        `completion_cost()` wird für Audio bewusst nicht genutzt, LLMP-S6). Das
-        `modality`-Feld ("tts"|"stt") unterscheidet den Eintrag im JSONL.
+        tragen KEINE `usage.prompt_tokens` — input/output_tokens bleiben 0.
+        `est_cost_eur` kommt aus LiteLLM-native `response_cost` (falls vorhanden),
+        Fallback `completion_cost()`. Ist beides None/0/Fehler → bleibt `None`
+        (Audio-Ausnahme-Pfad LLMP-S6: LiteLLM kennt TTS/STT-Kosten nativ, aber
+        der Hand-Fallback aus pricing.py ist für Audio nicht vorhanden — None
+        ist der sichere Wert, wenn LiteLLM keine Kosten liefert).
+        Das `modality`-Feld ("tts"|"stt") unterscheidet den Eintrag im JSONL.
         `write_call` bleibt SSoT (serialisiert beliebige Felder).
         """
+        est_cost_eur = _litellm_response_cost_eur(response, self._litellm) if response is not None else None
+
         event = {
             "ts": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "caller": caller,
@@ -967,7 +1016,7 @@ class LitellmVendor(VendorBase):
             "input_tokens": 0,
             "output_tokens": 0,
             "wall_ms": wall_ms,
-            "est_cost_eur": None,
+            "est_cost_eur": est_cost_eur,
         }
         if correlation_id is not None:
             event["correlation_id"] = correlation_id

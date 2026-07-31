@@ -1,10 +1,16 @@
 """Preis-Tabelle für KI-Anbieter (LLMP-S4, OPEN-LLMP-A).
 
+Stand #1635: Die drei Telemetrie-Nähte (`_vendor/litellm._emit_telemetry`,
+`_emit_audio_telemetry`, `_vendor/anthropic._emit_telemetry`) nutzen jetzt
+primär LiteLLM-native `response._hidden_params["response_cost"]`.
+`pricing.py` bleibt aktiv für:
+- `_PRICES_USD_PER_MILLION` / `as_of_for` → `_seed_model_cost` (T1634/U3)
+- `as_of_for` → `telemetry_read.monthly_rollup` (Staleness-Warnung)
+- `EUR_PER_USD` → `_litellm_response_cost_eur` + anthropic-Vendor-Fallback
+- `compute_eur` → Fallback im anthropic-Hand-Vendor (kein LiteLLM-Routing)
+
 V1 hardcodet die Anbieter-Preise hier in der Lib (statt im jeweiligen
-Vendor-File). Mit dem zweiten Vendor (Mistral, T1085) liegen jetzt n=2
-Anbieter in derselben Tabelle — der OPEN-LLMP-A-Schnitt (Preise in eine
-geteilte Schicht ziehen) bleibt damit weiter ein bewusster Folge-Schritt,
-nicht spekulativ vorgezogen. Quellen-Abgleich heute:
+Vendor-File). Quellen-Abgleich heute:
 `eltern-chat/providers/pricing.py` (EC-23/E-EC-11; Anthropic Stand 2026-05-31,
 Mistral Stand 2026-06-10).
 

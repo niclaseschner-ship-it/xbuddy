@@ -1,0 +1,42 @@
+# XBuddy Alerting-Poller — probt /healthz + Heartbeat, sendet Alert bei rot (#1646).
+#
+# Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
+# (Konvention deploy/systemd/README.md — `__XBUDDY_*__`-Idiom, SVC-5).
+#
+# Läuft NICHT dauerhaft — der Timer (xbuddy-alerting-poller.timer) triggert
+# diesen oneshot-Service periodisch. Er probt einmal alle Services und beendet sich.
+#
+# Auth:
+#   - Bot-Token: EnvironmentFile __XBUDDY_DATA__/alerting/.env (ALERTING_BOT_TOKEN=…)
+#     Diese Datei liegt NICHT im Repo (SVC-5: Per-Instanz-Geheimnisse außerhalb
+#     des Checkouts). Einmal anlegen:
+#       mkdir -p __XBUDDY_DATA__/alerting
+#       echo 'ALERTING_BOT_TOKEN=<token>' > __XBUDDY_DATA__/alerting/.env
+#       chmod 600 __XBUDDY_DATA__/alerting/.env
+#   - Owner-Chat-ID: ZD-Slot 'alerting-owner-chat-id' im Zugangsdaten-Store.
+#     Einmal setzen:
+#       python3 -m tools.zugangsdaten set alerting-owner-chat-id <chat-id>
+#
+# Der Poller läuft mit denselben Rechten wie der User `__XBUDDY_USER__` —
+# er liest nur lokale Heartbeat-Dateien und macht ausgehende HTTPS-Calls
+# zu Telegram; kein Root nötig.
+
+[Unit]
+Description=XBuddy Alerting-Poller — /healthz + Heartbeat-Überwachung (#1646)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__XBUDDY_USER__
+WorkingDirectory=__XBUDDY_REPO__
+Environment=PYTHONUNBUFFERED=1
+# Bot-Token für den Telegram-Alert (ALERTING_BOT_TOKEN). Datei liegt außerhalb
+# des Checkouts (SVC-5). Das führende `-` macht die Datei optional: fehlt sie,
+# schlägt der Poller beim Alert-Versuch laut fehl (SVC-7-Geist).
+EnvironmentFile=-__XBUDDY_DATA__/alerting/.env
+# Zugangsdaten-Store für den ZD-Slot 'alerting-owner-chat-id'.
+Environment=ZUGANGSDATEN_STORE_FILE=__XBUDDY_DATA__/zugangsdaten/zugangsdaten.json
+# XBUDDY_DATA_DIR für den Heartbeat-Pfad (eltern-chat/heartbeat).
+Environment=XBUDDY_DATA_DIR=__XBUDDY_DATA__
+ExecStart=__XBUDDY_PYTHON__ __XBUDDY_REPO__/deploy/alerting/service_health_poller.py
