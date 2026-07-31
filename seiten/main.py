@@ -1160,12 +1160,20 @@ def hoerspiel_eltern_view(kind_id: str):
     except OSError:
         build_id = "0"
 
+    # INST-1 (#1670): Instanz-Liste server-injiziert (analog hoerspiel_player_view).
+    # </script>-Guard analog CONN-7.
+    from markupsafe import Markup
+    _instanzen_blob = json.dumps(
+        _hsp_instanzen(), ensure_ascii=False
+    ).replace("</", "<\\/")
+    instanzen_json = Markup(_instanzen_blob)
+
     # Template aus hoerspiel/templates/ via absolutem Pfad.
     hoerspiel_templates = os.path.join(_REPO_ROOT_SEITEN, "hoerspiel", "templates")
     from jinja2 import Environment, FileSystemLoader
     env = Environment(loader=FileSystemLoader(hoerspiel_templates), autoescape=True)
     tmpl = env.get_template("eltern.html")
-    html = tmpl.render(build_id=build_id)
+    html = tmpl.render(build_id=build_id, instanzen_json=instanzen_json)
 
     resp = make_response(html, 200)
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
