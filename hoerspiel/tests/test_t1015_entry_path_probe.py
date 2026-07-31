@@ -6,8 +6,8 @@ neue Auth-Kette korrekt verdrahtet:
      (kein lokales ``DEFAULT_FAMILIE_ORIGIN``-Literal mehr in hoerspiel/main.py).
   2. Ein via ``configure(familie_client_auth=...)`` injizierter Test-Stub wird
      vom Auth-Accessor ``_get_familie_client_auth()`` zurueckgegeben.
-  3. ``require_mini_app_auth`` ruft bei validem Auth-Header den injizierten
-     FamilieClient auf (Stub-Transport wird getroffen).
+  3. ``require_init_data`` ruft bei validem tma-Header den injizierten
+     FamilieClient auf (Stub-Transport wird getroffen, HART-Pfad T1640).
 
 Beide Familie-Client-Accessoren (``_get_familie_client_auth`` fuer MAD-7-Auth
 und ``_get_familie_client`` fuer die Face-Pille) nutzen jetzt denselben
@@ -98,14 +98,14 @@ def test_entry_path_probe_accessor_gibt_injizierten_stub_zurueck():
         hoerspiel_main.runtime["familie_client_auth"] = prev
 
 
-def test_entry_path_probe_require_mini_app_auth_ruft_familie_client():
-    """require_mini_app_auth ruft bei validem Auth-Header get_telegram_ids() via Stub auf.
+def test_entry_path_probe_require_init_data_ruft_familie_client(tmp_path):
+    """require_init_data ruft bei validem tma-Header get_telegram_ids() via Stub auf.
 
     Erwartung:
-      * Eine via require_mini_app_auth gewrappte Dummy-Funktion erhaelt bei
+      * Eine via require_init_data gewrappte Dummy-Funktion erhaelt bei
         gueltigem Authorization-Header + Familien-Mitglied einen 200-Status.
       * Transport-Stub wurde >= 1x aufgerufen (FAM-Check traf den neuen Client,
-        AC2 + Entry-Path-Probe).
+        AC2 + Entry-Path-Probe, HART-Pfad T1640).
     """
     captured = {"calls": 0, "url": None}
     body = json.dumps(_fake_personen()).encode("utf-8")
@@ -122,15 +122,17 @@ def test_entry_path_probe_require_mini_app_auth_ruft_familie_client():
     prev_cfg = hoerspiel_main.runtime.get("init_data_config")
 
     try:
+        # Minimale configure() ohne data_path (In-Memory-Modus reicht fuer Auth-Test).
         hoerspiel_main.runtime["familie_client_auth"] = real_client
         hoerspiel_main.runtime["bot_token"] = "test-bot-token:abc"
         hoerspiel_main.runtime["init_data_config"] = {"max_age_seconds": 86400}
         hoerspiel_main.app.config["TESTING"] = True
 
-        # Dummy-Handler mit require_mini_app_auth-Decorator.
+        # Dummy-Handler mit require_init_data-Decorator — damit der FAM-Check
+        # ohne eine echte Route aufgerufen werden kann.
         from flask import jsonify as _jsonify
 
-        @hoerspiel_main.require_mini_app_auth
+        @hoerspiel_main.require_init_data
         def _probe():
             return _jsonify({"ok": True}), 200
 
@@ -143,14 +145,14 @@ def test_entry_path_probe_require_mini_app_auth_ruft_familie_client():
         ):
             result = _probe()
 
+        # result kann (response, status) oder response-Objekt sein
         status = result[1] if isinstance(result, tuple) else result.status_code
         assert status == 200, (
-            "require_mini_app_auth + FAM-Check lieferte unerwartet status %d"
-            % status
+            "require_init_data + FAM-Check lieferte unerwartet status %d" % status
         )
         assert captured["calls"] >= 1, (
             "familie_client.get_telegram_ids hat den Stub nicht erreicht — "
-            "require_mini_app_auth hat den neuen Client nicht aufgerufen"
+            "require_init_data hat den neuen Client nicht aufgerufen"
         )
         assert PFAD_PERSONEN in captured["url"]
     finally:
