@@ -35,6 +35,22 @@ Punkte für Per-Kind, nicht gebaut).
 2. **Generik-Grad:** Option A handverdrahtet (Paula + Neko explizit überall),
    Option B (Registry mit erzeugtem Routing + Eltern-Chat-Auswahl) verworfen
    bis zur dritten Instanz oder zweiten Buddy-Klasse mit n Instanzen.
+   **[AMENDIERT 2026-07-31 — Weg C, #1656]** Der Reaktivierungs-Trigger „dritte
+   Instanz" **hat gefeuert** (niclas ist live: `deploy/nginx/xbuddy-origin.conf`
+   dritter Origin, `conventions/ports.md` Port 5056, `eltern-chat/config.py`
+   `hoerspiel_url_origin_niclas`). Die Wiederaufnahme ist aber **eng gescopet**:
+   config-out betrifft **nur die read-only Instanz-LISTE + Klarnamen**, die heute
+   4× dupliziert driften (belegt: `controller/app-panel/app.js:795` kennt niclas
+   NICHT, obwohl live) → EINE gitignored `instanzen.json` + generische
+   `instanzen.example.json`, aus der die Backends **lesen**. Das von Option B
+   verworfene **„erzeugte Routing"** (Port-Offset-Algorithmus, generierte
+   nginx-Origins/systemd-Units/URL-Segmente) bleibt **verworfen** — Ports/Units/
+   URL-Slugs bleiben **handverdrahtet**. Config-Guard als Vertrag: die Config
+   **liest/zeigt**, generiert **nie** Routing/Ports (`conventions/instanzen.md`).
+   Motiv: behobener Drift + „einfach adaptierbar für andere Familie" (Klon-Kosten
+   senken, NICHT Multi-Tenancy — `apps.md:90` bleibt). Ratifiziert
+   `brainstorm/berater-runde/20260731-0100-RATIFIZIERT-config-separation-weg-c.md`
+   (Nic „ja b").
 3. **Alter/Geburtsdatum NICHT in `familie.json`:** Entwicklungsstufe lebt in
    `xbuddy-data/hoerspiel/<kind_id>/instance.json` (z. B. `kognitiv_stufe`,
    `themen_je_alter`). Begründung **technisch belegt** (`familie/registry.py`
