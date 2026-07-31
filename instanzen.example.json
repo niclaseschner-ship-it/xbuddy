@@ -1,0 +1,16 @@
+{
+  "hoerspiel": [
+    {
+      "slug": "kind1",
+      "port": 5053,
+      "origin": "127.0.0.1:5053",
+      "display_name": "Kind Eins"
+    },
+    {
+      "slug": "kind2",
+      "port": 5055,
+      "origin": "127.0.0.1:5055",
+      "display_name": "Kind Zwei"
+    }
+  ]
+}

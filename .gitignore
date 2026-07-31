@@ -18,6 +18,10 @@ desktop.ini
 .env.*
 !.env.example
 
+# Instanz-Config: Live-Klarnamen + Instanz-Liste (INST-1). Nur die
+# generische instanzen.example.json ist getrackt.
+instanzen.json
+
 # Logs
 *.log
 
