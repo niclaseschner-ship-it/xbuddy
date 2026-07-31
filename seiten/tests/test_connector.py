@@ -514,3 +514,36 @@ def test_ac3_sw_scope_in_html_aus_registry(client):
     assert erwartet_scope in body, (
         f"SW-Scope {erwartet_scope!r} aus REGISTRY fehlt im gerenderten HTML (PWAM-3)"
     )
+
+
+# ── T1662: Scroll-Guard (Eltern-View, kein overflow:hidden auf html/body) ─────
+
+def test_t1662_connector_css_kein_body_overflow_hidden():
+    """T1662: connector/style.css enthaelt kein html/body { overflow: hidden }.
+
+    Eltern-Views MUESSEN auf Chrome/Blink (Windows + Android) scrollen.
+    overflow:hidden auf html oder body blockiert Scroll hart in Blink —
+    iOS Safari (WebKit) toleriert es via Momentum, Chrome nicht (T1662-Befund).
+
+    PANEL-12-Sorte (Kiosk) ist explizit ausgeschlossen — nur Eltern-Views.
+    overflow-x: hidden (horizontaler Lock) ist erlaubt und unberuehrt.
+    """
+    import re
+    css_path = os.path.join(_CONNECTOR_ASSET_DIR, "style.css")
+    with open(css_path, encoding="utf-8") as f:
+        content = f.read()
+
+    def _normiere(s: str) -> str:
+        return s.replace("overflow: hidden", "overflow:hidden")
+
+    # Pruefe html- und body-Bloecke auf ganzheitliches overflow:hidden.
+    # Text-/Inline-overflow:hidden (z.B. text-overflow:hidden, .provider-card overflow:hidden)
+    # ist erlaubt; nur html/body-Selektor-Bloecke sind verboten.
+    for selektor in ("html", "body", "html, body", "html,body"):
+        muster = rf'{re.escape(selektor)}\s*\{{[^}}]*\}}'
+        for block in re.findall(muster, content, re.DOTALL):
+            normiert = _normiere(block)
+            assert "overflow:hidden" not in normiert, (
+                f"connector/style.css: '{selektor}'-Block enthaelt overflow:hidden "
+                f"— T1662 Scroll-Guard verletzt (Kiosk-Sorte auf Eltern-View):\n{block}"
+            )
