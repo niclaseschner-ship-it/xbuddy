@@ -1,6 +1,10 @@
 /* KIBuddy Frage-View — KIBUDDY-2..11, -19, -27, -29, -30, -31
    Touch-Display, Kiosk-Modus, stage=toddler.
-   Keine filter:brightness/invert (KIBUDDY-30). */
+   Keine filter:brightness/invert (KIBUDDY-30).
+
+   T1619: Container-Queries (container-type: size + cqh/cqw/cqmin) statt
+   harter px-Fonts. Vorbild: routine/static/routine.css:134-299.
+   Kiosk-no-scroll (overflow:hidden) bleibt erhalten. */
 
 /* ── Reset / Base ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
@@ -20,9 +24,11 @@ body.xb[data-stage="toddler"] {
 }
 
 /* ── Shell-Grid ─────────────────────────────────────────────── */
+/* T1619: height:100dvh statt 100vh — berücksichtigt mobile Browser-Chrome.
+   overflow:hidden (Kiosk-no-scroll) bleibt. */
 .shell {
   width: 100%;
-  height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr auto auto;
   grid-template-areas:
@@ -32,6 +38,10 @@ body.xb[data-stage="toddler"] {
     "footer";
   gap: 0;
   overflow: hidden;
+  /* T1619: Shell als Container — Kinder können cqh/cqw/cqmin der Shell nutzen.
+     container-name: shell ermöglicht explizites Targeting. */
+  container-type: size;
+  container-name: shell;
 }
 
 /* ── TOPBAR (KIBUDDY-29) ────────────────────────────────────── */
@@ -39,41 +49,46 @@ body.xb[data-stage="toddler"] {
   grid-area: topbar;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px 8px;
+  gap: clamp(6px, 1.5cqw, 16px);
+  padding: clamp(6px, 1cqh, 12px) clamp(10px, 1.5cqw, 20px) clamp(5px, 0.8cqh, 10px);
   background: #e8f4e8;
   border-bottom: 2px solid #c5ddc5;
-  min-height: 64px;
+  min-height: clamp(48px, 7cqh, 72px);
+  /* T1619: eigener Container für Topbar-Kinder */
+  container-type: size;
+  container-name: topbar;
 }
 
+/* T1619: clamp() statt 28px — skaliert zwischen 18px (kleine Displays) und 36px (groß) */
 .topbar-title {
-  font-size: 28px;
+  font-size: clamp(18px, 3.5cqh, 36px);
   font-weight: 700;
   color: #1a4d1a;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
+/* T1619: clamp() statt 18px */
 .topbar-status {
   flex: 1;
-  font-size: 18px;
+  font-size: clamp(13px, 2.5cqh, 22px);
   color: #3a6b3a;
   text-align: center;
-  padding: 0 8px;
+  padding: 0 clamp(4px, 0.8cqw, 12px);
 }
 
 /* KIBUDDY-29: Reset-Knopf — oben rechts, immer sichtbar, Vollfarbe */
 .btn-reset {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px 8px 10px;
+  gap: clamp(4px, 0.8cqw, 8px);
+  padding: clamp(5px, 0.8cqh, 10px) clamp(8px, 1.2cqw, 16px) clamp(5px, 0.8cqh, 10px) clamp(6px, 1cqw, 12px);
   border: 2px solid #8b4513;
-  border-radius: 40px;
+  border-radius: var(--radius-full, 9999px);
   background: #fff8f0;
   cursor: pointer;
   font-family: inherit;
-  font-size: 16px;
+  font-size: clamp(12px, 2cqh, 18px);
   font-weight: 600;
   color: #6b2d0a;
   flex-shrink: 0;
@@ -88,9 +103,10 @@ body.xb[data-stage="toddler"] {
 }
 
 /* KIBUDDY-30: Vollfarbe, KEIN filter:brightness/invert */
+/* T1619: clamp() für Icon-Größe — war hart 36px */
 .btn-reset img {
-  width: 36px;
-  height: 36px;
+  width: clamp(24px, 4cqh, 44px);
+  height: clamp(24px, 4cqh, 44px);
   object-fit: contain;
 }
 
@@ -100,8 +116,11 @@ body.xb[data-stage="toddler"] {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 8px 12px 4px;
+  padding: clamp(4px, 0.8cqh, 10px) clamp(8px, 1.2cqw, 16px) clamp(3px, 0.5cqh, 6px);
   min-height: 0;
+  /* T1619: Container für Chat-Inhalte — cqh/cqw relativ zur Chat-Area */
+  container-type: size;
+  container-name: chat-area;
 }
 
 /* KIBUDDY-19: scrollender Container, Seite scrollt nicht */
@@ -111,8 +130,8 @@ body.xb[data-stage="toddler"] {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 4px 4px 8px;
+  gap: clamp(6px, 1.2cqh, 16px);
+  padding: clamp(2px, 0.4cqh, 6px) clamp(2px, 0.3cqw, 6px) clamp(5px, 1cqh, 12px);
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
@@ -121,30 +140,30 @@ body.xb[data-stage="toddler"] {
 .mikro-fehler {
   background: #fff3cd;
   border: 2px solid #ffba00;
-  border-radius: 16px;
-  padding: 16px 20px;
-  margin: 12px 0;
-  font-size: 20px;
+  border-radius: var(--radius-lg, 20px);
+  padding: clamp(10px, 1.5cqh, 20px) clamp(12px, 2cqw, 24px);
+  margin: clamp(6px, 1cqh, 16px) 0;
+  font-size: clamp(14px, 2.5cqh, 24px);
   text-align: center;
 }
 .mikro-fehler-sub {
-  font-size: 16px;
+  font-size: clamp(11px, 2cqh, 18px);
   color: #7a6000;
-  margin-top: 8px;
+  margin-top: clamp(4px, 0.8cqh, 10px);
 }
 
 /* ── CHAT-BUBBLES (KIBUDDY-19) ───────────────────────────────── */
 .turn {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: clamp(4px, 0.8cqh, 10px);
 }
 
 /* bubble-row: Bubble + Vorlese-Knopf nebeneinander (KIBUDDY-31) */
 .bubble-row {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: clamp(4px, 0.8cqw, 10px);
 }
 
 /* Kind-Bubble rechts (KIBUDDY-19) */
@@ -157,11 +176,12 @@ body.xb[data-stage="toddler"] {
   flex-direction: row;
 }
 
+/* T1619: font-size war hart 24px — jetzt clamp() */
 .bubble {
-  border-radius: 20px;
-  padding: 12px 16px;
+  border-radius: var(--radius-lg, 20px);
+  padding: clamp(8px, 1.2cqh, 16px) clamp(10px, 1.5cqw, 20px);
   max-width: 80%;
-  font-size: 24px;        /* AC2: deutlich größer (war 20px) */
+  font-size: clamp(16px, 3.5cqh, 30px);  /* AC2: deutlich größer (war 20px→24px) */
   line-height: 1.4;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   word-break: keep-all;  /* AC2: kein mid-word-Umbruch */
@@ -188,9 +208,9 @@ body.xb[data-stage="toddler"] {
 .wort-render {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: clamp(4px, 0.8cqh, 8px) clamp(6px, 1.2cqw, 14px);
   align-items: flex-end;
-  padding-top: 8px;
+  padding-top: clamp(4px, 0.8cqh, 10px);
 }
 
 /* Inhaltswort-Slot mit Icon-Reserve (KIBUDDY-17 Punkt 5/6) */
@@ -198,60 +218,66 @@ body.xb[data-stage="toddler"] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: clamp(1px, 0.3cqh, 4px);
 }
 
+/* T1619: Icon-Größe war hart 52px — jetzt clamp() */
 /* Icon-Reserve-Höhe für Miss-Slot — Baseline-Alignment bleibt einheitlich */
 .wort-slot .icon-reserve {
-  height: 52px; /* gleich wie img height */
+  height: clamp(36px, 6cqh, 64px); /* gleich wie img height */
   display: flex;
   align-items: flex-end;
 }
 
+/* T1619: war 52px × 52px */
 .wort-slot img {
-  width: 52px;
-  height: 52px;
+  width: clamp(36px, 6cqh, 64px);
+  height: clamp(36px, 6cqh, 64px);
   object-fit: contain;
   display: block;
   /* KIBUDDY-30: KEIN filter:brightness/invert — Vollfarbe */
 }
 
+/* T1619: font-size war hart 17px */
 .wort-slot .wort-text {
-  font-size: 17px;
+  font-size: clamp(12px, 2cqh, 20px);
   font-weight: 600;
   text-align: center;
   color: #1a2e1a;
-  max-width: 72px;       /* etwas breiter damit keep-all mehr Raum hat */
+  max-width: clamp(60px, 8cqw, 90px);  /* etwas breiter damit keep-all mehr Raum hat */
   word-break: keep-all;  /* AC2: kein mid-word-Umbruch */
   hyphens: none;         /* AC2: keine Silbentrennung */
   overflow-wrap: normal;
 }
 
 /* Funktionswort — nur Text, kein Icon-Slot (KIBUDDY-17 Punkt 6a) */
+/* T1619: font-size war hart 18px */
 .wort-funk {
-  font-size: 18px;
+  font-size: clamp(13px, 2.5cqh, 22px);
   color: #3a5a3a;
   align-self: flex-end;
-  padding-bottom: 2px;
+  padding-bottom: clamp(1px, 0.3cqh, 4px);
   line-height: 1.3;
 }
 
 /* Satzzeichen (KIBUDDY-17 Punkt 7) */
+/* T1619: font-size war hart 18px */
 .wort-satz {
-  font-size: 18px;
+  font-size: clamp(13px, 2.5cqh, 22px);
   color: #3a5a3a;
   align-self: flex-end;
-  padding-bottom: 2px;
-  margin-left: -8px; /* an vorheriges Wort anschmiegen */
+  padding-bottom: clamp(1px, 0.3cqh, 4px);
+  margin-left: clamp(-10px, -1.5cqw, -4px); /* an vorheriges Wort anschmiegen */
 }
 
 /* KIBUDDY-31: Vorlese-Knopf je Bubble */
+/* T1619: war hart 60×60px */
 .btn-vorlese {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 60px;
-  height: 60px;
+  width: clamp(40px, 7cqh, 72px);
+  height: clamp(40px, 7cqh, 72px);
   border-radius: 50%;
   border: 2px solid #6ee7b7;
   background: #fff;
@@ -267,9 +293,10 @@ body.xb[data-stage="toddler"] {
 }
 
 /* KIBUDDY-30: Vorlese-Icon (38221) Vollfarbe */
+/* T1619: war hart 44×44px */
 .btn-vorlese img {
-  width: 44px;
-  height: 44px;
+  width: clamp(28px, 5.5cqh, 52px);
+  height: clamp(28px, 5.5cqh, 52px);
   object-fit: contain;
   /* KEIN filter:brightness/invert */
 }
@@ -281,11 +308,14 @@ body.xb[data-stage="toddler"] {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  padding: 8px 16px 12px;
+  padding: clamp(5px, 0.8cqh, 12px) clamp(10px, 1.5cqw, 20px) clamp(8px, 1.2cqh, 16px);
   background: #f0f7f0;
   border-top: 2px solid #c5ddc5;
   position: relative;
-  min-height: 140px;
+  min-height: clamp(100px, 18cqh, 180px);
+  /* T1619: PTT-Zone als Container für cqh-basierte Knopf/Pegel-Größen */
+  container-type: size;
+  container-name: ptt-zone;
 }
 
 /* KIBUDDY-10 V1 ENTFERNT (2026-06-15): Slide-Lock-Hinweis komplett raus —
@@ -296,8 +326,8 @@ body.xb[data-stage="toddler"] {
   display: flex;
   flex-direction: row;
   justify-content: center;
-  gap: 20px;
-  margin-top: 16px;
+  gap: clamp(10px, 2cqw, 28px);
+  margin-top: clamp(8px, 1.5cqh, 20px);
   flex-wrap: wrap;
 }
 
@@ -305,20 +335,22 @@ body.xb[data-stage="toddler"] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-width: 88px;
-  max-width: 120px;
+  gap: clamp(3px, 0.8cqh, 8px);
+  min-width: clamp(64px, 10cqw, 100px);
+  max-width: clamp(80px, 14cqw, 140px);
 }
 
+/* T1619: war hart 72×72px */
 .buzzword-item img {
-  width: 72px;
-  height: 72px;
+  width: clamp(48px, 9cqh, 88px);
+  height: clamp(48px, 9cqh, 88px);
   object-fit: contain;
   /* KIBUDDY-30: Vollfarbe */
 }
 
+/* T1619: font-size war hart 18px */
 .buzzword-label {
-  font-size: 18px;
+  font-size: clamp(13px, 2.5cqh, 22px);
   font-weight: 600;
   color: #2d5a2d;
   text-align: center;
@@ -329,20 +361,21 @@ body.xb[data-stage="toddler"] {
 /* KIBUDDY-11: Cancel-Hinweis */
 .cancel-hinweis {
   position: absolute;
-  bottom: 16px;
+  bottom: clamp(10px, 2cqh, 20px);
   left: 50%;
   transform: translateX(-50%);
   background: #fdecea;
   border: 3px solid #e53935;
-  border-radius: 16px;
-  padding: 10px 18px;
+  border-radius: var(--radius-lg, 16px);
+  padding: clamp(6px, 1.2cqh, 14px) clamp(10px, 2cqw, 22px);
   box-shadow: 0 4px 16px rgba(229, 57, 53, 0.3);
   z-index: 20;
 }
 
+/* T1619: war hart 56×56px */
 .cancel-img {
-  width: 56px;
-  height: 56px;
+  width: clamp(40px, 7cqh, 70px);
+  height: clamp(40px, 7cqh, 70px);
   object-fit: contain;
 }
 
@@ -350,36 +383,38 @@ body.xb[data-stage="toddler"] {
 .mikro-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: clamp(6px, 1.2cqw, 14px);
   justify-content: center;
   width: 100%;
 }
 
 /* Pegel-Gruppen links und rechts (KIBUDDY-9) */
+/* T1619: war hart 80px — jetzt cqh */
 .pegel-links,
 .pegel-rechts {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 80px;
+  gap: clamp(2px, 0.5cqw, 6px);
+  height: clamp(56px, 11cqh, 96px);
 }
 
 /* Einzelner Pegel-Balken */
 .pegel-bar {
-  width: 8px;
+  width: clamp(5px, 0.8cqw, 10px);
   border-radius: 4px;
   background: #4ade80;
   height: 8px; /* Dynamisch per JS gesetzt */
   transition: height 0.04s linear;
   min-height: 4px;
-  max-height: 72px;
+  max-height: clamp(50px, 10cqh, 88px);
   align-self: center;
 }
 
 /* KIBUDDY-7/8: PTT-Knopf — fix in Mitte, sofortige Skalierung */
+/* T1619: war hart 110×110px */
 .btn-ptt {
-  width: 110px;
-  height: 110px;
+  width: clamp(72px, 14cqh, 140px);
+  height: clamp(72px, 14cqh, 140px);
   border-radius: 50%;
   border: 4px solid #22c55e;
   background: #fff;
@@ -410,9 +445,10 @@ body.xb[data-stage="toddler"] {
 }
 
 /* KIBUDDY-30: Mikro-Piktogramm 37404, Vollfarbe */
+/* T1619: war hart 80×80px */
 .btn-ptt img {
-  width: 80px;
-  height: 80px;
+  width: clamp(50px, 10cqh, 100px);
+  height: clamp(50px, 10cqh, 100px);
   object-fit: contain;
   /* KEIN filter:brightness/invert */
   pointer-events: none;
@@ -421,7 +457,7 @@ body.xb[data-stage="toddler"] {
 /* Lock-Modus: Stopp-Zeile — AC1: absolute damit mikro-row NICHT verschoben wird */
 .stopp-row {
   position: absolute;
-  top: 8px;          /* oberhalb mikro-row, innerhalb ptt-zone */
+  top: clamp(5px, 1cqh, 12px);       /* oberhalb mikro-row, innerhalb ptt-zone */
   left: 0;
   width: 100%;
   display: flex;
@@ -435,17 +471,18 @@ body.xb[data-stage="toddler"] {
   display: none;
 }
 
+/* T1619: font-size war hart 22px */
 .btn-stopp {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 28px;
-  border-radius: 40px;
+  gap: clamp(6px, 1.2cqw, 14px);
+  padding: clamp(8px, 1.5cqh, 18px) clamp(14px, 2.5cqw, 36px);
+  border-radius: var(--radius-full, 9999px);
   border: 3px solid #ef4444;
   background: #fee2e2;
   color: #b91c1c;
   font-family: inherit;
-  font-size: 22px;
+  font-size: clamp(15px, 3cqh, 28px);
   font-weight: 700;
   cursor: pointer;
   touch-action: manipulation;
@@ -455,8 +492,9 @@ body.xb[data-stage="toddler"] {
 
 .btn-stopp:active { transform: scale(0.96); }
 
+/* T1619: font-size war hart 28px */
 .stopp-quad {
-  font-size: 28px;
+  font-size: clamp(18px, 3.5cqh, 36px);
   color: #dc2626;
 }
 
@@ -464,9 +502,9 @@ body.xb[data-stage="toddler"] {
 .bubble-laden {
   background: #d1fae5;
   border: 2px solid #6ee7b7;
-  border-radius: 20px;
+  border-radius: var(--radius-lg, 20px);
   border-bottom-left-radius: 4px;
-  padding: 14px 20px;
+  padding: clamp(8px, 1.5cqh, 18px) clamp(10px, 1.8cqw, 24px);
   display: inline-flex;
   align-items: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
@@ -474,13 +512,13 @@ body.xb[data-stage="toddler"] {
 
 .lade-dots {
   display: inline-flex;
-  gap: 8px;
+  gap: clamp(4px, 0.8cqw, 12px);
   align-items: center;
 }
 
 .lade-dots span {
-  width: 12px;
-  height: 12px;
+  width: clamp(8px, 1.5cqh, 16px);
+  height: clamp(8px, 1.5cqh, 16px);
   border-radius: 50%;
   background: #4a8a4a;
   animation: lade-pulse 1.2s infinite;
@@ -495,24 +533,26 @@ body.xb[data-stage="toddler"] {
 }
 
 /* ── TTS-Fehler-Hinweis (FIX4, KIBUDDY-30) ────────────────── */
+/* T1619: font-size war hart 13px */
 .tts-fehler-hinweis {
   display: block;
-  font-size: 13px;
+  font-size: clamp(10px, 1.8cqh, 15px);
   color: #a05000;
   background: #fff8ee;
   border: 1px solid #f6d07a;
-  border-radius: 8px;
-  padding: 4px 10px;
-  margin-top: 6px;
+  border-radius: var(--radius-sm, 8px);
+  padding: clamp(2px, 0.5cqh, 6px) clamp(6px, 1cqw, 14px);
+  margin-top: clamp(3px, 0.6cqh, 8px);
   text-align: center;
   /* Kein filter, kein brightness (KIBUDDY-30) */
 }
 
 /* ── FOOTER ────────────────────────────────────────────────── */
+/* T1619: font-size war hart 11px */
 .footer {
   grid-area: footer;
-  padding: 4px 16px;
-  font-size: 11px;
+  padding: clamp(2px, 0.4cqh, 6px) clamp(10px, 1.5cqw, 20px);
+  font-size: clamp(9px, 1.6cqh, 13px);
   color: #7a9a7a;
   text-align: center;
   background: #e8f4e8;
