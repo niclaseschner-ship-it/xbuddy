@@ -507,8 +507,6 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 /api/v1/seiten                                (Trigger: Phase 2/3, mini-app-uebersicht-Migration)
 /api/v1/seiten/uebersicht                     (Trigger: Phase 2/3)
 /api/v1/seiten/mini-app-uebersicht            (Trigger: Phase 2/3)
-/api/v1/familie/personen*                     (Trigger: Familien-Personen-Editor-Mini-App)
-/api/v1/familie/foto/*                        (Trigger: Familien-Foto-Mini-App)
 /api/v1/panels/*                              (Trigger: Phase 4 Panel-Mini-App)
 /api/v1/panels/<id>/tiles*                    (Trigger: Phase 4)
 /api/v1/geraete/*                             (Trigger: Geräte-Editor-Mini-App)
@@ -516,6 +514,15 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 /api/v1/displays/<id>/events                  (Trigger: Phase 4)
 /api/v1/displays/<id>/state                   (Trigger: Phase 4)
 ```
+
+**familie-Datenrouten sind KEIN AUTH-6-Migrations-Backlog (RAT-32-Amendment, #1638).**
+`/api/v1/familie/personen*` und `/api/v1/familie/foto/*` tragen keinen Defer-Trigger
+mehr: `familie` ist ein RAT-31-Abriss-Ziel — es kommt keine extern erreichbare
+Familien-Editor-Mini-App. Statt Migration nach AUTH-3 werden diese Routen **extern
+permanent per nginx-403 abgeschaltet** (Funnel → `403`); intern (Loopback/Kiosk)
+bleiben sie erreichbar. Damit gehören sie nicht in die AUTH-6-Backlog-Liste (die nur
+Routen mit Defer-Trigger führt, s. o.). Ratifiziert: RAT-32-Amendment 2026-07-30
+(`decisions/RAT-32-auth-cookie-only-hart.md`, nennt #1638) unter RAT-31.
 
 Phase 6 (vollständige Migration) löst AUTH-6 auf. Solange Einträge in
 AUTH-6 stehen, ist MAD-7 in `conventions/mini-app-design.md` mit dem
