@@ -7,12 +7,15 @@ Pruefen die threadgetrennte poll_loop-Variante in main.py:
 * Reader sendet Sofort-Typing fuer Privatchat-Updates (EC-39), nicht fuer
   Gruppen oder `my_chat_member` (EC-25 bleibt verriegelt).
 * sendChatAction-Fehler unterbrechen den Reader nicht (Best-Effort, EC-39).
+* Heartbeat-Datei wird nach erfolgreichem Poll geschrieben (T1666 / SVC-6);
+  Schreibfehler unterbrechen den Loop nicht.
 
 Die Tests fuehren `poll_loop` in einem Daemon-Thread, damit der Hauptthread
 weiter Assertions setzen kann.
 """
 
 import contextlib
+import os
 import threading
 import time
 
@@ -483,3 +486,165 @@ def test_send_chat_action_failure_is_swallowed(monkeypatch):
             "send_chat_action wurde nicht einmal versucht"
     finally:
         tg_reader.release()
+
+
+# ---------- T1666 / SVC-6-Ergänzung: Heartbeat --------------------------------
+
+def _run_reader_with_heartbeat(tg_reader, heartbeat_path, stop_after_polls=1):
+    """Startet _reader_loop direkt in einem Daemon-Thread mit einem gestubbten
+    ACK-System. Gibt (stop_event, reader_thread) zurueck.
+
+    Beendet den Reader, sobald `stop_after_polls` erfolgreiche get_updates-
+    Aufrufe beobachtet wurden (tg_reader exhausted → leere Liste → stop_event
+    nach kurzer Wartezeit).
+    """
+    import queue as queue_mod
+
+    handoff = queue_mod.Queue(maxsize=1)
+    ack = queue_mod.Queue(maxsize=1)
+    open_chat_ids = set()
+    chat_ids_lock = threading.RLock()
+    stop_event = threading.Event()
+
+    # Processor-Stub: konsumiert jeden Hand-off sofort und sendet ACK.
+    def _processor():
+        while not stop_event.is_set():
+            try:
+                _t0, update_id, _update = handoff.get(timeout=0.2)
+                ack.put(update_id)
+            except queue_mod.Empty:
+                continue
+
+    proc_t = threading.Thread(target=_processor, daemon=True)
+    proc_t.start()
+
+    reader_t = threading.Thread(
+        target=main_mod._reader_loop,
+        args=(None, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
+              stop_event, 0, heartbeat_path),
+        daemon=True,
+    )
+    reader_t.start()
+    return stop_event, reader_t
+
+
+def test_heartbeat_written_after_successful_poll(tmp_path):
+    """T1666 / SVC-6: Nach einem erfolgreichen get_updates-Poll (non-empty)
+    existiert die Heartbeat-Datei mit einem validen Unix-Timestamp.
+
+    Prueft: atomar geschrieben (kein .tmp zurueckgelassen), Inhalt ist eine
+    parseable Integer-Zeile, Timestamp ist juengst (nicht mehr als 5 s alt).
+    """
+    heartbeat_path = str(tmp_path / "heartbeat")
+    u1 = _private_update(1, 42)
+    tg_reader = _ScriptedReaderTg([[u1]])
+
+    stop_event, reader_t = _run_reader_with_heartbeat(tg_reader, heartbeat_path)
+    try:
+        # Warten, bis Heartbeat erscheint.
+        assert _wait_until(
+            lambda: os.path.exists(heartbeat_path), timeout=2.0
+        ), "Heartbeat-Datei wurde nach erfolgreichem Poll nicht geschrieben"
+
+        # Inhalt: parseable Integer-Timestamp.
+        content = open(heartbeat_path, encoding="utf-8").read().strip()
+        ts = int(content)   # wirft ValueError wenn kein Integer
+
+        # Timestamp muss aktuell sein (max 5 s alt).
+        age = time.time() - ts
+        assert 0 <= age < 5, (
+            "Heartbeat-Timestamp ist nicht frisch: age=%.1f s (Inhalt: %r)"
+            % (age, content))
+
+        # Kein .tmp zurueckgelassen.
+        assert not os.path.exists(heartbeat_path + ".tmp"), \
+            ".tmp-Datei wurde nicht durch os.replace bereinigt"
+    finally:
+        stop_event.set()
+        tg_reader.release()
+        reader_t.join(timeout=1.0)
+
+
+def test_heartbeat_written_after_empty_poll(tmp_path):
+    """T1666 / SVC-6: Heartbeat wird AUCH bei leerem get_updates-Ergebnis
+    geschrieben — leerer Poll = Bot lebt, ist aber gerade idle.
+    """
+    heartbeat_path = str(tmp_path / "heartbeat")
+    # Leere Liste: Bot ist erreichbar, aber keine neuen Updates.
+    tg_reader = _ScriptedReaderTg([[]])
+
+    stop_event, reader_t = _run_reader_with_heartbeat(tg_reader, heartbeat_path)
+    try:
+        assert _wait_until(
+            lambda: os.path.exists(heartbeat_path), timeout=2.0
+        ), "Heartbeat fehlt nach leerem Poll (Bot idle = trotzdem lebendig)"
+    finally:
+        stop_event.set()
+        tg_reader.release()
+        reader_t.join(timeout=1.0)
+
+
+def test_heartbeat_write_failure_does_not_crash_loop(tmp_path, monkeypatch):
+    """T1666 / SVC-6: Ein OSError beim Heartbeat-Schreiben (z. B. Disk voll)
+    bricht den Poll-Loop NICHT ab — der Reader verarbeitet weiter Updates.
+
+    Simulation: `os.replace` wirft OSError — `_write_heartbeat` schlueckt ihn
+    (try/except OSError). Das Update muss danach trotzdem beim Processor ankommen.
+    """
+    import queue as queue_mod
+
+    original_replace = os.replace
+    replace_calls = []
+
+    def _failing_replace(src, dst):
+        if "heartbeat" in dst:
+            replace_calls.append(dst)
+            raise OSError("simulated disk full")
+        return original_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", _failing_replace)
+
+    u1 = _private_update(1, 99)
+    heartbeat_path = str(tmp_path / "heartbeat")
+    tg_reader = _ScriptedReaderTg([[u1]])
+
+    handoff = queue_mod.Queue(maxsize=1)
+    ack = queue_mod.Queue(maxsize=1)
+    open_chat_ids = set()
+    chat_ids_lock = threading.RLock()
+    stop_event = threading.Event()
+    received_updates = []
+
+    def _processor():
+        while not stop_event.is_set():
+            try:
+                _t0, update_id, _update = handoff.get(timeout=0.2)
+                received_updates.append(update_id)
+                ack.put(update_id)
+            except queue_mod.Empty:
+                continue
+
+    proc_t = threading.Thread(target=_processor, daemon=True)
+    proc_t.start()
+
+    reader_t = threading.Thread(
+        target=main_mod._reader_loop,
+        args=(None, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
+              stop_event, 0, heartbeat_path),
+        daemon=True,
+    )
+    reader_t.start()
+
+    try:
+        # Update muss ankommen, obwohl os.replace OSError wirft.
+        assert _wait_until(
+            lambda: 1 in received_updates, timeout=2.0
+        ), ("Poll-Loop wurde durch Heartbeat-Schreibfehler unterbrochen — "
+            "Update U1 nie beim Processor")
+        # os.replace wurde fuer den Heartbeat aufgerufen (Fehler wirklich passiert).
+        assert replace_calls, "os.replace wurde fuer Heartbeat nie versucht"
+    finally:
+        stop_event.set()
+        tg_reader.release()
+        reader_t.join(timeout=1.0)
+        proc_t.join(timeout=1.0)
