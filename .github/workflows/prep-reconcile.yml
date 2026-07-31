@@ -43,7 +43,15 @@ jobs:
       (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'status:ready'))
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 (voller Verlauf) ist Pflicht: verdict_check.py check_drift
+      # prueft `git merge-base --is-ancestor <verdict_repo_sha> origin/main`.
+      # verdict_repo_sha ist PW-26-immutabel aus dem Prep-Moment; ein shallow
+      # Clone (default depth 1) enthaelt ihn nicht, sobald main seither weiterlief
+      # → false-positive "Verdict stale" → gueltiger status:ready-Stempel gestrippt
+      # (#1685). Voller Verlauf macht den Vorfahr-Check korrekt.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # verdict_check ist Harness-Logik (Ticket-Verdikt-Membran), kein
       # xbuddy-Projektcode — lebt seit RAT-23 Stufe 2 im public lotse-Repo.
