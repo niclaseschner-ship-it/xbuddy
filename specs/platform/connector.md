@@ -27,31 +27,45 @@ HTTP-Secrets-Editor + In-Page-Switch = **V2**, blockiert auf [#948](../../README
 (Auth-Klasse für sensible lokale Schreib-Routen — diese Seite ist der erste Treiber) +
 nginx-Funnel-deny + Spec-Patch + ggf. [#1030](../../README.md) (Hot-Swap).
 
-## 1. Aufbau — zwei Sektionen als Tabelle
+## 1. Aufbau — drei klare Blöcke (Nordstern #1669)
 
-### CONN-1 — Sektion „Schnittstellen & Tokens", eine Zeile pro (Anbieter, Zweck)-Route
-Eine Tabellen-Zeile pro **externer Verbindung**, gruppiert nach **(Vendor, Purpose)** —
-**nicht** allein nach Vendor-Slug und nicht pro Buddy (ENTSCHEID-1262 → „Patch D",
-Nic 2026-07-03: „eigene erkennbare Foto-Analyse-Zeile"). Zwei Slots desselben Vendors mit
-**unterschiedlichem Purpose** — z. B. `eltern-chat-anthropic-api-key` (Chat) und
+Die Seite ist in **drei Blöcke in fester Reihenfolge** gegliedert (Nic 2026-07-31,
+Ticket #1669 — die frühere „zwei Sektionen als Peer-Tabelle" war „wild zusammengewürfelt",
+weil LiteLLM als Peer neben Anthropic/Mistral stand, obwohl es das **Gateway** ist):
+
+```
+① GESAMTKOSTEN  (oben, prominent)  → CONN-4 (Summe über alles: 30 Tage + 7 Tage + Daten-ab-Marker)
+② WELCHE APP NUTZT WAS             → CONN-2 (pro App aktuelles Modell + Kosten + Wechseln-Affordanz)
+③ ANBIETER-STATUS (klein, Fußzeile) → CONN-1 (LiteLLM als Gateway benannt, konfigurierte Keys mit Status)
+```
+
+### CONN-1 — Block ③ „Anbieter-Status": LiteLLM als Gateway, darunter die Schlüssel
+Der Block nennt **zuerst LiteLLM als gemeinsames Gateway** — alle Apps sprechen über
+dieses eine Gateway, die Anbieter darunter sind die **dahinter konfigurierten Schlüssel**,
+**keine** getrennten Peer-Zugänge (das war der „macht kein Sinn"-Murks, #1669). Darunter
+eine kompakte Liste, **eine Zeile pro externer Verbindung**, gruppiert nach **(Vendor,
+Purpose)** — **nicht** allein nach Vendor-Slug und nicht pro Buddy (ENTSCHEID-1262 →
+„Patch D", Nic 2026-07-03: „eigene erkennbare Foto-Analyse-Zeile"). Zwei Slots desselben
+Vendors mit **unterschiedlichem Purpose** — z. B. `eltern-chat-anthropic-api-key` (Chat) und
 `eltern-chat-anthropic-foto-analyse-api-key` (Foto-Analyse) — ergeben **zwei**
 unterscheidbare Zeilen; zwei Slots mit gleichem (Vendor, Purpose) über verschiedene caller
 bleiben **eine** aggregierte Zeile. Pro Zeile: Anbieter-Logo + Name, ein **menschenlesbares
 Zweck-Label** (abgeleitet aus dem Purpose-Sub-Qualifier vor dem Schlüsseltyp-Suffix:
 `foto-analyse-api-key` → „Foto-Analyse"; ein Purpose nur aus dem Schlüsseltyp (`api-key`)
 → Default-Label „Chat" — **nie** der ZD-Slot-Klartext, CONN-7), Status, **wer-bucht-darauf**
-(Chips der nutzenden Buddys), **Summe abgerechnet** (aggregiert über alle caller dieser
-(Vendor, Purpose)-Route). *Wenn* ein Slot einen Key trägt, *dann* Status „konfiguriert";
+(Chips der nutzenden Apps). *Wenn* ein Slot einen Key trägt, *dann* Status „konfiguriert";
 *wenn* nicht genutzt + von keinem aktiven Pfad referenziert (`hoerspiel-llm-provider-*`),
-*dann* „inaktiv / Altlast".
+*dann* „inaktiv / Altlast". Der Block sitzt als **kleine Fußzeile** unter Block ②, nicht als
+prominente Peer-Tabelle. Zeilen-Klick öffnet das Detail-Sheet (CONN-6/CONN-7).
 Test-Anker: seiten/tests/test_connector_schnittstellen.py::test_conn1_vendor_purpose_zwei_zeilen
 
-### CONN-2 — Sektion „Je Buddy", eine Zeile pro Funktion
-Eine Tabellen-Zeile pro **Buddy × Funktion**: eltern-chat (LLM-Chat **und**
+### CONN-2 — Block ② „Welche App nutzt was", eine Zeile pro App × Funktion
+Eine Zeile pro **App × Funktion**: eltern-chat (LLM-Chat **und**
 LLM-Foto-Analyse — zwei Zeilen seit #1262, konsistent zur (Vendor,Purpose)-Route aus
-CONN-1), hoerspiel (LLM **und** TTS — zwei Zeilen), kibuddy (LLM). Pro Zeile: Buddy-Icon
-(aus `<buddy>/views.json`), Funktion, **aktuell genutzt** (Vendor + Modell), Calls/Kosten,
-Edit-Aktion (CONN-6).
+CONN-1), hoerspiel (LLM **und** TTS — zwei Zeilen), kibuddy (LLM). Pro Zeile: App-Icon
+(aus `<buddy>/views.json`), Funktion, **aktuell genutzt** (Vendor + Modell), Kosten und
+eine **sichtbare `[Wechseln ▸]`-Affordanz** (CONN-6). Zeilen-Klick öffnet den
+7-Tage-Verlauf (CONN-5).
 
 ### CONN-3 — TTS als aktive Verbindung, Verbrauch noch nicht erfasst
 *Wenn* ein Buddy einen TTS-Dienst nutzt (hoerspiel → Azure OpenAI, `hoerspiel/tts/azure.py`),
@@ -62,10 +76,15 @@ außerhalb des `tools/llm`-Telemetrie-Scopes liegt (LLMP-S6). Folge: TTS-Spend-I
 
 ## 2. Verbrauch & Kosten
 
-### CONN-4 — Aggregation aus JSONL, Tail-Fenster
+### CONN-4 — Aggregation aus JSONL, Tail-Fenster + Gesamtsumme prominent (Block ①)
 Die Seite aggregiert `var/llm/provider_calls.jsonl` (LLMP-S4) pro caller × model_id ×
 Zeitraum: Summe `est_cost_eur`, Calls, Tokens. *Wenn* ein Modell unbekannten Preis hat
 (`est_cost_eur: null`, OPEN-LLMP-A), *dann* zeigt die Kosten-Zelle „—", nicht 0.
+**Block ① (Nordstern #1669):** die **Gesamtsumme über alle Apps** steht **ganz oben,
+prominent** — nicht mehr im `tfoot` der App-Tabelle. Sie zeigt zwei Fenster
+(z. B. „letzte 30 Tage" + „letzte 7 Tage") plus den „Daten ab <Datum>"-Marker. Die
+7-Tage-Summe wird aus den ohnehin gerechneten Tages-Serien der App-Zeilen (CONN-5)
+gebildet — **kein** zusätzlicher Telemetrie-Lesevorgang.
 **Lese-Disziplin:** die Aggregation liest **nicht** die volle Datei bei jedem Aufruf —
 V1 ein Tail-Zeitfenster (z. B. 30 Tage) oder Lazy-Aggregat-Cache; bei abgeschnittenem
 Fenster ein „Daten ab <Datum>"-Marker. (Schützt vor OPEN-LLMP-E; Kill-Kriterium:
@@ -77,10 +96,14 @@ kleines Diagramm „letzte 7 Tage" (Calls/Kosten pro Tag, aus der tageweisen JSO
 
 ## 3. Schreib-Aktionen (V1: Verweis, kein HTTP-Schreiben)
 
-### CONN-6 — Edit/Add verweisen in den Eltern-Chat (ehrlich pro Pfad)
-*Wenn* eine Schreib-Aktion ausgelöst wird, *dann* öffnet die Seite ein Modal mit der
-realen Möglichkeit — **kein** HTTP-Schreiben. Die Realität ist pro Pfad verschieden und
-wird ehrlich gezeigt (`anbieter_wechseln` kennt nur eltern-chat):
+### CONN-6 — Wechseln-Affordanz verweist in den Eltern-Chat (ehrlich pro Pfad)
+Jede App-Zeile in Block ② trägt eine **sichtbare `[Wechseln ▸]`-Affordanz** — der
+Provider-Wechsel ist damit als **Möglichkeit sichtbar** (Nordstern #1669: „Provider
+wechseln, z. B. eltern-chat Claude→Mistral"), auch wenn er in V1 **technisch noch
+inaktiv** ist. *Wenn* die Affordanz ausgelöst wird, *dann* öffnet die Seite ein Sheet mit
+der realen Möglichkeit — **kein** HTTP-Schreiben, **keine** funktionierende Wechsel-Mechanik,
+nur die ehrliche Ansage „läuft über den Eltern-Chat / kommt in V2". Die Realität ist pro
+Pfad verschieden und wird ehrlich gezeigt (`anbieter_wechseln` kennt nur eltern-chat):
 - **eltern-chat LLM:** Anbieter wechselbar über den Eltern-Chat (`anbieter_wechseln`, ONB-11/12).
 - **hoerspiel LLM / kibuddy LLM:** **kein** Self-Service — heute nur Config + Service-Neustart → V2.
 - **hoerspiel TTS:** Azure-only, **kein** Anbieterwechsel → V2.
