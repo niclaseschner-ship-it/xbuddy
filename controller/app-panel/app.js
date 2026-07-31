@@ -789,10 +789,15 @@
   // Source und ruft play(). Sticky-Activation muss zuvor durch einen
   // Kachel-Tap gesetzt worden sein (primeSilentAudio).
   //
-  // V1 hartkodiert paula+neko (HSP-28a — keine Instanz-Registry, RAT-17
-  // Option A).
-
-  var HSP_KIND_IDS = ['paula', 'neko'];
+  // INST-1 (#1656): die Instanz-Liste kommt server-injiziert aus
+  // instanzen.json (window.__HSP_INSTANZEN__, gesetzt in index.html via
+  // render_app_panel_index) — statt hier hartkodiert (Drift-Fix: niclas
+  // erscheint). Fehlt die Injektion (alter Cache / Standalone), fällt es auf
+  // paula+neko zurück, damit die Audio-Streams nicht komplett tot sind.
+  var HSP_KIND_IDS = (Array.isArray(window.__HSP_INSTANZEN__) &&
+                      window.__HSP_INSTANZEN__.length)
+    ? window.__HSP_INSTANZEN__.filter(function (s) { return typeof s === 'string' && s; })
+    : ['paula', 'neko'];
   var hspStreams = {};
   // Letztes empfangenes SSE-Lebenszeichen je kind_id (Date.now()-Wert).
   // Wird bei jedem Server-Heartbeat (15s) und jedem audio_play-Event gesetzt.
