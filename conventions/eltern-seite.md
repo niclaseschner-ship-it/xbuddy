@@ -46,6 +46,14 @@ in **`<buddy>/views.json`** (nicht zentral in `seiten/views.json`), mit **einem*
 `typ` pro Seite. Doppel-Einträge mit divergentem `typ` (Audit-Befund einkauf)
 und Fremd-Heimat (plan in seiten statt plan) sind verboten.
 
+**Ausnahme — seiten-eigene Plattform-Services:** Views, die **kein** Buddy-Feature
+sind, sondern von `seiten` selbst gehostet werden (Slug-Pfad `/api/v1/seiten/…`
+bzw. `seiten/static/…`), wohnen legitim zentral in `seiten/views.json` — `seiten`
+IST ihre Heimat, das ist keine Fremd-Heimat. Das gilt für `uebersicht`,
+`mini-app-uebersicht` und `connector` (KI-Anbieter-Read-only-Übersicht, von seiten
+gehostet). Der Test: hätte die View einen eigenen Buddy-`<buddy>/`-Ordner mit Code?
+Wenn nein (reiner seiten-gehosteter Service), bleibt sie zentral (#1706).
+
 ## ESB-4 — Nicht-Kinder-Ansichten sind scrollbar
 
 Jede Eltern-Ansicht ist vertikal **scrollbar** (Nic-Setzung: „alle nicht Kinder
