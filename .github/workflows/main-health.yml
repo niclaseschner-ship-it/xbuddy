@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   main-health:
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, win-wsl]
     steps:
       - uses: actions/checkout@v4
 

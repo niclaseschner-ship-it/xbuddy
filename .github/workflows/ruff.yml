@@ -20,7 +20,7 @@ jobs:
     # (am opened-Event transient null); `!= 0` lässt null/fehlend LAUFEN und
     # nimmt so nie Code aus (RAT-30:36 „Code nie versehentlich ausnehmen").
     if: ${{ github.event.pull_request.changed_files != 0 }}
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, win-wsl]
     steps:
       - uses: actions/checkout@v4
 
