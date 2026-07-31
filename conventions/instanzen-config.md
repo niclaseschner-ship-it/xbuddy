@@ -57,12 +57,20 @@ Kill-Kriterium (wörtlich aus RAT-17 / der ratifizierten Runde):
 Der von RAT-17 Option B verworfene Port-Offset-Algorithmus bleibt
 verworfen — diese Konvention re-eröffnet ihn **nicht**.
 
+Prüfbar: kein arithmetischer Port-Ausdruck und kein f-String-gebauter
+Unit-/Origin-Name aus einem Config-Feld darf im Konsumenten-Code auftauchen.
+
 ### INST-4 — Slugs sind opak und werden nie live umbenannt
 `slug` ist ein technischer, opaker String. Er ist an nginx-Origin,
 systemd-Unit, URL-Segment und Cookie-Domain gekoppelt — diese Kopplung ist
 atomar (alle-oder-404). Ein Live-Rename eines Slugs (`paula` → `kind1`) ist
 **verboten**: er bricht laufenden Betrieb. Klarnamen ändern sich über
 `display_name` in `instanzen.json` (INST-2), **ohne** den Slug anzufassen.
+
+Für das öffentliche Repo neutralisiert der Mirror-Bau (#1170, Baustein 2)
+den Slug **nur in der Snapshot-Kopie** (`git archive`), nicht im Live-Code.
+Der einzige Leak ist die Klarnamen-Zuordnung — und die ist per INST-1
+gitignored.
 
 ### INST-5 — Onboarding-Pfad: über den Eltern-Chat, nie hand-scp
 Wie CONFIG-2: Klarnamen und die Instanz-Liste kommen über den Eltern-Chat
