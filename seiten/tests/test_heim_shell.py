@@ -92,10 +92,6 @@ def test_shell1_route_html_enthaelt_panel_id(client):
     assert PANEL_ID in body
 
 
-# ============================================================
-#  test_shell2_lookup_display_id — SHELL-2
-# ============================================================
-
 def test_shell4_pane_bindet_seiten_sse(client):
     """SHELL-4 (RAT-31 E2): Das rechte Pane hat eine EIGENE EventSource auf den
     seiten-seitigen SSE-Stream /shell/<panel_id>/events — kein statischer
