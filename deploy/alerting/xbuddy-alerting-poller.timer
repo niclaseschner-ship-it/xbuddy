@@ -1,0 +1,29 @@
+# XBuddy Alerting-Poller-Timer — triggert den Health-Check alle 5 Minuten (#1646).
+#
+# Keine Platzhalter nötig — der Timer hat keine per-Instanz-Werte.
+#
+# Aktivieren:
+#   sudo systemctl enable --now xbuddy-alerting-poller.timer
+#
+# Intervall: alle 5 Minuten. Passt zum Heartbeat-Schwellwert (300 s):
+# ein hängender eltern-chat wird spätestens nach 2 Poller-Läufen erkannt
+# (=10 Minuten). HTTP-tote Services werden beim nächsten Lauf erkannt (~5 min).
+#
+# `Persistent=true`: verpasste Läufe (z. B. nach Suspend/Reboot) werden
+# sofort nachgeholt. Das verhindert, dass ein kurzes Ausschalten + Einschalten
+# eine Alerting-Lücke hinterlässt.
+
+[Unit]
+Description=XBuddy Alerting-Poller-Timer — Health-Check alle 5 Minuten (#1646)
+
+[Timer]
+# 3 Minuten nach Boot das erste Mal — nach dem Runner-Health-Timer (OnBootSec=2min),
+# damit nicht alle Oneshot-Services gleichzeitig starten.
+OnBootSec=3min
+OnUnitActiveSec=5min
+# Verpasste Läufe (z. B. nach Suspend) sofort nachholen.
+Persistent=true
+Unit=xbuddy-alerting-poller.service
+
+[Install]
+WantedBy=timers.target
