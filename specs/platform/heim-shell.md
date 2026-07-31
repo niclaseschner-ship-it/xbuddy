@@ -27,9 +27,10 @@ der Live-Refresh läuft same-origin über `seiten/` (SHELL-4, RAT-31 E2); der
 frühere Router-Fanout und der `display_id`-Lookup (SHELL-2) sind entfernt.
 
 **V1-Pilot-Scope:** EIN Testgerät (Paula-Tablet `tablet-tablet-paula-01`,
-1920×1200), **LAN-only** (kein Funnel). Einstieg über `panel_id`; `display_id`
-per Router-Lookup (ROU-32). Reversibel: Rückbau = Shell-Route weg, Tablet zeigt
-wieder auf den klassischen Display-Client.
+1920×1200), **LAN-only** (kein Funnel). Einstieg über `panel_id`; rechtes
+Buddy-Pane per SSE-getriebenem `iframe.src`-Swap (SHELL-4, RAT-31 E2) — kein
+`display_id`-Router-Lookup mehr (SHELL-2 entfernt, #1568/#1590). Reversibel:
+Rückbau = Shell-Route weg, Tablet zeigt wieder auf den klassischen Display-Client.
 
 **Out-of-Scope V1** (jeweils eigenes Ticket, sobald gebraucht): produktiver
 RAT-19-Phase-4-Rollout (Auth scharf, siehe SHELL-6) · zweites Shell-Gerät
@@ -49,14 +50,16 @@ stiller Fallback). Verortung: `seiten/`-Service (`seiten/static/` +
 `platform.js`); nginx routet `/shell/` zum seiten-Service.
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell1_route_html
 
-### SHELL-2 — ~~`display_id` per Router-Lookup~~ — **OBSOLET (RAT-31 E6f-C, #1588)**
-> **RAT-31 E6f-C (2026-07-29, #1588):** SHELL-2 (`_lookup_display_id` / ROU-32-
-> Router-Lookup) ist entfernt. Das rechte Buddy-Pane bekommt seinen `src` per
-> SSE-getriebenem `iframe.src`-Swap (SHELL-4) — ein `display_id`-Lookup entfällt
-> (ein Gerät = ein Ziel, RAT-31). `seiten/main.py::_lookup_display_id` ist
-> gelöscht; `--router-url` / `router_url` runtime-Slot entfernt (#1588).
-> Tests `test_shell2_lookup_real_url` / `test_shell2_lookup_gibt_none_bei_404`
-> gelöscht. Gedeckt durch: `decisions/RAT-31-wirbelsaeule-abriss.md`.
+### SHELL-2 — ~~`display_id` per Router-Lookup~~ — **OBSOLET (RAT-31 E6f-C, #1588/#1590)**
+> **RAT-31 E6f-C (2026-07-29, #1568) — final bereinigt (#1590, 2026-07-31):**
+> SHELL-2 (`_lookup_display_id` / ROU-32-Router-Lookup) ist logisch und physisch
+> entfernt. Das rechte Buddy-Pane bekommt seinen `src` per SSE-getriebenem
+> `iframe.src`-Swap (SHELL-4) — ein `display_id`-Lookup entfällt
+> (ein Gerät = ein Ziel, RAT-31). `seiten/main.py::_lookup_display_id`
+> (Tombstone-Stub) und `configure(router_url=)`-no-op-Parameter sind gelöscht
+> (#1590); externe Test-Aufrufer (`test_build_id_registry.py`, `test_dual_gate_7b.py`)
+> bereinigt. Tests `test_shell2_lookup_real_url` / `test_shell2_lookup_gibt_none_bei_404`
+> gelöscht (#1568). Gedeckt durch: `decisions/RAT-31-wirbelsaeule-abriss.md`.
 
 ### SHELL-9 — IDs aus Daten, kein Hardcode (n=1)
 Weder `panel_id` noch Geräte-IDs stehen im Shell-Code. Die `panel_id` kommt
