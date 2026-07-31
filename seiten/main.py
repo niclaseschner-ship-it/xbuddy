@@ -365,7 +365,13 @@ def get_seiten_uebersicht():
         tailscale_origin=runtime["tailscale_origin"],
         funnel_origin=runtime["funnel_origin"],
     )
-    return render_template("uebersicht.html", **layout)
+    # no-store (Nic 2026-07-31): die Übersicht darf NICHT gecacht werden — sonst
+    # zeigen Clients nach einer Link-/Origin-Änderung die alte Version (Cache-
+    # Schmerz beim same-origin-Umbau). Immer frisch rendern.
+    resp = make_response(render_template("uebersicht.html", **layout))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @app.route("/api/v1/seiten/layout", methods=["GET"])
