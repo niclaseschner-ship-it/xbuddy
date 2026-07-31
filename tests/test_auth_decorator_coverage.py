@@ -24,12 +24,32 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 AUTH_MD = REPO_ROOT / "specs" / "platform" / "auth.md"
 
 # Buddy-Slug → Service-Modul. Phase 1 (#948): essen. #1321: photo/kibuddy/plan.
+# Phase 2 (#1639): routine (SOFT→HART-Cookie-Migration, auth.md „AUTH-Decorator-Lib").
 MODULE_MAP = {
     "essen": REPO_ROOT / "essen" / "main.py",
     "photo": REPO_ROOT / "photo" / "main.py",
     "kibuddy": REPO_ROOT / "kibuddy" / "main.py",
     "plan": REPO_ROOT / "plan" / "main.py",
+    "routine": REPO_ROOT / "routine" / "main.py",
 }
+
+# Phase-2-Route-Liste routine (#1639, method-explizit gegen die realen
+# `@app.route`-Strings in routine/main.py). Spec-Wahrheit ist die AUTH-3-Prosa
+# in auth.md („routine: die /api/v1/routine/*-Datenrouten … config, items");
+# die method-explizite Endliste-Fence in auth.md enumeriert bisher nur
+# photo/kibuddy/plan (#1321). Bis diese Fence um routine erweitert wird, hält
+# der Copetrage-Test die routine-AUTH-3-Endliste hier — dieselbe maschinelle
+# Verriegelung wie für die gefenceten Buddies (jede Zeile = eine Flask-Route +
+# Methode, gegen den AST geprüft). NICHT die Display-View /display/routine/morgen
+# (AUTH-6/AUTH-7-Renderer) und nicht /healthz (SVC-6).
+_ROUTINE_AUTH3_ROUTES = [
+    ("/api/v1/routine/config", "GET"),
+    ("/api/v1/routine/config", "PUT"),
+    ("/api/v1/routine/items", "GET"),
+    ("/api/v1/routine/items", "POST"),
+    ("/api/v1/routine/items", "PUT"),
+    ("/api/v1/routine/items/<item_id>", "DELETE"),
+]
 
 # T1389 / AUTH-7b: die Renderer-Routen (Shell/Controller/SSE) leben nicht unter
 # /api/v1/<buddy>/, sondern in seiten. RAT-31-Nachzug (E6f, #1568): der frühere
@@ -130,6 +150,10 @@ def test_jede_auth3_route_traegt_den_decorator():
     Auth-Decorator im Source."""
     routen = _auth3_routes()
     assert routen, "AUTH-3-Liste leer geparst — auth.md-Format prüfen"
+
+    # Phase-2-Nachzug (#1639): routine-AUTH-3-Routen ergänzen (Prosa-klassifiziert
+    # in auth.md, method-explizit hier bis zur Fence-Erweiterung; s. _ROUTINE_AUTH3_ROUTES).
+    routen = routen + _ROUTINE_AUTH3_ROUTES
 
     # Cache je Modul.
     dekoriert = {buddy: _decorated_routes(pfad) for buddy, pfad in MODULE_MAP.items()}
