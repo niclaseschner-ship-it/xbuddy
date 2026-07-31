@@ -34,7 +34,23 @@ sys.path.insert(0, _ELTERN_CHAT)
 # tools/ und wird seit #84 vom Onboarding-Speicher importiert.
 sys.path.insert(0, os.path.dirname(_ELTERN_CHAT))
 
+from tools.instanzen import ENV_CONFIG_FILE as _INSTANZEN_ENV  # noqa: E402
 from tools.zugangsdaten import ENV_STORE_FILE  # noqa: E402
+
+# INST-1 (#1656): tasks.HOERSPIEL_INSTANZEN liest seit Welle 2b die Instanz-Liste
+# über tools.instanzen. agent.py und skills/hoerspiel_folge_erzeugen_task.py leiten
+# ihre Namens-/enum-Listen beim Modul-IMPORT aus dieser Liste ab. Damit die Suite
+# gegen die realen Slugs (paula/neko/niclas, PORT-2) prüft — statt gegen den
+# INST-6-kind1/kind2-Default —, muss INSTANZEN_CONFIG_FILE VOR dem ersten
+# `import agent`/`import tasks` gesetzt sein. conftest.py lädt pytest vor allen
+# Test-Modulen, deshalb hier auf Modul-Ebene (nicht als Fixture — eine Fixture
+# liefe zu spät, die Konstanten sind dann schon eingefroren). Die Datei liegt
+# neben conftest.py (getrackt) und trägt dieselben Test-Slugs wie
+# seiten/tests/test_hsp_instanzen.py.
+os.environ.setdefault(
+    _INSTANZEN_ENV,
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "instanzen.test.json"),
+)
 
 
 @pytest.fixture(autouse=True)
