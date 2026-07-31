@@ -406,8 +406,25 @@ REGISTRY: dict[str, MantelConfig] = {
     "mini-app-uebersicht": MantelConfig(
         build_id_source_set=("mini-app-uebersicht.js", "platform.js"),
     ),
+    # ── ROUTINE-20/23 (T1665) — vollstaendiger Voll-Mantel via Lib (PWAM-5) ──
+    #    Manifest via build_manifest(), sw.js via render_sw() — kein manifest.json/
+    #    sw.js auf Platte. Icons aus seiten/static/routine/ (V1-Platzhalter aus plan,
+    #    eigenes Motiv als Mini-Folge). Auth: tma (MAD-7).
     "routine": MantelConfig(
         build_id_source_set=("routine-anpassen.js", "platform.js"),
+        name="Morgenroutine anpassen · XBuddy",
+        short_name="Routine",
+        start_url="/seiten/routine/anpassen/",
+        icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
+        display="fullscreen",
+        theme_color="#47503C",
+        background_color="#F5F1E8",
+        # network-first: HTML frisch vom Server (Stale-Cache-Haertung analog plan);
+        # Offline-Fallback bleibt ueber den Cache erhalten.
+        html_cache_mode="network-first",
+        stop_prefixes=(),
+        sw_script_route="/seiten/routine/anpassen/sw.js",
+        sw_scope="/seiten/routine/anpassen/",
     ),
     # ── Hörspiel-Player (HSP-47) — erster Voll-Konsument ÜBER die Lib ──
     #    Manifest via build_manifest(), sw.js via render_sw() (kein sw.js/
