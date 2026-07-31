@@ -449,7 +449,13 @@ class AnthropicVendor(VendorBase):
         wall_ms: int,
     ) -> None:
         """Baut den `ProviderCallEvent` aus der Anthropic-Response und reicht
-        ihn an `tools.llm.telemetry.write_call` weiter (LLMP-S4).
+        ihn an `tools.llm.telemetry.write_call` weiter (LLMP-S4, #1635).
+
+        Kosten-Quelle: `response._hidden_params["response_cost"]` (USD, LiteLLM-
+        native, über den litellm-Routing-Pfad) → EUR mit `pricing.EUR_PER_USD`.
+        Fallback: `pricing.compute_eur` (Hand-Tabelle) — der anthropic-Hand-
+        Vendor routet nicht über LiteLLM und hat daher kein `_hidden_params`;
+        solange er lebt, bleibt `compute_eur` der tatsächliche Pfad.
 
         Bei fehlendem `usage`-Feld (älterer Test-Mock) bleiben die Token-Counts
         auf 0 — der JSONL-Eintrag entsteht trotzdem, damit das Schreib-Format
@@ -462,13 +468,31 @@ class AnthropicVendor(VendorBase):
         cache_read_tokens = int(getattr(usage, "cache_read_input_tokens", 0) or 0) if usage else 0
         cache_creation_tokens = int(getattr(usage, "cache_creation_input_tokens", 0) or 0) if usage else 0
 
-        est_cost_eur = pricing.compute_eur(
-            self.model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cache_read_tokens=cache_read_tokens,
-            cache_creation_tokens=cache_creation_tokens,
-        )
+        # Primär: LiteLLM-native response_cost (USD→EUR) — gesetzt, wenn die
+        # Response über LiteLLM läuft. Hand-Vendor hat kein _hidden_params (dict)
+        # → fällt auf compute_eur zurück (bleibt korrekt solange anthropic-Vendor lebt).
+        hidden = getattr(response, "_hidden_params", None)
+        cost_usd: float | None = None
+        try:
+            if hidden is not None and isinstance(hidden, dict):
+                raw = hidden.get("response_cost")
+                if raw is not None:
+                    fval = float(raw)
+                    if fval > 0:
+                        cost_usd = fval
+        except Exception:
+            pass
+
+        if cost_usd is not None:
+            est_cost_eur: float | None = cost_usd * pricing.EUR_PER_USD
+        else:
+            est_cost_eur = pricing.compute_eur(
+                self.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_creation_tokens=cache_creation_tokens,
+            )
 
         event = {
             "ts": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
