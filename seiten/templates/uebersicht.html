@@ -268,6 +268,16 @@
         <p class="zeigt">{{ k.zeigt }}</p>
       {% endif %}
       <div class="urls">
+        {# Nic-Setzung 2026-07-31: der primäre klickbare Link ist SAME-ORIGIN
+           (relativer Pfad, wie die heim-shell SHELL-3) — er bleibt auf dem
+           Origin, von dem die Übersicht geladen wurde (Public-Funnel), und
+           funktioniert damit von überall ohne hartkodierte Origin. Die
+           absoluten Origin-Zeilen darunter bleiben als kopierbare/teilbare
+           Links (in Produktion nur Funnel, da heim/tailscale leer). #}
+        <div class="url-row">
+          <span class="url-label">Öffnen:</span>
+          <a class="url-link" href="{{ k.pfad }}">hier öffnen</a>
+        </div>
         {% if k.urls.heim %}
           <div class="url-row">
             <span class="url-label">Heim:</span>
