@@ -46,7 +46,7 @@ Punkte für Per-Kind, nicht gebaut).
    verworfene **„erzeugte Routing"** (Port-Offset-Algorithmus, generierte
    nginx-Origins/systemd-Units/URL-Segmente) bleibt **verworfen** — Ports/Units/
    URL-Slugs bleiben **handverdrahtet**. Config-Guard als Vertrag: die Config
-   **liest/zeigt**, generiert **nie** Routing/Ports (`conventions/instanzen.md`).
+   **liest/zeigt**, generiert **nie** Routing/Ports (`conventions/instanzen-config.md`).
    Motiv: behobener Drift + „einfach adaptierbar für andere Familie" (Klon-Kosten
    senken, NICHT Multi-Tenancy — `apps.md:90` bleibt). Ratifiziert
    `brainstorm/berater-runde/20260731-0100-RATIFIZIERT-config-separation-weg-c.md`
