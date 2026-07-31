@@ -44,6 +44,12 @@
               font-size:1.4rem; z-index:9999; cursor:pointer;">
     Tippen, um Audio zu starten
   </div>
+  <!-- INST-1 (#1656) — HSP-Instanz-Liste (nur slugs) server-injiziert aus
+       instanzen.json, statt in app.js hartkodiert (Drift-Fix: emil erscheint).
+       Der Server ersetzt __HSP_INSTANZEN_JSON__ durch einen JSON-Array-Blob
+       (render_app_panel_index). app.js liest window.__HSP_INSTANZEN__ statt der
+       früheren HSP_KIND_IDS-Konstante. -->
+  <script>window.__HSP_INSTANZEN__ = __HSP_INSTANZEN_JSON__;</script>
   <!-- PWA-4 — Shared Config-Lader (controller/_shared/config.js) muss vor
        app.js geladen werden, damit pwaShared.loadPwaConfig im Bootstrap
        verfügbar ist. -->

@@ -52,18 +52,23 @@ DEFAULT_VOICE = "onyx"
 # T1382/OPEN-HSP-W/-X: kein Code-Default-Serien-Name mehr (Mia-Leak). serien_name
 # ist rein instanz-getragen (instance.json, HSP-27); neutral leer wenn ungesetzt.
 
-# HSP-43 / #1263: hörspiel-LOKALE Instanz-Liste (origin-frei; NUR kind_id/name).
-# Muster: seiten/main.py:947 `_HSP_INSTANZEN` — die eine autoritative Kopie DIESER
-# Komponente. KEINE plattformweite Registry, KEIN Cross-Service-Import (jede
-# Komponente hält ihre eigene Kopie, RAT-17 stop_rule kein_register). Scope-Grenze
-# der Liste: NIE port/origin/service/pfad — diese leben in conventions/ports.md
-# bzw. der Runtime-Config. emil ist erwachsen-zielgruppig (HSP-45); der Backend-
-# Service wird MANUELL provisioniert (HSP-44, nicht Code).
-INSTANZEN = [
-    {"kind_id": "mia",  "name": "Mia"},
-    {"kind_id": "finn",   "name": "Finn"},
-    {"kind_id": "emil", "name": "Niclas"},   # #1263 (HSP-43/HSP-44)
-]
+# INST-1 (conventions/instanzen-config.md, #1656): die Instanz-Liste ist KEINE
+# Code-Konstante mehr — sie kommt aus der Repo-Root-`instanzen.json`
+# (tools.instanzen). Fehlt/kaputt die Datei, greift der Loader-Default (INST-6).
+# Diese Komponente nutzt nur kind_id (Ring-Reihenfolge in main.py) + name.
+# Mapping: kind_id = slug, name = display_name. Scope-Grenze (INST-3): NIE
+# port/origin/service/pfad — die bleiben conventions/ports.md / Runtime-Config.
+def instanzen() -> list[dict]:
+    """hörspiel-lokale Instanz-Liste (kind_id/name) aus instanzen.json (INST-1).
+
+    Reine Anzeige-/Reihenfolge-Ableitung — generiert keinen Port/keine Route
+    (INST-3). Fehlt die Datei, kommt der eingebettete Loader-Default (INST-6).
+    """
+    from tools import instanzen as _instanzen_mod
+    return [
+        {"kind_id": e["slug"], "name": e["display_name"]}
+        for e in _instanzen_mod.lade_instanzen("hoerspiel")
+    ]
 
 # HSP-14 / HSP-27 — Pausen-Defaults (familien-konfigurierbar in hoerspiel.json).
 DEFAULT_PAUSE_ABSATZ_SEK: float = 0.55

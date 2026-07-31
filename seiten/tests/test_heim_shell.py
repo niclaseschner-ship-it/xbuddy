@@ -443,25 +443,46 @@ def test_shell_pwa_ac3_rail_iframe_nativ(client):
 
 
 def test_shell_pwa_ac3_panel_unangetastet():
-    """SHELL-PWA AC3 stop_rule: controller/app-panel/app.js (PANEL-12-Grid/JS) unpetraendert.
+    """SHELL-PWA AC3 stop_rule: die PANEL-12-Grid-Geometrie in app.js unpetraendert.
 
-    Bewacht wird ausschliesslich app.js — die JS-seitige Grid-Geometrie darf nicht
-    angefasst werden. Panel-CSS (style.css) ist fuer die kachel-relative
-    Inhalts-Skalierung (Container-Query / cqmin) ausdruecklich erlaubt (T1224,
-    Nic-angewiesen 2026-06-30).
+    Bewacht wird die JS-seitige Grid-Geometrie (computeGridGeometry /
+    applyGridGeometry) — sie darf nicht angefasst werden. Panel-CSS (style.css)
+    ist fuer die kachel-relative Inhalts-Skalierung (Container-Query / cqmin)
+    ausdruecklich erlaubt (T1224, Nic-angewiesen 2026-06-30).
+
+    T1656 (#1656, INST-1): Der Guard ist von „app.js komplett eingefroren" auf
+    „nur die Grid-Geometrie eingefroren" verengt — INST-1 macht app.js
+    ausdruecklich zum LESER der Instanz-Liste (window.__HSP_INSTANZEN__), was
+    den HSP-Audio-Block (ausserhalb der Grid-Geometrie) legitim aendert.
     """
+    app_js_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "controller", "app-panel", "app.js")
+
+    def _grid_region(quelle):
+        """Extrahiert den zusammenhaengenden PANEL-12-Geometrie-Block
+        (computeGridGeometry + applyGridGeometry) als byte-Signatur.
+
+        Grenzen: vom Geometrie-Section-Header bis zum '//  API'-Divider — das
+        umfasst beide Grid-Funktionen und NICHTS vom HSP-Audio-Block danach.
+        """
+        start = quelle.index("//  PANEL-12 — Geometrie-Berechnung")
+        ende = quelle.index("//  API", start)
+        return quelle[start:ende]
+
+    with open(app_js_path, encoding="utf-8") as fh:
+        aktuell = fh.read()
+
     import subprocess
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    # Git-Status pruefen: app.js darf keine ungestaged/staged Aenderungen haben.
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "HEAD", "--", "controller/app-panel/app.js"],
-        capture_output=True, text=True,
-        cwd=repo_root,
-    )
-    changed = result.stdout.strip()
-    assert changed == "", (
-        "SHELL-PWA AC3 stop_rule: controller/app-panel/app.js darf NICHT geaendert sein "
-        "(PANEL-12-Grid/JS unpetraendert — nur style.css fuer Container-Query erlaubt)"
+    head = subprocess.run(
+        ["git", "show", "HEAD:controller/app-panel/app.js"],
+        capture_output=True, text=True, cwd=repo_root,
+    ).stdout
+
+    assert _grid_region(aktuell) == _grid_region(head), (
+        "SHELL-PWA AC3 stop_rule: die PANEL-12-Grid-Geometrie (computeGridGeometry/"
+        "applyGridGeometry) in controller/app-panel/app.js darf NICHT geaendert sein"
     )
 
 

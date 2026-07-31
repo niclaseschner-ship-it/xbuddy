@@ -86,6 +86,37 @@ class FakeTTSEngine:
 
 
 # ============================================================
+#  INST-1 (#1656) — Test-instanzen.json für die ganze Suite
+# ============================================================
+#
+# Seit #1656 lesen config.instanzen() + der Cycle-Ring die Instanz-Liste aus
+# instanzen.json (tools.instanzen). Die Datei ist gitignored/live und im Test
+# nicht vorhanden — ohne Naht fiele der Loader auf den kind1/kind2-Default (INST-6),
+# und die mia→finn→emil-Ring-Tests brächen. Diese autouse-Fixture stellt eine
+# INST-2-konforme Datei über INSTANZEN_CONFIG_FILE bereit (mia/finn/emil, PORT-2).
+
+_TEST_INSTANZEN = {
+    "hoerspiel": [
+        {"slug": "mia", "port": 5053, "origin": "127.0.0.1:5053",
+         "display_name": "Mia"},
+        {"slug": "finn", "port": 5055, "origin": "127.0.0.1:5055",
+         "display_name": "Finn"},
+        {"slug": "emil", "port": 5056, "origin": "127.0.0.1:5056",
+         "display_name": "Niclas"},
+    ]
+}
+
+
+@pytest.fixture(autouse=True)
+def _instanzen_config(tmp_path, monkeypatch):
+    from tools import instanzen as _instanzen_mod
+    cfg = tmp_path / "instanzen.json"
+    cfg.write_text(json.dumps(_TEST_INSTANZEN), encoding="utf-8")
+    monkeypatch.setenv(_instanzen_mod.ENV_CONFIG_FILE, str(cfg))
+    return str(cfg)
+
+
+# ============================================================
 #  Daten-Bereich, Configs, Test-Client
 # ============================================================
 
