@@ -45,7 +45,7 @@ ein `manifest.json` (PWAM-2), ein `sw.js` (PWAM-3) und eine Asset-Route mit
 `build_id`-Cache-Buster (PWAM-4). `ENTSCHEID → "Wo es landet (Genre + IDs)" →
 PWAM-1 Mantel-Definition`.
 
-**Registrierte Konsumenten (n=4 real):**
+**Registrierte Konsumenten (n=5 real, Stand T1665):**
 
 | Konsument | manifest | sw.js | Cache-Buster-Route | Spec |
 |---|---|---|---|---|
@@ -53,6 +53,7 @@ PWAM-1 Mantel-Definition`.
 | plan | `seiten/static/plan/manifest.json` | `seiten/static/plan/sw.js` | `plan_einstellungen_asset_view` `seiten/main.py:722` | PLAN-35 |
 | heim-shell | DYNAMISCH `heim_shell_manifest` `seiten/main.py:1015` | `seiten/static/shell/sw.js` | `shell_asset_view` `seiten/main.py:1107` | SHELL-PWA |
 | connector | `seiten/static/connector/manifest.json` | `seiten/static/connector/sw.js` | **fehlt** (statisch `BUILD='v1'` sw.js:15) | CONN-8 |
+| routine | LIB `build_manifest()` via `routine_anpassen_asset_view` | LIB `render_sw()` via `routine_anpassen_asset_view` | `/seiten/routine/anpassen/<asset>` `seiten/main.py` | ROUTINE-20/23 (T1665) |
 
 **connector ist ein registrierter, aber noch nicht voll-konformer Mantel.** Er
 zählt erst **nach der Install-Probe** als voll konform — bis dahin trägt er drei
