@@ -17,6 +17,9 @@
   <link rel="stylesheet" href="/display/hoerspiel/static/eltern.css?v={{ build_id }}">
   <!-- platform.js (MAD-5 / RAT-16) muss vor eltern.js geladen sein -->
   <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
+  <!-- INST-1 (#1670): Instanz-Liste server-injiziert, analog player.html HSP-49.
+       Shape: [{"kind_id","name","foto_url"}]. eltern.js liest .map(e=>e.kind_id). -->
+  <script>window.__HSP_INSTANZEN__ = {{ instanzen_json }};</script>
   <script src="/display/hoerspiel/static/eltern.js?v={{ build_id }}" defer></script>
 </head>
 <body>
