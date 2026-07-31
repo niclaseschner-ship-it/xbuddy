@@ -33,9 +33,14 @@ from tools.llm._vendor import litellm as litellm_vendor
 def _make_fake_litellm_response(text: str, *, prompt_tokens: int = 100,
                                 completion_tokens: int = 50,
                                 cache_read: int = 0,
-                                cache_creation: int = 0):
+                                cache_creation: int = 0,
+                                response_cost: float | None = None):
     """Baut eine OpenAI-förmige LiteLLM-Response (`.choices[0].message.content`
-    + `.usage` mit prompt/completion_tokens; Anthropic-Cache-Zahlen additiv)."""
+    + `.usage` mit prompt/completion_tokens; Anthropic-Cache-Zahlen additiv).
+
+    `response_cost` (USD) wird als `_hidden_params`-dict mitgegeben wenn gesetzt
+    — Naht #1635: `_litellm_response_cost_eur` liest es zuerst.
+    """
     message = MagicMock()
     message.content = text
     choice = MagicMock()
@@ -48,11 +53,20 @@ def _make_fake_litellm_response(text: str, *, prompt_tokens: int = 100,
     resp.usage.completion_tokens = completion_tokens
     resp.usage.cache_read_input_tokens = cache_read
     resp.usage.cache_creation_input_tokens = cache_creation
+    # _hidden_params als echtes dict (kein MagicMock) → Naht liest ihn korrekt.
+    resp._hidden_params = {"response_cost": response_cost} if response_cost is not None else {}
     return resp
 
 
-def _make_fake_litellm_sdk(response=None, *, side_effect=None):
-    """Gemocktes `litellm`-SDK: `.completion` + `.exceptions.APIError`."""
+def _make_fake_litellm_sdk(response=None, *, side_effect=None,
+                            completion_cost_return: float | None = None):
+    """Gemocktes `litellm`-SDK: `.completion` + `.exceptions.APIError` + `.completion_cost`.
+
+    `completion_cost_return` steuert den Fallback-Pfad von `_litellm_response_cost_eur`
+    (#1635) — None (default) lässt `completion_cost()` einen TypeError werfen
+    (wie ein echter MagicMock ohne Return-Wert-Konfiguration würde), 0.0 testet
+    den 0-Pfad, > 0 testet den Fallback-Erfolg-Pfad.
+    """
     fake = MagicMock()
     # litellm.exceptions.APIError als Basisklasse für die ProviderError-Übersetzung.
     fake.exceptions.APIError = _FakeAPIError
@@ -60,6 +74,11 @@ def _make_fake_litellm_sdk(response=None, *, side_effect=None):
         fake.completion.side_effect = side_effect
     else:
         fake.completion.return_value = response
+    # completion_cost-Fallback: None → wirft TypeError (unerwartet), sonst float.
+    if completion_cost_return is None:
+        fake.completion_cost.side_effect = TypeError("mock: kein completion_cost")
+    else:
+        fake.completion_cost.return_value = completion_cost_return
     return fake
 
 
@@ -116,6 +135,7 @@ def test_chat_call_writes_single_jsonl_entry(jsonl_path):
             completion_tokens=567,
             cache_read=8901,
             cache_creation=234,
+            response_cost=0.01,  # LiteLLM-native Kosten (USD, Naht #1635)
         )
     )
 
@@ -143,8 +163,9 @@ def test_chat_call_writes_single_jsonl_entry(jsonl_path):
     assert parsed["cache_read_tokens"] == 8901
     assert parsed["cache_creation_tokens"] == 234
     assert parsed["model_id"] == "claude-haiku-4-5"
-    # Pricing: bekanntes Modell → est_cost_eur gesetzt (Hand-Telemetrie).
+    # Pricing: LiteLLM-native response_cost=0.01 USD → 0.01 * 0.92 EUR (#1635).
     assert parsed["est_cost_eur"] is not None
+    assert parsed["est_cost_eur"] == pytest.approx(0.01 * 0.92)
     assert isinstance(parsed["wall_ms"], int)
     assert parsed["wall_ms"] >= 0
 
@@ -829,7 +850,12 @@ def test_capabilities_covers_audio():
 
 def _make_audio_sdk(*, speech_return=None, transcription_return=None,
                     speech_side_effect=None, transcription_side_effect=None):
-    """Gemocktes litellm-SDK mit .speech + .transcription."""
+    """Gemocktes litellm-SDK mit .speech + .transcription.
+
+    `completion_cost` wirft TypeError — Audio-Responses haben keine Token-Kosten
+    im LiteLLM-Sinne, d. h. `_litellm_response_cost_eur` soll None zurückgeben
+    (Audio-Ausnahme-Pfad LLMP-S6, #1635).
+    """
     fake = MagicMock()
     fake.exceptions.APIError = _FakeAPIError
     if speech_side_effect is not None:
@@ -840,6 +866,8 @@ def _make_audio_sdk(*, speech_return=None, transcription_return=None,
         fake.transcription.side_effect = transcription_side_effect
     else:
         fake.transcription.return_value = transcription_return
+    # Audio: completion_cost soll None liefern → Fallback-Pfad gibt None zurück.
+    fake.completion_cost.side_effect = TypeError("audio: kein completion_cost")
     return fake
 
 
@@ -940,3 +968,114 @@ def test_speech_api_error_propagates_no_jsonl(jsonl_path):
         with pytest.raises(ProviderError):
             speech.synth("t", voice="onyx")
     assert not jsonl_path.exists()
+
+
+# ----------------------------------------------------------------------
+#  #1635 — Kosten-Naht auf LiteLLM-native (response_cost)
+# ----------------------------------------------------------------------
+
+
+def test_litellm_response_cost_eur_primary_hidden_params():
+    """#1635: response._hidden_params={"response_cost":0.01} USD → 0.01*0.92 EUR."""
+    from tools.llm._vendor.litellm import _litellm_response_cost_eur
+
+    resp = MagicMock()
+    resp._hidden_params = {"response_cost": 0.01}
+
+    fake_sdk = MagicMock()
+    result = _litellm_response_cost_eur(resp, fake_sdk)
+
+    assert result == pytest.approx(0.01 * 0.92)
+    # completion_cost wurde NICHT gerufen (Primary-Pfad reichte)
+    fake_sdk.completion_cost.assert_not_called()
+
+
+def test_litellm_response_cost_eur_fallback_completion_cost():
+    """#1635: response_cost None → Fallback completion_cost(0.005 USD) → 0.005*0.92 EUR."""
+    from tools.llm._vendor.litellm import _litellm_response_cost_eur
+
+    resp = MagicMock()
+    resp._hidden_params = {}  # kein response_cost → Fallback
+
+    fake_sdk = MagicMock()
+    fake_sdk.completion_cost.return_value = 0.005
+
+    result = _litellm_response_cost_eur(resp, fake_sdk)
+
+    assert result == pytest.approx(0.005 * 0.92)
+    fake_sdk.completion_cost.assert_called_once_with(completion_response=resp)
+
+
+def test_litellm_response_cost_eur_none_when_both_unavailable():
+    """#1635: response_cost None UND completion_cost wirft → None (Audio-Pfad)."""
+    from tools.llm._vendor.litellm import _litellm_response_cost_eur
+
+    resp = MagicMock()
+    resp._hidden_params = {}
+
+    fake_sdk = MagicMock()
+    fake_sdk.completion_cost.side_effect = TypeError("audio: kein cost")
+
+    result = _litellm_response_cost_eur(resp, fake_sdk)
+
+    assert result is None
+
+
+def test_litellm_response_cost_eur_none_response():
+    """#1635: response=None → None (Audio ohne Response-Objekt, sicherer Guard)."""
+    from tools.llm._vendor.litellm import _litellm_response_cost_eur
+
+    result = _litellm_response_cost_eur(None, MagicMock())
+    assert result is None
+
+
+def test_emit_telemetry_uses_response_cost_naht(jsonl_path):
+    """#1635: _emit_telemetry liest response_cost aus _hidden_params (nicht pricing.compute_eur)."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_fake_litellm_response(
+            "ok",
+            prompt_tokens=200,
+            completion_tokens=100,
+            response_cost=0.02,  # 0.02 USD → 0.02 * 0.92 EUR
+        )
+    )
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_chat
+        chat = get_chat(slot="kibuddy-litellm-api-key")
+        chat.complete_multiturn(system="S.", turns=[], user_message="F?")
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["est_cost_eur"] == pytest.approx(0.02 * 0.92)
+
+
+def test_emit_telemetry_fallback_completion_cost(jsonl_path):
+    """#1635: response_cost fehlt → Fallback completion_cost → EUR in JSONL."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_fake_litellm_response("ok"),  # kein response_cost
+        completion_cost_return=0.003,       # completion_cost-Fallback: 0.003 USD
+    )
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_chat
+        chat = get_chat(slot="kibuddy-litellm-api-key")
+        chat.complete_multiturn(system="S.", turns=[], user_message="F?")
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["est_cost_eur"] == pytest.approx(0.003 * 0.92)
+
+
+def test_emit_telemetry_none_when_no_cost(jsonl_path):
+    """#1635: response_cost None + completion_cost wirft → est_cost_eur=null in JSONL."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_fake_litellm_response("ok"),  # kein response_cost
+        # completion_cost_return=None → TypeError (Default in _make_fake_litellm_sdk)
+    )
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_chat
+        chat = get_chat(slot="kibuddy-litellm-api-key")
+        chat.complete_multiturn(system="S.", turns=[], user_message="F?")
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["est_cost_eur"] is None
