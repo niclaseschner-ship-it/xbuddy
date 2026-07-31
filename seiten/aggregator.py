@@ -135,7 +135,7 @@ def _eintrag_aus_manifest(app_slug, ist_controller, view, icons_erforderlich=Fal
       funnel_url  = https://<funnel_domain><pfad>
     `bot_username` wird aus `os.environ[view['web_app']['bot_env_var']]` gelesen;
     fehlt die ENV-Variable, wird der Eintrag übersprungen (per-View-Skip,
-    SREG-13). `funnel_domain` kommt aus der Aggregator-Konfig (SEITEN_TAILSCALE_ORIGIN
+    SREG-13). `funnel_domain` kommt aus der Aggregator-Konfig (SEITEN_FUNNEL_ORIGIN
     analog — wird von `manifest_eintraege`/`baue_inventar` durchgereicht).
 
     Bei Sorte a (Display-View): fehlendes `icons[]` erzeugt je nach Schalter
@@ -283,7 +283,7 @@ def manifest_eintraege(root, icons_erforderlich=False, funnel_domain=""):
     `icons_erforderlich` steuert das SREG-10-Verhalten für fehlende `icons[]`
     bei Sorte-a-Views: False = Warnung + gelistet, True = per-View-Skip.
 
-    `funnel_domain` (SREG-14): Tailscale-Funnel-Domain für `funnel_url`-Komposition
+    `funnel_domain` (SREG-14): Funnel-Domain für `funnel_url`-Komposition
     bei Mini-App-Einträgen (URL-12 — Origin kommt vom Aggregator, nicht vom Manifest).
     """
     eintraege = []
@@ -321,7 +321,7 @@ def baue_inventar(root, icons_erforderlich=False, funnel_domain=""):
         root: Repo-Wurzel, unter der die `views.json`-Manifeste liegen (SREG-2).
         icons_erforderlich: SREG-10-Schalter (Default False = Migrationsphase;
             True = nach Backfill, per-View-Skip bei fehlendem icons[]).
-        funnel_domain: Tailscale-Funnel-Domain für `funnel_url`-Komposition bei
+        funnel_domain: Funnel-Domain für `funnel_url`-Komposition bei
             Mini-App-Einträgen (SREG-14, URL-12). Leer = `funnel_url` ohne Host
             (nur sinnvoll im Test-Modus).
 

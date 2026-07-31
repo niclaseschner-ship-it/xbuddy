@@ -7,10 +7,10 @@ Entry-Path-Probe (AC2): GET /api/v1/seiten/uebersicht → render.baue_layout
 + Copy-Buttons + Origin-URLs.
 
 Origin-Config-Tests (AC4): die zwei Modi werden erschöpfend belegt:
-  - ENV (SEITEN_HEIM_ORIGIN / SEITEN_TAILSCALE_ORIGIN) durch resolved_config
-  - CLI (--seiten-heim-origin / --seiten-tailscale-origin) durch resolved_config
+  - ENV (SEITEN_HEIM_ORIGIN / SEITEN_FUNNEL_ORIGIN) durch resolved_config
+  - CLI (--seiten-heim-origin / --seiten-funnel-origin) durch resolved_config
   - CLI schlägt ENV
-  - leerer Tailscale → Banner-Hinweis im HTML
+  - SEITEN_TAILSCALE_ORIGIN ignoriert seit #1458 → Banner-Hinweis immer aktiv
 """
 
 import json

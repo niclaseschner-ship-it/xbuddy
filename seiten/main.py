@@ -2539,11 +2539,12 @@ def parse_args(argv):
     p.add_argument("--key",  help="TLS-Key (optional, für HTTPS-Modus)")
     # SREG-7: Display-URL-Origins für die SREG-12-Übersichts-Seite.
     # Können auch via ENV gesetzt werden (SEITEN_HEIM_ORIGIN /
-    # SEITEN_TAILSCALE_ORIGIN) — CLI-Flag schlägt ENV schlägt Default.
+    # SEITEN_FUNNEL_ORIGIN) — CLI-Flag schlägt ENV schlägt Default.
+    # SEITEN_TAILSCALE_ORIGIN wird seit #1458 ignoriert (Funnel-only).
     p.add_argument("--seiten-heim-origin", dest="seiten_heim_origin",
                    help="Heimnetz-Origin für SREG-12-Seite (SREG-7, z.B. https://xbuddy-hub.local:8443)")
     p.add_argument("--seiten-tailscale-origin", dest="seiten_tailscale_origin",
-                   help="Tailscale-Origin für SREG-12-Seite (SREG-7, leer = Banner)")
+                   help="DEPRECATED/IGNORIERT seit #1458 (Funnel-only, SREG-7)")
     p.add_argument("--seiten-funnel-origin", dest="seiten_funnel_origin",
                    help="Funnel-FQDN-Origin für Familien-User-Geräte (SREG-7 dritte Origin,"
                         " AUTH-7b, RAT-27; z.B. https://buddyboard.taile235cf.ts.net)")
