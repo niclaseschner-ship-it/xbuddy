@@ -46,7 +46,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from seiten import aggregator, pwa_mantel, render  # noqa: E402
-from tools import configloader, logsetup  # noqa: E402
+from tools import configloader, instanzen, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 
@@ -1097,17 +1097,24 @@ _HOERSPIEL_PLAYER_MIME = {
 
 _HOERSPIEL_PLAYER_COMPONENT = "hoerspiel-player"
 
-# HSP-43: autoritative Instanz-Liste dieser Komponente (seiten-lokale Kopie).
-# Quelle: PORT-2 / conventions/ports.md (mia 5053, finn 5055, emil 5056).
-# emil ist aufgenommen (#1263); dessen Backend-Service wird MANUELL provisioniert
-# (HSP-44 — Deploy, nicht Code). foto_url: None — tools.familie_client bietet keinen
-# Foto-Zugang (FAM-8, stop_rule kein_familie_client).
-# KEIN generischer Instanz-Register (RAT-17, stop_rule kein_register, #1263).
-_HSP_INSTANZEN = [
-    {"kind_id": "mia",  "name": "Mia",  "foto_url": None},
-    {"kind_id": "finn",   "name": "Finn",   "foto_url": None},
-    {"kind_id": "emil", "name": "Niclas", "foto_url": None},
-]
+# INST-1 (conventions/instanzen-config.md, #1656): die Instanz-Liste ist
+# KEINE Code-Konstante mehr — sie kommt aus der Repo-Root-`instanzen.json`
+# (tools.instanzen). Fehlt/kaputt die Datei, greift der eingebettete
+# Loader-Default (INST-6). Feld-Mapping für den Player-Blob (HSP-49,
+# window.__HSP_INSTANZEN__): kind_id = slug, name = display_name.
+# foto_url bleibt None — tools.familie_client bietet keinen Foto-Zugang
+# (FAM-8, stop_rule kein_familie_client) und foto_url steht nicht in
+# instanzen.json (INST-2, genau vier Felder).
+def _hsp_instanzen():
+    """Player-Blob-Liste (kind_id/name/foto_url) aus instanzen.json (INST-1).
+
+    Liest via tools.instanzen und mappt auf die vom player.js erwarteten
+    Feldnamen. Reine Anzeige-Ableitung — kein Port/Route wird generiert (INST-3).
+    """
+    return [
+        {"kind_id": e["slug"], "name": e["display_name"], "foto_url": None}
+        for e in instanzen.lade_instanzen("hoerspiel")
+    ]
 
 
 def _hoerspiel_static_dir():
@@ -1169,11 +1176,11 @@ def hoerspiel_player_view():
 
     build_id = _hoerspiel_player_build_id()
 
-    # HSP-49: Instanz-Blob — _HSP_INSTANZEN ist die autoritative Quelle (eine Stelle).
-    # </script>-Guard analog CONN-7.
+    # HSP-49 / INST-1: Instanz-Blob — Quelle ist jetzt instanzen.json via
+    # _hsp_instanzen() (eine Wahrheit, #1656). </script>-Guard analog CONN-7.
     from markupsafe import Markup
     _instanzen_blob = json.dumps(
-        _HSP_INSTANZEN, ensure_ascii=False
+        _hsp_instanzen(), ensure_ascii=False
     ).replace("</", "<\\/")
     instanzen_json = Markup(_instanzen_blob)
 
@@ -1954,13 +1961,22 @@ def _proxy_panel_bearbeiten(panel_id, sicht):
 def _render_app_panel_index(panel_id):
     """PANEL-2 / IDENT-5: liefert index.html mit der Panel-Identitaet als
     __PANEL_ID__-Token (Server-side-Identitaet, kein Roundtrip) und der aktuellen
-    build_id fuer alle __BUILD_ID__-Asset-URLs (PANEL-14). 1:1 vom Router."""
+    build_id fuer alle __BUILD_ID__-Asset-URLs (PANEL-14). 1:1 vom Router.
+
+    INST-1 (#1656): __HSP_INSTANZEN_JSON__ wird durch die HSP-Slug-Liste aus
+    instanzen.json ersetzt (window.__HSP_INSTANZEN__), damit app.js die Liste
+    liest statt sie hartzukodieren (Drift-Fix: emil erscheint). Nur slugs —
+    keine Ports/Origins (INST-3)."""
     index_path = os.path.join(_app_panel_dir(), "index.html")
     with open(index_path, encoding="utf-8") as fh:
         html = fh.read()
     build_id = _app_panel_build_id()
+    # HSP-Slug-Liste als JSON-Array. </script>-Guard analog CONN-7.
+    _hsp_slugs = [e["slug"] for e in instanzen.lade_instanzen("hoerspiel")]
+    _hsp_blob = json.dumps(_hsp_slugs, ensure_ascii=False).replace("</", "<\\/")
     return (html
             .replace("__PANEL_ID__", panel_id, 1)
+            .replace("__HSP_INSTANZEN_JSON__", _hsp_blob)
             .replace("__BUILD_ID__", build_id))
 
 

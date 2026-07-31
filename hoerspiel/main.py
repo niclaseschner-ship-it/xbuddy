@@ -87,10 +87,10 @@ logger = logging.getLogger(__name__)
 #  Laufzeit-Zustand (Test-Naht analog wetter/main.py)
 # ============================================================
 
-# HSP-3a / HSP-43 (#1263): die „anderen Kinder" ergeben sich aus der hörspiel-
-# lokalen Instanz-Liste `config.INSTANZEN` (alle Einträge außer der eigenen
-# kind_id) — kein binärer mia↔finn-Toggle mehr, damit n≥3 (emil) additiv
-# trägt (HSP-3a n≥3, HSP-46). KEINE Registry, KEIN Cross-Service-Import.
+# HSP-3a / HSP-43 (#1263) / INST-1 (#1656): die „anderen Kinder" ergeben sich aus
+# der Instanz-Liste `config.instanzen()` (Leser von instanzen.json, alle Einträge
+# außer der eigenen kind_id) — kein binärer mia↔finn-Toggle mehr, damit n≥3
+# (emil) additiv trägt (HSP-3a n≥3, HSP-46). KEINE Registry, KEIN Cross-Service-Import.
 
 # ENV-Key für den Familie-Service-Origin (DCOMP-1 / CLIENT-1).
 # Default kommt aus tools.familie_client.DEFAULT_ORIGIN (zentral, CLIENT-1).
@@ -336,7 +336,7 @@ def _pille_vars(kind_id: str) -> dict:
     # Ring: nur Instanzen, die im Snapshot vorhanden sind (PLAN-20-Geist).
     ring_ids = [
         inst["kind_id"]
-        for inst in config_mod.INSTANZEN
+        for inst in config_mod.instanzen()
         if registry.get(inst["kind_id"]) is not None
     ]
 

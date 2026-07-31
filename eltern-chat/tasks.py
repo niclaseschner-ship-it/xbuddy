@@ -31,19 +31,31 @@ from authz import MEMBER_STATUSES
 from hooks import HookContext, HookFailure, summarize_failures
 from model import READ, WRITE, TaskDef
 
+from tools import instanzen as _instanzen
+
 logger = logging.getLogger(__name__)
 
 
-# HSP-43 / #1263: eltern-chat-LOKALE Hörspiel-Instanz-Liste (origin-frei; NUR
-# kind_id/name). Die eine autoritative Kopie DIESER Komponente — Muster
-# seiten/main.py:947 `_HSP_INSTANZEN`, hoerspiel/config.py `INSTANZEN`. KEINE
-# Registry, KEIN Cross-Service-Import (jede Komponente hält ihre Kopie). Aus ihr
-# leiten die HFE-`enum` (Skill) UND die Agent-Prompt-Namensliste ab; port/origin
-# stehen NIE hier (die Origins kommen aus config.py, handverdrahtet je kind_id).
+# HSP-43 / #1263 / INST-1 (#1656): eltern-chat-Sicht der Hörspiel-Instanz-Liste.
+# Seit #1656 (conventions/instanzen-config.md INST-1) ist die Quelle NICHT mehr
+# eine hier hartkodierte Kopie, sondern die eine Repo-Root-`instanzen.json`
+# (gitignored, live) — gelesen über `tools.instanzen`. Diese Komponente liegt
+# damit auf einer Linie mit seiten/main.py `_hsp_instanzen()` und
+# hoerspiel/config.py `instanzen()`; kein Ort trägt mehr seine eigene Kopie.
+# Mapping INST-2 → eltern-chat-Sicht: slug→kind_id, display_name→name. port/origin
+# stehen NIE hier (INST-3 — die Origins kommen aus config.py, handverdrahtet je
+# kind_id, Betriebs-SSoT). Aus dieser Liste leiten die HFE-`enum` (Skill) UND die
+# Agent-Prompt-Namensliste ab (agent.py:_HSP_NAMEN).
+#
+# Auswertungs-Zeitpunkt: Modul-Level (wie die frühere Konstante). agent.py und
+# skills/hoerspiel_folge_erzeugen_task.py bauen ihre Namens-/enum-Ableitungen
+# ebenfalls beim Import; das bleibt verhaltensgleich zur bisherigen Konstante
+# (ein Deploy startet den Service neu → Code + Config frisch gelesen). Fehlt/kaputt
+# die Datei, greift der INST-6-Default (kind1/kind2, generische Namen, Warnung im
+# Log) — kein Crash; das ist der normale Repo-Zustand vor dem Onboarding.
 HOERSPIEL_INSTANZEN = [
-    {"kind_id": "mia",  "name": "Mia"},
-    {"kind_id": "finn",   "name": "Finn"},
-    {"kind_id": "emil", "name": "Niclas"},   # #1263 (HSP-43)
+    {"kind_id": e["slug"], "name": e["display_name"]}
+    for e in _instanzen.lade_instanzen("hoerspiel")
 ]
 
 

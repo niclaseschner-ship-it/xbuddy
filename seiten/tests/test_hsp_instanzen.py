@@ -1,12 +1,14 @@
-"""HSP-43 / #1263 — Instanz-Liste im Hörspiel-Player-Template-Kontext (emil).
+"""HSP-43 / #1263 / INST-1 (#1656) — Instanz-Liste im Player-Template-Kontext.
 
 Löst `test_hsp49_instanz_liste.py` ab: seit #1263 ist emil als dritte Instanz
-provisioniert (Backend-Deploy manuell, HSP-44). `_HSP_INSTANZEN` in seiten/main.py
-ist die EINE autoritative seiten-lokale Kopie (kind_id+name, foto_url best-effort/
-null); die Liste iteriert im Player-Template als window.__HSP_INSTANZEN__.
+provisioniert (Backend-Deploy manuell, HSP-44). Seit #1656 (INST-1) ist die
+Quelle NICHT mehr eine Code-Konstante, sondern die Repo-Root-`instanzen.json`
+(tools.instanzen). `_hsp_instanzen()` in seiten/main.py mappt slug→kind_id,
+display_name→name, foto_url=None und iteriert im Player-Template als
+window.__HSP_INSTANZEN__.
 
-Anker: specs/buddies/hoerspiel.md HSP-43/HSP-49, conventions/ports.md PORT-2
-(mia 5053, finn 5055, emil 5056).
+Anker: specs/buddies/hoerspiel.md HSP-43/HSP-49, conventions/instanzen-config.md
+INST-1..6, conventions/ports.md PORT-2 (mia 5053, finn 5055, emil 5056).
 
 Lauf: python3 -m pytest seiten/tests/test_hsp_instanzen.py -x -v
 """
@@ -22,14 +24,34 @@ _REPO_ROOT = os.path.dirname(_SEITEN_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402
+from tools import instanzen as _instanzen_mod  # noqa: E402
 from tools.initdata import session_cookie as sc  # noqa: E402
 
 _TEST_BOT_TOKEN = "testtoken-hsp43"
 _VALID_COOKIE = sc.sign_session("hsp-test-client-hsp43", _TEST_BOT_TOKEN)
 
+# INST-2-Form: drei Einträge inkl. emil — spiegelt PORT-2. Wird pro Test über
+# INSTANZEN_CONFIG_FILE injiziert (der Loader liest sonst die live-/fehlende
+# Repo-Root-Datei und fiele auf den kind1/kind2-Default zurück).
+_TEST_INSTANZEN = {
+    "hoerspiel": [
+        {"slug": "mia", "port": 5053, "origin": "127.0.0.1:5053",
+         "display_name": "Kind Eins"},
+        {"slug": "finn", "port": 5055, "origin": "127.0.0.1:5055",
+         "display_name": "Kind Zwei"},
+        {"slug": "emil", "port": 5056, "origin": "127.0.0.1:5056",
+         "display_name": "Kind Drei"},
+    ]
+}
+
 
 @pytest.fixture(autouse=True)
-def reset_runtime():
+def reset_runtime(tmp_path, monkeypatch):
+    # INST-1: Test-instanzen.json via ENV-Naht (INSTANZEN_CONFIG_FILE) bereitstellen.
+    cfg = tmp_path / "instanzen.json"
+    cfg.write_text(json.dumps(_TEST_INSTANZEN), encoding="utf-8")
+    monkeypatch.setenv(_instanzen_mod.ENV_CONFIG_FILE, str(cfg))
+
     seiten_main.configure(
         root=_REPO_ROOT,
         inventar_path=None,
@@ -91,18 +113,21 @@ def test_instanz_liste_enthaelt_name_und_foto_url(client):
         assert entry["foto_url"] is None
 
 
-def test_hsp_instanzen_konstante_ist_autoritative_liste():
-    """HSP-43: _HSP_INSTANZEN in seiten/main.py ist die eine autoritative Stelle
-    und trägt mia, finn und emil (kind_id/name Strings, nicht leer)."""
-    instanzen = seiten_main._HSP_INSTANZEN
-    assert isinstance(instanzen, list)
-    kind_ids = {e["kind_id"] for e in instanzen}
+def test_hsp_instanzen_reader_ist_autoritative_liste():
+    """INST-1: _hsp_instanzen() in seiten/main.py leitet die Liste aus
+    instanzen.json ab (kind_id/name Strings, foto_url None). Scope-Grenze
+    HSP-43/INST-2: der Player-Blob trägt NUR kind_id/name/foto_url — nie
+    port/origin (die bleiben Betriebs-SSoT, INST-3)."""
+    liste = seiten_main._hsp_instanzen()
+    assert isinstance(liste, list)
+    kind_ids = {e["kind_id"] for e in liste}
     assert {"mia", "finn", "emil"} <= kind_ids
-    for entry in instanzen:
+    for entry in liste:
         assert isinstance(entry["kind_id"], str)
         assert entry["kind_id"]
         assert isinstance(entry["name"], str)
         assert entry["name"]
-        # Scope-Grenze HSP-43: NUR kind_id/name/foto_url — nie port/origin/service.
+        assert entry["foto_url"] is None
+        # Scope-Grenze HSP-43/INST-3: NUR kind_id/name/foto_url im Player-Blob.
         assert "port" not in entry
         assert "origin" not in entry

@@ -780,11 +780,12 @@ def test_patch_config_persistiert_in_datei(tmp_path, runtime_cfg_with_mistral, d
 
 
 def test_config_instanzen_traegt_emil():
-    """HSP-43: config.INSTANZEN ist die autoritative hörspiel-lokale Liste und
-    trägt mia, finn UND emil (kind_id/name; NIE port/origin)."""
-    kind_ids = {i["kind_id"] for i in config_mod.INSTANZEN}
+    """INST-1 (#1656): config.instanzen() liest die Liste aus instanzen.json und
+    trägt mia, finn UND emil (kind_id/name; NIE port/origin im Ergebnis-Blob)."""
+    liste = config_mod.instanzen()
+    kind_ids = {i["kind_id"] for i in liste}
     assert {"mia", "finn", "emil"} <= kind_ids
-    for i in config_mod.INSTANZEN:
+    for i in liste:
         assert i["kind_id"]
         assert i["name"]
         assert "port" not in i
