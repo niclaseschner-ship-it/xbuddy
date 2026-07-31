@@ -195,9 +195,23 @@ def _write_store(path, slots):
 
 
 def test_check_llm_slots_keine_warnung_wenn_alle_vorhanden(tmp_path):
-    """Alle Code-Slots im Store → kein stderr, rc 0."""
+    """Alle Code-Slots im Store → kein stderr, rc 0.
+
+    Die erwartete Slot-Menge wird aus der Shell-Prüfung SELBST abgeleitet
+    (gegen einen leeren Store), statt sie in Python parallel zu enumerieren —
+    sonst driftet die Test-Enumeration von der echten grep-Enumeration der
+    Shell-Funktion (T1578-CI-Divergenz: Python-Set != Shell-grep)."""
+    empty = tmp_path / "empty.json"
+    _write_store(empty, [])
+    erkannt = _run("--check-llm-slots", str(empty))
+    slots = [
+        zeile.split("FEHLT:", 1)[1].strip()
+        for zeile in erkannt.stderr.splitlines()
+        if "FEHLT:" in zeile
+    ]
+    assert slots, "Erwarte >=1 gemeldeten Slot gegen leeren Store: %s" % erkannt.stderr
     store = tmp_path / "zugangsdaten.json"
-    _write_store(store, _all_code_slots())
+    _write_store(store, slots)
     res = _run("--check-llm-slots", str(store))
     assert res.returncode == 0, res.stderr
     assert "FEHLT" not in res.stderr, "Keine Warnung erwartet, aber: %s" % res.stderr
