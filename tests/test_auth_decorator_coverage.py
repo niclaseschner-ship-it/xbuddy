@@ -25,6 +25,7 @@ AUTH_MD = REPO_ROOT / "specs" / "platform" / "auth.md"
 
 # Buddy-Slug → Service-Modul. Phase 1 (#948): essen. #1321: photo/kibuddy/plan.
 # Phase 2 (#1639): routine (SOFT→HART-Cookie-Migration, auth.md „AUTH-Decorator-Lib").
+# Phase 3 (#1640): hoerspiel. Phase 4 (#1638): familie (PII-Datenrouten gegated).
 MODULE_MAP = {
     "essen": REPO_ROOT / "essen" / "main.py",
     "photo": REPO_ROOT / "photo" / "main.py",
@@ -32,6 +33,7 @@ MODULE_MAP = {
     "plan": REPO_ROOT / "plan" / "main.py",
     "routine": REPO_ROOT / "routine" / "main.py",
     "hoerspiel": REPO_ROOT / "hoerspiel" / "main.py",
+    "familie": REPO_ROOT / "familie" / "main.py",
 }
 
 # Phase-2-Route-Liste routine (#1639, method-explizit gegen die realen
@@ -71,6 +73,20 @@ _HOERSPIEL_AUTH3_ROUTES = [
     ("/api/v1/hoerspiel/<kind_id>/resume", "PUT"),
     ("/api/v1/hoerspiel/<kind_id>/themen", "GET"),
     ("/api/v1/hoerspiel/<kind_id>/folgen-vorschlag", "POST"),
+]
+
+# Phase-4-Route-Liste familie (#1638, method-explizit gegen die realen
+# `@app.route`-Strings in familie/main.py). Spec-Wahrheit: die AUTH-3-Prosa
+# in auth.md (PII-Datenrouten der Familien-Registry sind AUTH-3-geschützt,
+# da sie Namen/Fotos/Telegram-IDs enthalten). Bis die #1321-Fence diese
+# Routen enumeriert, hält der Coverage-Test die Endliste hier.
+# NICHT gegated (bleiben public): /healthz (SVC-1).
+_FAMILIE_AUTH3_ROUTES = [
+    ("/api/v1/familie/personen", "GET"),
+    ("/api/v1/familie/personen/<person_id>", "GET"),
+    ("/api/v1/familie/foto/<person_id>", "GET"),
+    ("/api/v1/familie/personen", "POST"),
+    ("/api/v1/familie/personen/<person_id>/foto", "POST"),
 ]
 
 # T1389 / AUTH-7b: die Renderer-Routen (Shell/Controller/SSE) leben nicht unter
@@ -175,7 +191,8 @@ def test_jede_auth3_route_traegt_den_decorator():
 
     # Phase-2-Nachzug (#1639): routine-AUTH-3-Routen ergänzen (Prosa-klassifiziert
     # in auth.md, method-explizit hier bis zur Fence-Erweiterung; s. _ROUTINE_AUTH3_ROUTES).
-    routen = routen + _ROUTINE_AUTH3_ROUTES + _HOERSPIEL_AUTH3_ROUTES
+    # Phase-4-Nachzug (#1638): familie-PII-Datenrouten ergänzen.
+    routen = routen + _ROUTINE_AUTH3_ROUTES + _HOERSPIEL_AUTH3_ROUTES + _FAMILIE_AUTH3_ROUTES
 
     # Cache je Modul.
     dekoriert = {buddy: _decorated_routes(pfad) for buddy, pfad in MODULE_MAP.items()}
