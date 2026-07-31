@@ -41,7 +41,7 @@ jobs:
     if: >
       (github.event.action == 'labeled' && github.event.label.name == 'status:ready') ||
       (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'status:ready'))
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 

@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   lint-imports:
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, win-wsl]
     steps:
       - uses: actions/checkout@v4
 
