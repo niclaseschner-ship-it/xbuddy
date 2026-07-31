@@ -761,6 +761,45 @@ _BACKOFF_START = 1      # Sekunden — Startverzögerung bei leerem Poll
 _BACKOFF_FACTOR = 2     # Multiplikator je aufeinanderfolgendem leeren Poll
 _BACKOFF_CAP = 5        # Sekunden — maximale Backoff-Pause
 
+# T1666 / SVC-6-Ergänzung: Heartbeat-Pfad für eltern-chat (Polling-Bot ohne HTTP).
+# Priorität: ENV XBUDDY_DATA_DIR > Default. Analoges Muster wie tools/llm/telemetry.py.
+_HEARTBEAT_SUBDIR = "eltern-chat"
+_HEARTBEAT_FILENAME = "heartbeat"
+
+
+def _resolve_heartbeat_path() -> str:
+    """Löst den Heartbeat-Pfad nach SVC-6 auf.
+
+    Format: `<XBUDDY_DATA_DIR>/eltern-chat/heartbeat`
+    Priorität: ENV `XBUDDY_DATA_DIR` > Default `/home/buddy/xbuddy-data`.
+    Test-Naht: ENV kann auf tmp_path zeigen.
+    """
+    base = os.environ.get("XBUDDY_DATA_DIR") or "/home/buddy/xbuddy-data"
+    return os.path.join(base, _HEARTBEAT_SUBDIR, _HEARTBEAT_FILENAME)
+
+
+def _write_heartbeat(heartbeat_path: str) -> None:
+    """Schreibt den aktuellen Unix-Timestamp atomar in `heartbeat_path`.
+
+    Format: eine Zeile mit dem Unix-Epoch-Integer (maschinenlesbar für #1646-Poller).
+    Atomar via .tmp-Datei + os.replace (POSIX-Garantie — Leser sehen nie halb
+    geschriebene Datei). Schreibfehler werden geloggt und geschluckt — der
+    Heartbeat ist Observability, kein kritischer Pfad; ein Schreibfehler darf
+    den Poll-Loop NICHT unterbrechen (SVC-6-Ergänzung T1666).
+    """
+    try:
+        directory = os.path.dirname(heartbeat_path)
+        if directory and not os.path.isdir(directory):
+            os.makedirs(directory, exist_ok=True)
+        tmp_path = heartbeat_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(str(int(time.time())) + "\n")
+        os.replace(tmp_path, heartbeat_path)
+    except OSError as e:
+        logging.warning(
+            "eltern-chat: Heartbeat konnte nicht geschrieben werden (%s): %s",
+            heartbeat_path, e)
+
 
 def _is_private_message_update(update):
     """True, wenn das Update ein `message` mit `chat.type == "private"` trägt
@@ -791,7 +830,7 @@ def _safe_send_chat_action(tg, chat_id, action="typing"):
 
 
 def _reader_loop(ctx, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
-                 stop_event, get_updates_timeout):
+                 stop_event, get_updates_timeout, heartbeat_path=None):
     """Reader-Daemon (EC-37): Long-Poll, Sofort-Typing (EC-39), Hand-off, ACK.
 
     Backoff (E-EC-2, #294) liegt jetzt hier: Reader pausiert bei leerem oder
@@ -799,6 +838,11 @@ def _reader_loop(ctx, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
     dem `handoff.put` ein Sofort-Typing-Indikator gefeuert (EC-39, nur
     Privatchat), die `chat_id` in `open_chat_ids` aufgenommen und dann auf
     das ACK des Processors gewartet (EC-38: At-least-once).
+
+    `heartbeat_path` — wenn gesetzt, wird nach jedem erfolgreichen
+    `get_updates`-Rückgabe (auch leere Liste) der Unix-Timestamp atomar in
+    diese Datei geschrieben (SVC-6-Ergänzung T1666). Schreibfehler werden
+    geloggt und geschluckt — sie unterbrechen den Poll-Loop nicht.
     """
     offset = None
     backoff = 0.0
@@ -827,6 +871,11 @@ def _reader_loop(ctx, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
                 exc_info=True)
             stop_event.set()
             return
+
+        # SVC-6-Ergänzung T1666: Heartbeat nach jedem erfolgreichen Poll
+        # (auch leere Update-Liste = Bot lebt). Schreibfehler schlucken.
+        if heartbeat_path:
+            _write_heartbeat(heartbeat_path)
 
         if not updates:
             if backoff == 0.0:
@@ -951,6 +1000,10 @@ def poll_loop(ctx, get_updates_timeout=30, tg_reader=None):
     if tg_reader is None:
         tg_reader = ctx.tg
 
+    # SVC-6-Ergänzung T1666: Heartbeat-Pfad einmalig auflösen; Reader schreibt
+    # ihn nach jedem erfolgreichen get_updates-Poll.
+    heartbeat_path = _resolve_heartbeat_path()
+
     handoff = queue.Queue(maxsize=1)   # (t0, update_id, update) — EC-37
     ack = queue.Queue(maxsize=1)       # update_id — Done-Signal (EC-37/EC-38)
     open_chat_ids = set()              # set[int] — EC-37/EC-39
@@ -961,7 +1014,7 @@ def poll_loop(ctx, get_updates_timeout=30, tg_reader=None):
         target=_reader_loop,
         name="poll-reader",
         args=(ctx, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
-              stop_event, get_updates_timeout),
+              stop_event, get_updates_timeout, heartbeat_path),
         daemon=True)
     renewer = threading.Thread(
         target=_renewer_loop,
