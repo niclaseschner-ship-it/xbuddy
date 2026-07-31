@@ -30,21 +30,6 @@
       }
     },
     {
-      "slug": "einstellungen",
-      "typ": "pwa",
-      "pfad": "/seiten/plan/einstellungen",
-      "label": "Plan-Einstellungen",
-      "synonyme": ["petrantwortlichkeiten", "wer macht was"],
-      "zeigt": "Default-Petrantwortlichkeiten je Slot und Wochentag setzen.",
-      "zielgruppe": "eltern",
-      "pwa": {
-        "manifest": "/seiten/static/plan/manifest.json",
-        "start_url": "/seiten/plan/einstellungen",
-        "service_worker": "/seiten/static/plan/sw.js"
-      },
-      "auth": "public"
-    },
-    {
       "slug": "connector",
       "typ": "pwa",
       "pfad": "/api/v1/seiten/connector/",
