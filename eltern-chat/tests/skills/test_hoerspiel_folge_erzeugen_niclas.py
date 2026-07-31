@@ -102,8 +102,8 @@ def test_agent_prompt_kennt_niclas():
     stattdessen wird die Dreiliste dynamisch aus HOERSPIEL_INSTANZEN gebaut.
     """
     import agent
-    assert "Niclas" in agent.SYSTEM_PROMPT
-    assert "Paula, Neko oder Niclas" in agent.SYSTEM_PROMPT
+    assert "Kind Drei" in agent.SYSTEM_PROMPT
+    assert "Kind Eins, Kind Zwei oder Kind Drei" in agent.SYSTEM_PROMPT
     # Abwesenheits-Assertion: Binär-Hardcode wurde auf Instanz-Namensliste umgestellt
     assert "Für Paula oder Neko" not in agent.SYSTEM_PROMPT, (
         "Der SYSTEM_PROMPT darf »Für Paula oder Neko« nicht mehr hardcoden — "

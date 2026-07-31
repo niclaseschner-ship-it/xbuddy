@@ -32,18 +32,18 @@ def test_gueltige_datei_gelesen(tmp_path):
     _schreibe(pfad, {
         "hoerspiel": [
             {"slug": "paula", "port": 5053, "origin": "127.0.0.1:5053",
-             "display_name": "Paula"},
+             "display_name": "Kind Eins"},
             {"slug": "neko", "port": 5055, "origin": "127.0.0.1:5055",
-             "display_name": "Neko"},
+             "display_name": "Kind Zwei"},
             {"slug": "niclas", "port": 5056, "origin": "127.0.0.1:5056",
-             "display_name": "Niclas"},
+             "display_name": "Kind Drei"},
         ]
     })
 
     liste = instanzen.lade_instanzen("hoerspiel", pfad=str(pfad))
 
     assert [e["slug"] for e in liste] == ["paula", "neko", "niclas"]
-    assert [e["display_name"] for e in liste] == ["Paula", "Neko", "Niclas"]
+    assert [e["display_name"] for e in liste] == ["Kind Eins", "Kind Zwei", "Kind Drei"]
     for e in liste:
         assert set(e.keys()) == {"slug", "port", "origin", "display_name"}
     # INST-3: origin ist durchgereicht, nicht konstruiert.

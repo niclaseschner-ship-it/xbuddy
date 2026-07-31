@@ -36,11 +36,11 @@ _VALID_COOKIE = sc.sign_session("hsp-test-client-hsp43", _TEST_BOT_TOKEN)
 _TEST_INSTANZEN = {
     "hoerspiel": [
         {"slug": "paula", "port": 5053, "origin": "127.0.0.1:5053",
-         "display_name": "Paula"},
+         "display_name": "Kind Eins"},
         {"slug": "neko", "port": 5055, "origin": "127.0.0.1:5055",
-         "display_name": "Neko"},
+         "display_name": "Kind Zwei"},
         {"slug": "niclas", "port": 5056, "origin": "127.0.0.1:5056",
-         "display_name": "Niclas"},
+         "display_name": "Kind Drei"},
     ]
 }
 
