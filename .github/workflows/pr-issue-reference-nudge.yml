@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   nudge:
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     steps:
       - name: Hinweis posten, wenn keine Issue-Referenz im Body
         env:
