@@ -48,11 +48,11 @@ _PREFIX = "/controller/app-panel/" + _PANEL_ID
 _TEST_INSTANZEN = {
     "hoerspiel": [
         {"slug": "mia", "port": 5053, "origin": "127.0.0.1:5053",
-         "display_name": "Mia"},
+         "display_name": "Kind Eins"},
         {"slug": "finn", "port": 5055, "origin": "127.0.0.1:5055",
-         "display_name": "Finn"},
+         "display_name": "Kind Zwei"},
         {"slug": "emil", "port": 5056, "origin": "127.0.0.1:5056",
-         "display_name": "Niclas"},
+         "display_name": "Kind Drei"},
     ]
 }
 
