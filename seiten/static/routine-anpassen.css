@@ -48,6 +48,13 @@ body {
   overscroll-behavior: contain;
   overflow-x: hidden;
   max-width: 100%;
+  /* T1696: Telegram-Desktop/Android-WebView scrollt den frei wachsenden Body
+     NICHT zuverlaessig (iOS schon). Der Body wird zum gebundenen Scroll-Container:
+     Hoehe = Telegram-Viewport (100dvh), overflow-y:auto. Im Browser identisch
+     scrollbar. Kinder-Kiosk ist unberuehrt (eigene Views, ESB-4/PANEL-12). */
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── App-Header ─────────────────────────────────────────── */

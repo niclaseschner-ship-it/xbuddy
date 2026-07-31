@@ -1021,3 +1021,35 @@ def test_t1662_routine_anpassen_css_kein_body_overflow_hidden():
                 f"routine-anpassen.css: '{selektor}'-Block enthaelt overflow:hidden "
                 f"— T1662 Scroll-Guard verletzt (nur overflow-x: hidden erlaubt):\n{block}"
             )
+
+
+# ── T1696: Scroll-Container-Guard (body traegt height:100dvh + overflow-y:auto) ──
+
+def test_t1696_routine_anpassen_css_body_scroll_container():
+    """T1696: routine-anpassen.css body-Block traegt height:100dvh + overflow-y:auto.
+
+    Telegram-Desktop/Android-WebView scrollt den frei wachsenden Body NICHT
+    zuverlaessig (iOS schon). Der gebundene Scroll-Container (height:100dvh,
+    overflow-y:auto) ist der verifizierte Fix (T1662-Muster, Nic-Verifikation
+    #1662 Windows). Kein ganzheitliches overflow:hidden auf html oder body
+    (wuerde Scroll blockieren).
+    """
+    import re
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        content = f.read()
+
+    # Pruefe body-Block auf gebundenen Scroll-Container.
+    body_blocks = re.findall(r'body\s*\{[^}]*\}', content, re.DOTALL)
+    assert body_blocks, "routine-anpassen.css enthaelt keinen body-Block"
+
+    # Kombinierter Block (alle body-Bloecke zusammen) fuer Eigenschafts-Pruefung.
+    combined = "\n".join(body_blocks)
+    assert "height: 100dvh" in combined, (
+        "routine-anpassen.css body-Block enthaelt kein 'height: 100dvh' "
+        "— T1696 Scroll-Container-Guard verletzt"
+    )
+    assert "overflow-y: auto" in combined, (
+        "routine-anpassen.css body-Block enthaelt kein 'overflow-y: auto' "
+        "— T1696 Scroll-Container-Guard verletzt"
+    )
