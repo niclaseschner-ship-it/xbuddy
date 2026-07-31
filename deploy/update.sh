@@ -282,6 +282,123 @@ PY
 }
 
 # ---------------------------------------------------------------------------
+# FEHLT-Slot-Vorwarnung (T1578, #1578): meldet VOR dem Restart, wenn ein
+# tools.llm-Slot im Code deklariert ist, aber im ZD-Store fehlt.
+#
+# NUR meldend (stderr/Log) — kein ZD-Store-Write, kein Deploy-Abbruch (Nic
+# kann trotzdem deployen). Slot-Inventar = statische Slot-Strings im Code
+# (LLMP-5-Muster) + dynamisch via litellm_slot_for_provider() generierte
+# Slots (alle bekannten caller × provider-Kombinationen).
+#
+# Test-Naht: update.sh --check-llm-slots [STORE_PATH]
+# ---------------------------------------------------------------------------
+check_llm_slots() {
+    local store_path="${1:-}"
+    XBUDDY_REPO="$REPO" XBUDDY_ZD_STORE="${store_path}" python3 - <<'PY'
+import json
+import os
+import re
+import sys
+
+repo = os.environ["XBUDDY_REPO"]
+store_override = os.environ.get("XBUDDY_ZD_STORE", "")
+
+# ---------------------------------------------------------------------------
+# 1. ZD-Store-Pfad auflösen — analog tools.zugangsdaten.resolve_store_path.
+#    Priorität: XBUDDY_ZD_STORE (Test-Naht) > ZUGANGSDATEN_STORE_FILE > Default.
+# ---------------------------------------------------------------------------
+if store_override:
+    store_path = store_override
+elif os.environ.get("ZUGANGSDATEN_STORE_FILE"):
+    store_path = os.environ["ZUGANGSDATEN_STORE_FILE"]
+else:
+    store_path = os.path.join(repo, "tools", "zugangsdaten", "zugangsdaten.json")
+
+try:
+    with open(store_path, encoding="utf-8") as f:
+        store_keys = set(json.load(f).keys())
+except FileNotFoundError:
+    # Kein Store vorhanden — kein Preflight möglich, stumm überspringen.
+    sys.exit(0)
+except Exception as e:
+    print("update [Slot-Prüfung]: Store nicht lesbar (%s) — Prüfung übersprungen" % e,
+          file=sys.stderr)
+    sys.exit(0)
+
+# ---------------------------------------------------------------------------
+# 2. Code-Slots sammeln (LLMP-5: <konsument>-<vendor>-<purpose>).
+#
+# Zwei Quellen:
+#   A) Statische Strings: grep auf *.py nach Mustern mit bekannten Vendor-
+#      Segmenten (litellm, anthropic, azure, mistral).
+#   B) Dynamische Slots: litellm_slot_for_provider(caller, provider) für alle
+#      im Code belegten caller×provider-Kombinationen. Die Funktion baut die
+#      Slot-Namen zur Laufzeit; wir replizieren die Logik hier statisch.
+# ---------------------------------------------------------------------------
+
+# A) Statische Strings aus *.py greppen (ohne Tests/Evals)
+slot_pattern = re.compile(
+    r'"([a-z][a-z0-9-]+-(?:litellm|anthropic|azure|mistral|openai)-[a-z][a-z0-9-]+)"'
+)
+code_slots = set()
+for dirpath, _dirs, files in os.walk(repo):
+    # deploy/, tools/zugangsdaten/tests/, */tests/, */eval/ überspringen
+    parts = dirpath.replace(repo, "").lstrip(os.sep).split(os.sep)
+    if any(p in ("tests", "eval", ".git", ".claude") for p in parts):
+        continue
+    if parts and parts[0] == "deploy":
+        continue
+    for fname in files:
+        if not fname.endswith(".py"):
+            continue
+        if fname.startswith("test_"):
+            continue
+        # sync_*.py sind ENV-Brücken (kibuddy-azure-openai-*): kein tools.llm-Slot.
+        if fname.startswith("sync_"):
+            continue
+        try:
+            with open(os.path.join(dirpath, fname), encoding="utf-8") as f:
+                src = f.read()
+        except OSError:
+            continue
+        for m in slot_pattern.finditer(src):
+            code_slots.add(m.group(1))
+
+# B) Dynamische litellm-Slots: alle im Code belegten caller×provider-Paare.
+# Quelle: tools/llm/_resolver.py:_LITELLM_PURPOSE_FOR_PROVIDER (SSoT).
+# Caller-Liste: aus dem Code bekannte Konsumenten.
+_LITELLM_PURPOSE_FOR_PROVIDER = {
+    "claude": "claude-api-key",
+    "mistral": "eu-api-key",
+}
+_KNOWN_LITELLM_CALLERS = ["eltern-chat", "hoerspiel"]  # litellm_slot_for_provider-Aufrufer
+
+for caller in _KNOWN_LITELLM_CALLERS:
+    for provider, purpose in _LITELLM_PURPOSE_FOR_PROVIDER.items():
+        code_slots.add("%s-litellm-%s" % (caller, purpose))
+
+# ---------------------------------------------------------------------------
+# 3. Vergleich: Code-Slots vs. Store-Keys
+# ---------------------------------------------------------------------------
+missing = sorted(s for s in code_slots if s not in store_keys)
+
+if missing:
+    print(
+        "update [FEHLT-Slot-Vorwarnung]: %d tools.llm-Slot(s) im Code deklariert,"
+        " aber NICHT im ZD-Store provisioniert:" % len(missing),
+        file=sys.stderr,
+    )
+    for slot in missing:
+        print("  FEHLT: %s" % slot, file=sys.stderr)
+    print(
+        "  → Betroffene Services starten ohne diese Slots (SVC-7-Preflight"
+        " schlägt beim Boot fehl). Provisionierung via Nic-Onboarding (#1524).",
+        file=sys.stderr,
+    )
+PY
+}
+
+# ---------------------------------------------------------------------------
 # Vollauf.
 # ---------------------------------------------------------------------------
 run_full() {
@@ -307,6 +424,11 @@ run_full() {
     # deploy/version VOR den Restarts schreiben, damit die neu gestarteten
     # Services beim Boot direkt den neuen SHA über /version melden.
     write_version_file "$post"
+
+    # FEHLT-Slot-Vorwarnung VOR den Restarts (T1578): meldet, wenn ein neuer
+    # tools.llm-Slot im Code steht, aber noch nicht im ZD-Store provisioniert.
+    # Nur meldend — kein Abbruch.
+    check_llm_slots
 
     # Dependency-Sync aus pyproject VOR den Restarts (#1534): neu gestartete
     # Services sehen so neue/geänderte Deps. Ein Fehlschlag setzt rc, blockt aber
@@ -367,11 +489,17 @@ main() {
         --sync-deps)
             sync_deps
             ;;
+        --check-llm-slots)
+            # Test-Naht: optional STORE_PATH als zweites Argument (für Tests mit
+            # Temp-Store). Ohne Argument → produktiver ZD-Store-Pfad.
+            shift
+            check_llm_slots "${1:-}"
+            ;;
         "")
             run_full
             ;;
         *)
-            echo "usage: update.sh [--derive PATH... | --write-version SHA | --mark-done RANGE | --port-class SVC | --sync-deps]" >&2
+            echo "usage: update.sh [--derive PATH... | --write-version SHA | --mark-done RANGE | --port-class SVC | --sync-deps | --check-llm-slots [STORE_PATH]]" >&2
             exit 2
             ;;
     esac
