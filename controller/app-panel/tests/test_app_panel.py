@@ -2146,6 +2146,6 @@ def test_T1584_spec_traegt_shell_flow_zweig_in_panel_11():
     assert 'RAT-31' in section and 'ingest_url' in section, (
         "PANEL-11 Shell-Flow-Zweig muss RAT-31 und ingest_url referenzieren (T1584)"
     )
-    assert 'entfallen' in section, (
-        "PANEL-11 muss die RAT-31-Entfall-Notiz für die Stream-Korrekturfälle tragen (T1584)"
+    assert 'entfallen' in section or 'SUPERSEDED' in section, (
+        "PANEL-11 muss die RAT-31-Entfall-/SUPERSEDED-Notiz für die Stream-Korrekturfälle tragen (T1584/T1601)"
     )
