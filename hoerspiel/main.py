@@ -30,7 +30,6 @@ Port: 5053 (HSP-28). Service-Topologie: schlanke eigenständige Flask-App
 
 import argparse
 import contextlib
-import functools
 import json
 import logging
 import os
@@ -230,102 +229,12 @@ def _get_familie_client_auth():
     return _tools_familie_client_mod.FamilieClient(origin_url=origin)
 
 
-def _validate_mini_app_request():
-    """Validiert Authorization: tma <initData>-Header (MAD-7 / HSP-39).
-
-    Gibt (InitData, None) bei Erfolg zurück.
-    Gibt (None, (json_response, status)) bei Auth-Fehler zurück.
-    """
-    bot_token = _get_bot_token()
-
-    # HSP-40: Test-Modus-Bypass — bot_token="TEST" überspringt alle Auth-Checks.
-    # Das wird ausschließlich in unit-Tests via configure(bot_token="TEST") gesetzt.
-    if bot_token == "TEST":
-        from types import SimpleNamespace
-        return SimpleNamespace(user_id=1), None
-
-    if not _INIT_DATA_AVAILABLE or _init_data_mod is None:
-        return None, (jsonify({"error": "Init-Data-Modul nicht verfügbar"}), 500)
-
-    if not bot_token:
-        logger.error("MAD-7: ELTERNCHAT_BOT_TOKEN nicht gesetzt — Mini-App-Route nicht nutzbar.")
-        return None, (jsonify({"error": "Serverkonfiguration unvollständig (Bot-Token fehlt)"}), 500)
-
-    cfg = runtime.get("init_data_config")
-    if cfg is None:
-        cfg = _init_data_mod.load_config()
-        runtime["init_data_config"] = cfg
-
-    auth_header = request.headers.get("Authorization")
-    try:
-        init_data = _init_data_mod.validate_header(
-            auth_header,
-            bot_token,
-            cfg["max_age_seconds"],
-        )
-    except _init_data_mod.InitDataError as exc:
-        logger.warning("MAD-7 Auth fehlgeschlagen: %s", exc)
-        return None, (jsonify({"error": "initData ungültig, abgelaufen oder fehlt"}), 401)
-
-    return init_data, None
-
-
-def _check_familie_mitglied(user_id):
-    """Prüft ob user_id in der Familien-Registry registriert ist (FAM-7/8).
-
-    T1015: HTTP-Pfad über ``tools.familie_client`` (DCOMP-1-konform, ersetzt
-    den früheren familie.json-Direkt-Read).
-    """
-    familie_ids = _get_familie_client_auth().get_telegram_ids()
-    if familie_ids is None:
-        return None  # Familie-Service unerreichbar → fail-open
-    if user_id not in familie_ids:
-        logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", user_id)
-        return jsonify({"error": "Nicht autorisiert — kein Familienmitglied"}), 403
-    return None
-
-
-def require_mini_app_auth(f):
-    """Decorator: SOFT-AUTH (V3, #898) — Header optional.
-
-    Verhalten:
-    - Fehlt Authorization-Header: pass-through (Kind-Tablet-V1-Niveau).
-    - Header vorhanden, ungültig: 401 (vom Helper).
-    - Header vorhanden, gültig + Familien-Mitglied: weiter.
-    - Header vorhanden, gültig + Nicht-Mitglied: 403.
-    - Localhost-Bypass: pass-through.
-    """
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        # Localhost-Bypass für Internal-Service-Calls.
-        if (not request.headers.get("X-Forwarded-For")
-                and request.remote_addr in ("127.0.0.1", "::1")):
-            return f(*args, **kwargs)
-
-        # V3 Soft-Auth: Header optional. Fehlt ODER leerer "tma "-Wert → pass.
-        ah = request.headers.get("Authorization", "").strip()
-        if not ah or ah.lower() in ("tma", "tma ") or (
-            ah.lower().startswith("tma ") and not ah[4:].strip()
-        ):
-            return f(*args, **kwargs)
-
-        init_data, err = _validate_mini_app_request()
-        if err is not None:
-            return err
-        fam_err = _check_familie_mitglied(init_data.user_id)
-        if fam_err is not None:
-            return fam_err
-        return f(*args, **kwargs)
-    return wrapper
-
-
 # ============================================================
 #  AUTH-3 HART-Cookie — Datenrouten (T1640, auth.md AUTH-3)
 # ============================================================
 # Phase-3-Migration (2026-07-30 gefeuert): die hoerspiel-Datenrouten
 # (config, alben, alben/<id>/manifest, resume, themen, folgen-vorschlag) wandern
-# von AUTH-6/SOFT auf HART-Cookie (auth.md AUTH-3, RAT-32 cookie-only). Der
-# SOFT-Pass-through (require_mini_app_auth) stoppte den Funnel-PII-Leak nicht.
+# von AUTH-6/SOFT auf HART-Cookie (auth.md AUTH-3, RAT-32 cookie-only).
 # Verdrahtung identisch zum #1639-routine-Muster (make_require_init_data-Factory).
 # NICHT auf /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3 (AUTH-4
 # public — <audio>-Element lädt ohne zuverlässiges Cookie) und NICHT auf
@@ -335,9 +244,8 @@ def require_mini_app_auth(f):
 def _get_init_data_config():
     """Tma-Config (``max_age_seconds``) — gecacht im runtime-Dict oder frisch.
 
-    Getter-Naht für die AUTH-Decorator-Lib-Factory (T1640). Wörtlich der Pfad,
-    den der SOFT-Helper (`_validate_mini_app_request`) inline las
-    (``runtime.get("init_data_config")`` → ``_init_data_mod.load_config()`` + Cache).
+    Getter-Naht für die AUTH-Decorator-Lib-Factory (T1640).
+    Pfad: ``runtime.get("init_data_config")`` → ``_init_data_mod.load_config()`` + Cache.
     """
     cfg = runtime.get("init_data_config")
     if cfg is None:

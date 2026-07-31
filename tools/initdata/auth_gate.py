@@ -26,9 +26,10 @@ die den bislang pro Buddy hand-kopierten Flask-Auth-Wrapper konsolidieren
 Stelle der Datei (`request`/`g`/`make_response`):
 
 - `make_require_init_data(...)` — **HART** (Loopback → Cookie+Rolling-Refresh →
-  tma-Header → 401). Konsumenten: essen/kibuddy/photo/plan.
+  tma-Header → 401). Konsumenten: essen/kibuddy/photo/plan/routine/hoerspiel.
 - `make_require_soft_gate(...)` — **SOFT** (Loopback → tma → Pass-through, KEIN
-  Cookie-Zweig). Konsumenten: routine + hoerspiel.
+  Cookie-Zweig). Reserviert / aktuell kein Konsument (routine+hoerspiel auf HART
+  migriert: #1639/#1640).
 - `make_require_dual_gate(...)` — **AUTH-7b** (Cookie ODER Operator-IP,
   observe/hard). Konsument: seiten.
 
