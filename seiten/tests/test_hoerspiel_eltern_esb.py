@@ -253,6 +253,46 @@ def test_esb4_kein_body_overflow_hidden():
         )
 
 
+# ── T1696: Scroll-Container-Guard (body traegt height:100dvh + overflow-y:auto) ──
+
+def test_t1696_hoerspiel_eltern_css_body_scroll_container():
+    """T1696: eltern.css body-Block traegt height:100dvh + overflow-y:auto.
+
+    Telegram-Desktop/Android-WebView scrollt den frei wachsenden Body NICHT
+    zuverlaessig (iOS schon). Der gebundene Scroll-Container (height:100dvh,
+    overflow-y:auto) ist der verifizierte Fix (T1662-Muster, Nic-Verifikation
+    #1662 Windows). Sonderfall eltern.css: min-height:100dvh wurde durch
+    height:100dvh ersetzt (min-height laesst den Body frei wachsen = genau der Bug).
+    Kinder-Kiosk ist unberuehrt (eigene Views, ESB-4/PANEL-12).
+    """
+    import re
+    css_path = os.path.join(_HOERSPIEL_STATIC, "eltern.css")
+    assert os.path.isfile(css_path), f"eltern.css nicht gefunden: {css_path}"
+    with open(css_path, encoding="utf-8") as f:
+        content = f.read()
+
+    # Pruefe body-Block auf gebundenen Scroll-Container.
+    body_blocks = re.findall(r'body\s*\{[^}]*\}', content, re.DOTALL)
+    assert body_blocks, "eltern.css enthaelt keinen body-Block"
+
+    combined = "\n".join(body_blocks)
+    assert "height: 100dvh" in combined, (
+        "eltern.css body-Block enthaelt kein 'height: 100dvh' "
+        "— T1696 Scroll-Container-Guard verletzt (min-height waere der Scroll-Bug)"
+    )
+    assert "overflow-y: auto" in combined, (
+        "eltern.css body-Block enthaelt kein 'overflow-y: auto' "
+        "— T1696 Scroll-Container-Guard verletzt"
+    )
+    # Kein min-height als CSS-Property auf body (wuerde Body frei wachsen lassen = Scroll-Bug).
+    # Kommentare werden entfernt, bevor geprueft wird.
+    combined_no_comments = re.sub(r'/\*.*?\*/', '', combined, flags=re.DOTALL)
+    assert "min-height" not in combined_no_comments, (
+        "eltern.css body-Block enthaelt noch 'min-height' als CSS-Property "
+        "— T1696 Scroll-Container-Guard verletzt (min-height laesst Body frei wachsen)"
+    )
+
+
 # ── AC_ENTRY: HTML-Inhalt ────────────────────────────────────────────────────
 
 def test_ac_entry_manifest_link(client):

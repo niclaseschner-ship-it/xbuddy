@@ -25,7 +25,14 @@ body {
   font-family: var(--font-body, sans-serif);
   background: var(--bg, #f9f7f4);
   color: var(--ink, #1a1a1a);
-  min-height: 100dvh;
+  /* T1696: Telegram-Desktop/Android-WebView scrollt den frei wachsenden Body
+     NICHT zuverlaessig (iOS schon). Der Body wird zum gebundenen Scroll-Container:
+     Hoehe = Telegram-Viewport (100dvh), overflow-y:auto. min-height wurde durch
+     height ersetzt (min-height laesst den Body frei wachsen = genau der Bug).
+     Kinder-Kiosk ist unberuehrt (eigene Views, ESB-4/PANEL-12). */
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── App-Header + Tab-Navigation ─────────────────────────────────────────── */
