@@ -990,3 +990,34 @@ def test_t741_icons7_suche_icons_single_fetch():
         "geseheneIds gefunden in routine-anpassen.js — "
         "T741 AC4: Iter-8-Dedup-Block muss weg sein"
     )
+
+
+# ── T1662: Scroll-Guard (Eltern-View, kein overflow:hidden auf html/body) ─────
+
+def test_t1662_routine_anpassen_css_kein_body_overflow_hidden():
+    """T1662: routine-anpassen.css enthaelt kein html/body { overflow: hidden }.
+
+    Eltern-Views MUESSEN auf Chrome/Blink (Windows + Android) scrollen.
+    overflow:hidden auf html oder body blockiert Scroll hart in Blink —
+    iOS Safari (WebKit) toleriert es via Momentum, Chrome nicht (T1662-Befund).
+
+    ERLAUBT: overflow-x: hidden (horizontaler Lock, T728 Bug-1).
+    VERBOTEN: overflow: hidden auf html oder body (vertikaler Scroll-Killer).
+    """
+    import re
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        content = f.read()
+
+    def _normiere(s: str) -> str:
+        # Normiere nur ganzheitliches overflow:hidden (nicht overflow-x, overflow-y)
+        return re.sub(r'(?<!-)overflow: hidden', 'overflow:hidden', s)
+
+    for selektor in ("html", "body", "html, body", "html,body"):
+        muster = rf'{re.escape(selektor)}\s*\{{[^}}]*\}}'
+        for block in re.findall(muster, content, re.DOTALL):
+            normiert = _normiere(block)
+            assert "overflow:hidden" not in normiert, (
+                f"routine-anpassen.css: '{selektor}'-Block enthaelt overflow:hidden "
+                f"— T1662 Scroll-Guard verletzt (nur overflow-x: hidden erlaubt):\n{block}"
+            )

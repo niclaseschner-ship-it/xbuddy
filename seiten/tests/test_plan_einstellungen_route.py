@@ -1004,3 +1004,31 @@ def test_fix1139_icon_picker_reihenfolge():
         f"const iconId ({iconid_pos}) muss VOR schliesseIconPicker ({schliesse_pos}) "
         f"kommen, und beide VOR kontext.callback ({callback_pos}) (PLAN-1139-FIX4 Regression-Schutz)"
     )
+
+
+# ── T1662: Scroll-Guard (Eltern-View, kein overflow:hidden auf html/body) ─────
+
+def test_t1662_plan_einstellungen_css_kein_body_overflow_hidden():
+    """T1662: plan-einstellungen.css enthaelt kein html/body { overflow: hidden }.
+
+    Eltern-Views MUESSEN auf Chrome/Blink (Windows + Android) scrollen.
+    overflow:hidden auf html oder body blockiert Scroll hart in Blink —
+    iOS Safari (WebKit) toleriert es via Momentum, Chrome nicht (T1662-Befund).
+    overflow-x: hidden (horizontaler Lock) ist erlaubt und unberuehrt.
+    """
+    import re
+    css_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.css")
+    with open(css_path, encoding="utf-8") as f:
+        content = f.read()
+
+    def _normiere(s: str) -> str:
+        return s.replace("overflow: hidden", "overflow:hidden")
+
+    for selektor in ("html", "body", "html, body", "html,body"):
+        muster = rf'{re.escape(selektor)}\s*\{{[^}}]*\}}'
+        for block in re.findall(muster, content, re.DOTALL):
+            normiert = _normiere(block)
+            assert "overflow:hidden" not in normiert, (
+                f"plan-einstellungen.css: '{selektor}'-Block enthaelt overflow:hidden "
+                f"— T1662 Scroll-Guard verletzt:\n{block}"
+            )
