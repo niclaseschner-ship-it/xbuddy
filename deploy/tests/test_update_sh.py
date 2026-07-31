@@ -1,9 +1,10 @@
 """Tests für deploy/update.sh Stufe 1 (SVC-6, T1311/#1311).
 
 Deckt die im Worktree testbaren Nähte ab (ohne sudo/git/systemctl):
-  --derive         Service-Ableitung (geteilter Mapper + Shared-Pfad-Fan-out)
-  --write-version  deploy/version-Datei schreiben
-  --mark-done      restart_done:true in restart_pending.jsonl
+  --derive              Service-Ableitung (geteilter Mapper + Shared-Pfad-Fan-out)
+  --write-version       deploy/version-Datei schreiben
+  --mark-done           restart_done:true in restart_pending.jsonl
+  --check-llm-slots     FEHLT-Slot-Vorwarnung (T1578, #1578)
 
 Der Live-Restart-Pfad (pull/systemctl restart/Verifikation) läuft im
 Orchestrator-Deploy und ist hier bewusst nicht abgedeckt.
@@ -156,3 +157,79 @@ def test_port_class_unbekannter_service_ist_fehler():
     res = _port_class("xbuddy-tippfehler")
     assert res.returncode == 1
     assert res.stdout.strip() == "UNKNOWN"
+
+
+# ── --check-llm-slots: FEHLT-Slot-Vorwarnung (T1578, #1578) ──────────────────
+
+def _all_code_slots():
+    """Liefert die Menge der Code-deklarierten tools.llm-Slots (statisch + dynamisch).
+
+    Statisch: Slot-Strings aus dem Repo.
+    Dynamisch: litellm_slot_for_provider(caller, provider) für alle bekannten
+    caller×provider-Paare — repliziert die Logik aus update.sh:check_llm_slots.
+    """
+    # Statische Slots: bekannte aus dem Repo-Scan
+    _STATIC = {
+        "kibuddy-litellm-api-key",
+        "kibuddy-litellm-stt-key",
+        "kibuddy-litellm-tts-key",
+        "eltern-chat-litellm-foto-analyse-api-key",
+        "hoerspiel-anthropic-api-key",
+        "kibuddy-anthropic-api-key",
+    }
+    # Dynamische litellm-Slots
+    _CALLERS = ["eltern-chat", "hoerspiel"]
+    _PURPOSES = {"claude": "claude-api-key", "mistral": "eu-api-key"}
+    dynamic = {
+        "%s-litellm-%s" % (caller, purpose)
+        for caller in _CALLERS
+        for purpose in _PURPOSES.values()
+    }
+    return _STATIC | dynamic
+
+
+def _write_store(path, slots):
+    """Schreibt einen minimalen ZD-Store mit den gegebenen Slot-Namen (Dummy-Werte)."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(dict.fromkeys(slots, "dummy-key"), f)
+
+
+def test_check_llm_slots_keine_warnung_wenn_alle_vorhanden(tmp_path):
+    """Alle Code-Slots im Store → kein stderr, rc 0."""
+    store = tmp_path / "zugangsdaten.json"
+    _write_store(store, _all_code_slots())
+    res = _run("--check-llm-slots", str(store))
+    assert res.returncode == 0, res.stderr
+    assert "FEHLT" not in res.stderr, "Keine Warnung erwartet, aber: %s" % res.stderr
+
+
+def test_check_llm_slots_warnung_wenn_slot_fehlt(tmp_path):
+    """Fehlt ein Slot im Store → 'FEHLT: <slot>' erscheint auf stderr, rc 0 (nur meldend)."""
+    store = tmp_path / "zugangsdaten.json"
+    # Store ohne kibuddy-litellm-api-key
+    slots_ohne_einen = _all_code_slots() - {"kibuddy-litellm-api-key"}
+    _write_store(store, slots_ohne_einen)
+    res = _run("--check-llm-slots", str(store))
+    assert res.returncode == 0, "check-llm-slots darf nie den Deploy abbrechen (nur meldend)"
+    assert "FEHLT" in res.stderr, "Warnung erwartet"
+    assert "kibuddy-litellm-api-key" in res.stderr
+
+
+def test_check_llm_slots_kein_store_write(tmp_path):
+    """check-llm-slots schreibt NIE in den ZD-Store (nur lesend)."""
+    store = tmp_path / "zugangsdaten.json"
+    # Store mit nur einem Slot → viele fehlen
+    _write_store(store, {"eltern-chat-litellm-claude-api-key"})
+    mtime_before = store.stat().st_mtime
+    content_before = store.read_text()
+    _run("--check-llm-slots", str(store))
+    assert store.stat().st_mtime == mtime_before, "Store-Datei wurde modifiziert!"
+    assert store.read_text() == content_before, "Store-Inhalt wurde verändert!"
+
+
+def test_check_llm_slots_kein_store_datei_ok(tmp_path):
+    """Fehlt die Store-Datei komplett → stumm rc 0 (kein Crash, kein Abbruch)."""
+    store = tmp_path / "nicht-vorhanden.json"
+    res = _run("--check-llm-slots", str(store))
+    assert res.returncode == 0, res.stderr
+    assert "FEHLT" not in res.stderr
