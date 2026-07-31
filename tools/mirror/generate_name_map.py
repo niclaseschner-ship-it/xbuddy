@@ -27,7 +27,6 @@ import re
 import sys
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Ratifizierte Abbildung: Quell-Slug → Ziel-Slug (kind1/kind2/kind3)
 # Quelle: conventions/ports.md + hoerspiel/*.service + instanzen.example.json
