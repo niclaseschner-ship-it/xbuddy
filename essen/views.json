@@ -18,16 +18,16 @@
     },
     {
       "slug": "einkauf",
-      "typ": "mini-app",
+      "typ": "pwa",
       "pfad": "/seiten/essen/einkauf",
       "label": "Einkaufsliste pflegen",
       "synonyme": ["einkaufen", "liste", "abhaken"],
       "zeigt": "Einkaufsliste bearbeiten — abhaken, hinzufügen, Wünsche übernehmen.",
       "zielgruppe": "eltern",
-      "web_app": {
-        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
-        "app_short_name": "einkaufen",
-        "icons": ["arasaac/28339.png"]
+      "pwa": {
+        "manifest": "/seiten/essen/einkauf/manifest.json",
+        "start_url": "/seiten/essen/einkauf/",
+        "service_worker": "/seiten/essen/einkauf/sw.js"
       }
     }
   ]
