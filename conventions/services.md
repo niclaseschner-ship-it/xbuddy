@@ -138,3 +138,20 @@ Service selbst** (fail-fast beim Start), nicht in einen Handzettel.
 
 Präzedenz/Anlass: #1440 (kibuddy-Bot-Token-Lücke), #1447 (diese Konvention),
 Nic-Setzung 2026-07-25 (Variante A: »Dienst prüft beim Start selbst«).
+
+### SVC-8 — Bot-Services ohne HTTP: Liveness per Heartbeat statt `/healthz`
+
+Ein Service **ohne** Flask/HTTP-Server (reiner Telegram-Polling-Bot, z. B.
+`eltern-chat`) kann kein `/healthz` (SVC-6) exponieren, muss aber im
+unbeaufsichtigten Betrieb überwacht sein. Statt einer SVC-6-Ausnahme schreibt
+ein solcher Bot ein **Heartbeat**: eine Datei mit dem Zeitstempel des letzten
+erfolgreichen Arbeits-Zyklus (z. B. `getUpdates`-Poll) unter
+`xbuddy-data/<service>/heartbeat`, bei jedem Zyklus aktualisiert.
+
+Der Fern-Alerting-Poller (#1646) liest den Heartbeat **statt** `/healthz`:
+Zeitstempel älter als ein Schwellwert N → Bot tot/hängend → Alert an den
+Owner-Kanal. Damit ist der Bot genauso überwacht wie ein HTTP-Service —
+SVC-6 bleibt HTTP-only, SVC-8 ist der Nicht-HTTP-Zwilling, keine Ausnahme.
+
+Präzedenz/Anlass: #1641 (eltern-chat kein /healthz), Nic-Wahl b 2026-07-31
+(Signal statt Ausnahme). Bau #1666.
