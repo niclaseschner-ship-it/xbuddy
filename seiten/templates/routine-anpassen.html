@@ -3,15 +3,23 @@
      Statisches Skelett; JS-Hydration rendert die Sektionen und alle Sheets.
      ROUTINE-23: zweiter Mini-App-Konsument, folgt MAD-1..7+MAD-10
      (brainstorm-Vorlage, NICHT ratifiziert — Ratifizierung folgt nach Live, ROUTINE-23).
-     Abweichung von MAD-3: kein FAB — Inline-Add je Sektion (ROUTINE-23). -->
+     Abweichung von MAD-3: kein FAB — Inline-Add je Sektion (ROUTINE-23).
+     T1665: PWA-Mantel (PWAM-5) — manifest.json + sw.js Lib-generiert. -->
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#47503C">
   <!-- Cache-Buster (T728 Live-Iter): Telegram cached Mini-App-Assets sonst zu hart -->
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <title>Morgenroutine anpassen · XBuddy</title>
+
+  <!-- PWA-Manifest (absoluter Pfad, ROUTINE-23 / T1665 PWAM-5) -->
+  <link rel="manifest" href="/seiten/routine/anpassen/manifest.json">
+  <link rel="icon" href="/seiten/routine/anpassen/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/seiten/routine/anpassen/icon-192.png">
+
   <link rel="stylesheet" href="/api/v1/seiten/static/routine-anpassen.css?v={{ build_id }}">
   <!-- platform.js (RAT-16) muss vor routine-anpassen.js geladen sein -->
   <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
@@ -37,5 +45,25 @@
 
   <!-- Toast-Hinweis für Transient-Meldungen -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- PWA-Naht: Service-Worker (T1665 / ROUTINE-23 / PWAM-5) -->
+  <script>
+    (function () {
+      'use strict';
+
+      // ── Service-Worker registrieren (ROUTINE-23 / T1665) ──────────────────
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/seiten/routine/anpassen/sw.js', { scope: '{{ sw_scope }}' })
+            .catch(function (err) {
+              console.warn('[pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
+            });
+        });
+      } else {
+        console.warn('[pwa] Service-Worker nicht unterstuetzt.');
+      }
+    })();
+  </script>
 </body>
 </html>
