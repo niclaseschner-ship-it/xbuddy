@@ -3,16 +3,17 @@
 Lauf: python3 -m pytest deploy/nginx/tests/ -v
 
 Die Suite liest die nginx-Conf als Text und belegt textuell, dass die
-Origin-Routing-Tabelle aus `specs/platform/urls.md` URL-14 abgebildet ist:
-Familie-Upstream auf Port 5010 (FAM-7/8), `location /api/v1/familie/` zeigt
-darauf und steht VOR dem allgemeinen `/api/v1/`-Block (spezifisch vor
-allgemein, längster Prefix gewinnt — URL-14).
+Origin-Routing-Tabelle aus `specs/platform/urls.md` URL-14 abgebildet ist.
+
+Familie (RAT-31/#1638/#1339): `location /api/v1/familie/` gibt extern 403 zurück.
+Familie ist eine interne Registry; interne Leser (eltern-chat, plan, kibuddy)
+rufen sie per Loopback direkt an (http://127.0.0.1:5010), nicht über nginx.
+Der upstream-Block `xbuddy_familie` bleibt erhalten (wird intern direkt genutzt).
 
 Diese Tests parsen die Conf nicht semantisch (kein nginx im Loop), sondern
 fixieren die textuellen Eigenschaften, die das Routing tragen: ein Lookup-
-Block, ein proxy_pass, eine Reihenfolge. Das fängt #85-Regressionen ab
-(Familie-Block fehlt; falsche Position; falscher Upstream) ohne ein nginx-
-Binary in der Test-Umgebung vorauszusetzen.
+Block, ein return 403, eine Reihenfolge. Das fängt #85-Regressionen ab
+(Familie-Block fehlt; falsche Position) ohne ein nginx-Binary vorauszusetzen.
 """
 
 import os
@@ -46,18 +47,23 @@ def test_URL_14_familie_upstream_zeigt_auf_5010():
     )
 
 
-def test_URL_14_familie_location_proxypassed_an_familie_upstream():
-    """URL-14 Zeile 3: /api/v1/familie/ wird an xbuddy_familie geleitet."""
+def test_URL_14_familie_location_gibt_403_zurueck():
+    """RAT-31 / #1638 / #1339: /api/v1/familie/ gibt extern 403 zurück.
+
+    familie ist eine interne Registry; interne Leser (eltern-chat, plan, kibuddy)
+    rufen sie per Loopback direkt an (http://127.0.0.1:5010), nicht über nginx.
+    Die nginx-Location ist ausschließlich von externen Clients erreichbar → 403.
+    """
     text = _conf_text()
-    # `location /api/v1/familie/ { ... proxy_pass http://xbuddy_familie; ... }`
+    # `location /api/v1/familie/ { ... return 403; ... }`
     match = re.search(
-        r"location\s+/api/v1/familie/\s*\{[^}]*proxy_pass\s+http://xbuddy_familie\s*;[^}]*\}",
+        r"location\s+/api/v1/familie/\s*\{[^}]*return\s+403\s*;[^}]*\}",
         text,
         re.DOTALL,
     )
     assert match is not None, (
-        "location /api/v1/familie/ fehlt oder proxypasst nicht an xbuddy_familie "
-        "(URL-14, #85)"
+        "location /api/v1/familie/ fehlt oder gibt nicht 403 zurück "
+        "(RAT-31, #1638, #1339: externe Familie-Routen abgeschaltet)"
     )
 
 
