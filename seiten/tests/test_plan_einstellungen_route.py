@@ -397,32 +397,34 @@ def test_js_hat_put_fuer_speichern():
 # ── SREG-15: views.json-Registry-Eintrag ────────────────────────────────────
 
 def test_sreg15_views_json_enthaelt_einstellungen():
-    """SREG-15: seiten/views.json traegt slug 'einstellungen' mit typ 'pwa'.
+    """SREG-15 / ESB-3-Heimat: plan/views.json traegt slug 'einstellungen' mit typ 'pwa'.
 
-    Eigentest BUD-3/SREG: der Eintrag muss in views.json vorhanden sein,
-    damit GET /api/v1/seiten (Aggregator) die Plan-Einstellungs-PWA listet.
+    ESB-3-Heimat-Regel: plan-einstellungen gehoert in die Buddy-Heimat plan/views.json,
+    nicht in seiten/views.json (T1680-Umbau). Eigentest BUD-3/SREG: der Eintrag muss in
+    plan/views.json vorhanden sein, damit GET /api/v1/seiten (Aggregator) die
+    Plan-Einstellungs-PWA als 'plan-einstellungen' listet.
     """
     import json as _json
 
-    views_path = os.path.join(_SEITEN_DIR, "views.json")
+    views_path = os.path.join(_REPO_ROOT, "plan", "views.json")
     with open(views_path, encoding="utf-8") as fh:
         data = _json.load(fh)
 
     views = data.get("views", [])
     slugs = {v.get("slug"): v for v in views if isinstance(v, dict)}
     assert "einstellungen" in slugs, \
-        "seiten/views.json: slug 'einstellungen' fehlt (SREG-15)"
+        "plan/views.json: slug 'einstellungen' fehlt (SREG-15 / ESB-3-Heimat, T1680)"
     eintrag = slugs["einstellungen"]
     assert eintrag.get("typ") == "pwa", \
-        "seiten/views.json: einstellungen-Eintrag hat nicht typ='pwa' (SREG-15)"
+        "plan/views.json: einstellungen-Eintrag hat nicht typ='pwa' (SREG-15)"
     assert "pwa" in eintrag, \
-        "seiten/views.json: einstellungen-Eintrag fehlt pwa-Block (SREG-15)"
+        "plan/views.json: einstellungen-Eintrag fehlt pwa-Block (SREG-15)"
     pwa = eintrag["pwa"]
     for feld in ("manifest", "start_url", "service_worker"):
         assert feld in pwa, \
-            f"seiten/views.json: pwa.{feld} fehlt im einstellungen-Eintrag (SREG-15)"
+            f"plan/views.json: pwa.{feld} fehlt im einstellungen-Eintrag (SREG-15)"
     assert eintrag.get("auth") == "public", \
-        "seiten/views.json: einstellungen-Eintrag hat nicht auth='public' (SREG-15)"
+        "plan/views.json: einstellungen-Eintrag hat nicht auth='public' (SREG-15)"
 
 
 # ── PWA-2: manifest display=fullscreen ───────────────────────────────────────

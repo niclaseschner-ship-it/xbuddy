@@ -481,3 +481,99 @@ def test_aggregator_typ_mini_app_falsche_zielgruppe(tmp_path, monkeypatch):
     assert "routine-morgen" in keys, "routine-morgen muss trotz Skip-Nachbar im Inventar bleiben"
     # Defekte Mini-App-View (falsche zielgruppe) wird übersprungen
     assert "routine-anpassen" not in keys, "routine-anpassen (zielgruppe=kind) muss übersprungen werden"
+
+
+# ============================================================
+#  ESB-3-Heimat-Invariante — echte Manifeste (T1680)
+#
+#  Prüft die zwei ESB-3-Heimat-Regeln gegen die realen views.json-Dateien.
+#  Diese Tests schlagen sofort an, wenn einkauf oder plan-einstellungen
+#  in die falsche Heimat zurückwandern oder doppelt gelistet werden.
+# ============================================================
+
+def test_esb3_heimat_einkauf_nur_aus_essen(monkeypatch):
+    """ESB-3-Heimat (T1680): einkauf lebt ausschließlich in essen/views.json.
+
+    - typ muss 'pwa' sein (hat manifest+sw unter seiten/static/einkauf/).
+    - seiten/views.json darf KEINEN einkauf-Eintrag tragen.
+    - Der Aggregator liefert genau eine einkauf-View, app='essen'.
+    """
+    # Ohne gesetzten BOT-Username werden mini-app-Views übersprungen;
+    # pwa-Views sind nicht BOT-abhängig → nur einkauf-Heimat-Check relevant.
+    monkeypatch.delenv("ELTERNCHAT_BOT_USERNAME", raising=False)
+
+    # 1. essen/views.json: einkauf mit typ='pwa' vorhanden
+    import json as _json
+    essen_path = os.path.join(_REPO_ROOT, "essen", "views.json")
+    with open(essen_path, encoding="utf-8") as fh:
+        essen_data = _json.load(fh)
+    essen_slugs = {v["slug"]: v for v in essen_data["views"] if isinstance(v, dict)}
+    assert "einkauf" in essen_slugs, (
+        "ESB-3-Heimat: einkauf fehlt in essen/views.json (T1680)")
+    assert essen_slugs["einkauf"].get("typ") == "pwa", (
+        "ESB-3-Heimat: essen/views.json einkauf muss typ='pwa' haben (T1680)")
+
+    # 2. seiten/views.json: KEIN einkauf-Eintrag
+    seiten_path = os.path.join(_REPO_ROOT, "seiten", "views.json")
+    with open(seiten_path, encoding="utf-8") as fh:
+        seiten_data = _json.load(fh)
+    seiten_slugs = {v["slug"] for v in seiten_data["views"] if isinstance(v, dict)}
+    assert "einkauf" not in seiten_slugs, (
+        "ESB-3-Heimat: einkauf darf NICHT in seiten/views.json stehen (T1680)")
+
+    # 3. Aggregator liefert genau eine einkauf-View, app='essen'
+    eintraege = aggregator.manifest_eintraege(_REPO_ROOT)
+    einkauf_views = [e for e in eintraege if e.get("key", "").endswith("-einkauf")
+                     and "einkauf" in e.get("key", "")]
+    # key-Format ist <app>-<slug> → essen-einkauf
+    essen_einkauf = [e for e in eintraege if e.get("key") == "essen-einkauf"]
+    assert len(essen_einkauf) == 1, (
+        "ESB-3-Heimat: genau eine essen-einkauf-View im Inventar erwartet, "
+        "got %d (T1680)" % len(essen_einkauf))
+    assert essen_einkauf[0]["app"] == "essen", (
+        "ESB-3-Heimat: einkauf muss app='essen' haben (T1680)")
+    # Kein Duplikat aus einer anderen App
+    andere_einkauf = [e for e in einkauf_views if e.get("key") != "essen-einkauf"]
+    assert not andere_einkauf, (
+        "ESB-3-Heimat: einkauf-View aus fremder App: %r (T1680)" % andere_einkauf)
+
+
+def test_esb3_heimat_plan_einstellungen_nur_aus_plan(monkeypatch):
+    """ESB-3-Heimat (T1680): plan-einstellungen lebt ausschließlich in plan/views.json.
+
+    - plan/views.json muss slug 'einstellungen' mit typ='pwa' tragen.
+    - seiten/views.json darf KEINEN 'einstellungen'-Eintrag mehr haben.
+    - Aggregator liefert genau eine plan-einstellungen-View, app='plan'.
+    """
+    import json as _json
+
+    # 1. plan/views.json: einstellungen mit typ='pwa' vorhanden
+    plan_path = os.path.join(_REPO_ROOT, "plan", "views.json")
+    with open(plan_path, encoding="utf-8") as fh:
+        plan_data = _json.load(fh)
+    plan_slugs = {v["slug"]: v for v in plan_data["views"] if isinstance(v, dict)}
+    assert "einstellungen" in plan_slugs, (
+        "ESB-3-Heimat: 'einstellungen' fehlt in plan/views.json (T1680)")
+    assert plan_slugs["einstellungen"].get("typ") == "pwa", (
+        "ESB-3-Heimat: plan/views.json einstellungen muss typ='pwa' haben (T1680)")
+
+    # 2. seiten/views.json: KEIN einstellungen-Eintrag
+    seiten_path = os.path.join(_REPO_ROOT, "seiten", "views.json")
+    with open(seiten_path, encoding="utf-8") as fh:
+        seiten_data = _json.load(fh)
+    seiten_slugs = {v["slug"] for v in seiten_data["views"] if isinstance(v, dict)}
+    assert "einstellungen" not in seiten_slugs, (
+        "ESB-3-Heimat: 'einstellungen' darf NICHT in seiten/views.json stehen (T1680)")
+
+    # 3. Aggregator liefert genau eine plan-einstellungen-View, app='plan'
+    eintraege = aggregator.manifest_eintraege(_REPO_ROOT)
+    plan_einst = [e for e in eintraege if e.get("key") == "plan-einstellungen"]
+    assert len(plan_einst) == 1, (
+        "ESB-3-Heimat: genau eine plan-einstellungen-View im Inventar erwartet, "
+        "got %d (T1680)" % len(plan_einst))
+    assert plan_einst[0]["app"] == "plan", (
+        "ESB-3-Heimat: einstellungen muss app='plan' haben (T1680)")
+    # Kein Duplikat aus seiten
+    seiten_einst = [e for e in eintraege if e.get("key") == "seiten-einstellungen"]
+    assert not seiten_einst, (
+        "ESB-3-Heimat: 'seiten-einstellungen' darf nicht mehr im Inventar stehen (T1680)")
