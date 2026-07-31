@@ -334,7 +334,15 @@ def assert_routes_match(app, eintraege, slug, ausgenommene_pfade=None):
     den eigenen Slug).
     """
     routen_pfade = kanonische_display_pfade(app, slug, ausgenommene_pfade)
-    manifest_pfade = {e["pfad"] for e in eintraege}
+    # Nur die kanonischen /display/<slug>/-Einträge zählen für diese Buddy-Bindung
+    # (siehe Docstring). Seiten-gehostete Eltern-Views (typ:pwa, Pfad /seiten/…,
+    # ESB-3-Heimat im Buddy-views.json, Route aber in seiten) sind KEINE
+    # /display/-Routen des Buddys und werden hier nicht gegen die Buddy-App
+    # geprüft — sonst false-Drift nach #1680 (T1689).
+    display_prefix = "/display/%s/" % slug
+    manifest_pfade = {
+        e["pfad"] for e in eintraege if e["pfad"].startswith(display_prefix)
+    }
 
     fehlt_im_manifest = routen_pfade - manifest_pfade
     fehlt_als_route = manifest_pfade - routen_pfade
