@@ -148,7 +148,7 @@ def test_ac2_embedded_form_top_level(client):
     """AC2: eingebettetes Aggregat traegt schnittstellen + je_buddy + daten_ab + Marker."""
     data = _embedded_data(client.get(_HTML_PATH).get_data(as_text=True))
     for feld in ("schnittstellen", "je_buddy", "daten_ab", "fenster_tage",
-                 "chart_tage", "gesamt_llm_eur", "zd_inventar"):
+                 "chart_tage", "gesamt_llm_eur", "gesamt_7t_eur", "zd_inventar"):
         assert feld in data, f"Feld '{feld}' fehlt im eingebetteten Aggregat (CONN-8)"
     assert data["daten_ab"] == "2026-06-24"  # frühestes ts im Fenster
     assert data["fenster_tage"] == 30
@@ -202,6 +202,30 @@ def test_ac2_gesamt_llm_summe(client):
     data = _embedded_data(client.get(_HTML_PATH).get_data(as_text=True))
     # eltern 0.35 + hoerspiel 0.6963 + kibuddy round(0.00006,4)=0.0001 = 1.0464
     assert abs(data["gesamt_llm_eur"] - 1.0464) < 1e-6
+
+
+def test_ac2_gesamt_7t_summe(client):
+    """#1669 Block ①: gesamt_7t_eur summiert die 7-Tage-daily-Kosten aller Apps.
+    Alle Fixture-Events (06-24..06-26) liegen im 7-Tage-Fenster von today=06-26,
+    also deckt sich die 7-Tage-Summe hier mit der 30-Tage-Summe (~1.0464 €)."""
+    data = _embedded_data(client.get(_HTML_PATH).get_data(as_text=True))
+    assert data["gesamt_7t_eur"] is not None
+    assert abs(data["gesamt_7t_eur"] - 1.0464) < 1e-3
+
+
+def test_ac2_html_drei_bloecke_und_gateway(client):
+    """#1669: die gerenderte Shell trägt die 3-Block-Struktur — Gesamtkosten-Karte
+    (Block ①), „Welche App nutzt was" (Block ②) und LiteLLM-als-Gateway (Block ③),
+    NICHT mehr die alte „Schnittstellen & Tokens"-Peer-Tabelle."""
+    body = client.get(_HTML_PATH).get_data(as_text=True)
+    assert 'id="gesamt-karte"' in body            # Block ①
+    assert "Welche App nutzt was" in body          # Block ②
+    assert "Wechseln" in body                       # CONN-6-Affordanz sichtbar
+    assert "LiteLLM" in body                        # Block ③ Gateway ehrlich benannt
+    assert "Gateway" in body
+    # Der alte Peer-Tabellen-Rahmen ist weg (LiteLLM nicht mehr als Provider-Peer):
+    assert "Schnittstellen &amp; Tokens" not in body
+    assert 'id="sek1-body"' not in body
 
 
 # ── CONN-7: kein Geheimnis, kein Slot-Klartext ───────────────────────────────

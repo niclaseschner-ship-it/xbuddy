@@ -1,21 +1,25 @@
 <!DOCTYPE html>
 <!--
-  Connector-Übersicht — Eltern-PWA (CONN-8, Ticket #1086 Track B).
+  Connector-Übersicht — Eltern-PWA (CONN-8, Ticket #1086 Track B, #1669 3-Block).
 
-  Datengetriebene Variante des Mockups specs/mockups/connector/index.html:
-  Die zwei Tabellen-Sektionen + 7-Tage-Charts werden client-seitig aus dem
-  Endpoint /api/v1/seiten/connector/uebersicht gerendert (echte JSONL-Zahlen,
-  Track A telemetry_read). Machart/CSS sind aus dem Mockup übernommen
-  (seiten/static/connector/style.css). PUBLIC (AUTH-6, wie plan-einstellungen).
+  Datengetriebene Variante des Mockups: die Sicht ist in DREI klare Blöcke
+  gegliedert (Nordstern #1669), server-gerendert aus dem eingebetteten Aggregat
+  (echte JSONL-Zahlen, Track A telemetry_read). PUBLIC (AUTH-6, wie plan-einstellungen).
+
+    ① GESAMTKOSTEN (oben, prominent)  — Summe über alles: 30 Tage + 7 Tage + Daten-ab-Marker.
+    ② WELCHE APP NUTZT WAS            — pro App aktuelles Modell + Kosten + [Wechseln ▸]-Affordanz;
+                                         Zeilen-Klick = 7-Tage-Verlauf.
+    ③ ANBIETER-STATUS (klein, Fußzeile) — LiteLLM als Gateway benannt, konfigurierte Keys
+                                         (Anthropic/Mistral/Azure-TTS) mit Status.
 
   CONN-Abdeckung:
-    CONN-1  Schnittstellen-Tabelle (aktiv/inaktiv)         → #sek1-body
-    CONN-2  Je-Buddy×Funktion-Tabelle                       → #sek2-body
-    CONN-3  Azure-TTS aktiv, Kosten "Telemetrie folgt"      → tele-hint
-    CONN-4  "Daten ab <Datum>"-Marker (Tail-Fenster)        → .daten-fenster
-    CONN-5  7-Tage-Verlauf bei Zeilen-Klick                 → chart-row (echte daily-Daten)
-    CONN-6  Edit/Add → Sheet mit ehrlicher Wechsel-Realität → openDetailSheet
-    CONN-7  Kein Key-Klartext, keine Slot-Namen             → nur Status + Buddy-Chips
+    CONN-1  Anbieter-Status als konfigurierte Keys (Block ③)  → #anbieter-liste
+    CONN-2  Welche App nutzt was (Block ②)                     → #app-body
+    CONN-3  Azure-TTS aktiv, Kosten "Telemetrie folgt"         → tele-hint
+    CONN-4  "Daten ab <Datum>"-Marker + Gesamtsumme (Block ①)  → #gesamt-karte
+    CONN-5  7-Tage-Verlauf bei Zeilen-Klick                    → chart-row (echte daily-Daten)
+    CONN-6  Wechseln ▸ → Sheet mit ehrlicher Wechsel-Realität  → openBuddySheet
+    CONN-7  Kein Key-Klartext, keine Slot-Namen                → nur Status + Buddy-Chips
 -->
 <html lang="de">
 <head>
@@ -36,85 +40,78 @@
         <h1>KI-Anbieter</h1>
         <span class="header-chip">Eltern-Plus</span>
       </div>
-      <p class="header-sub">Read-only Übersicht · Schreib-Aktionen via Eltern-Chat (CONN-6) · Zeile anklicken = 7-Tage-Verlauf</p>
+      <p class="header-sub">Read-only Übersicht · Wechseln läuft über den Eltern-Chat (CONN-6) · Zeile anklicken = 7-Tage-Verlauf</p>
     </div>
   </header>
 
   <main class="page-main">
 
-    <!-- CONN-4: Daten-Marker -->
-    <div style="display:flex;justify-content:flex-end;">
-      <span class="daten-fenster" id="daten-fenster">Lade Daten…</span>
-    </div>
-
     <p id="lade-fehler" style="display:none;color:var(--warning,#b06a00);font-weight:600;"></p>
 
-    <!-- ══ SEKTION 1 — SCHNITTSTELLEN & TOKENS ══════════════════════════════ -->
-    <section id="schnittstellen" class="sektion">
-      <div class="sektion-marker">
-        <span class="sektion-nummer">1</span>
-        <h2 class="sektion-titel">Schnittstellen &amp; Tokens</h2>
+    <!-- ══ BLOCK ① — GESAMTKOSTEN (prominent, oben) ═════════════════════════ -->
+    <section id="gesamtkosten" class="sektion">
+      <div class="gesamt-karte" id="gesamt-karte">
+        <div class="gesamt-label">Gesamtkosten · alle Apps</div>
+        <div class="gesamt-zahlen">
+          <div class="gesamt-primaer">
+            <span class="gesamt-wert" id="gesamt-30t">—</span>
+            <span class="gesamt-span">letzte 30 Tage</span>
+          </div>
+          <div class="gesamt-sekundaer">
+            <span class="gesamt-wert-sm" id="gesamt-7t">—</span>
+            <span class="gesamt-span">letzte 7 Tage</span>
+          </div>
+        </div>
+        <!-- CONN-4: Daten-ab-Marker -->
+        <span class="daten-fenster" id="daten-fenster">Lade Daten…</span>
       </div>
-      <p class="sektion-beschr">Eine Zeile pro externer Verbindung — aggregiert über alle Buddys, die sie nutzen.</p>
-
-      <div class="section-actions">
-        <button class="add-btn-top" id="neue-schnittstelle-top" aria-label="Neue Schnittstelle anlegen">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Neue Schnittstelle
-        </button>
-      </div>
-
-      <div class="conn-table-wrap">
-        <table class="conn-table" aria-label="Schnittstellen & Tokens">
-          <thead>
-            <tr>
-              <th>Anbieter</th>
-              <th>Status</th>
-              <th>Nutzende Buddys</th>
-              <th class="num">Abgerechnet</th>
-              <th class="act" title="Bearbeiten"></th>
-            </tr>
-          </thead>
-          <tbody id="sek1-body"></tbody>
-        </table>
-      </div>
-      <p class="table-note">CONN-7 (strenger): Kein Key-Klartext, keine Slot-Namen — nur Status „konfiguriert/inaktiv" und nutzende Buddys.</p>
     </section>
 
-    <!-- ══ SEKTION 2 — JE BUDDY ══════════════════════════════════════════════ -->
-    <section id="je-buddy" class="sektion">
+    <!-- ══ BLOCK ② — WELCHE APP NUTZT WAS ═══════════════════════════════════ -->
+    <section id="welche-app" class="sektion">
       <div class="sektion-marker">
         <span class="sektion-nummer">2</span>
-        <h2 class="sektion-titel">Je Buddy</h2>
+        <h2 class="sektion-titel">Welche App nutzt was</h2>
       </div>
-      <p class="sektion-beschr">Verbrauch und Provider-Zuweisung pro Buddy und Funktion. Zeile anklicken = 7-Tage-Verlauf. Stift = Details/Wechsel.</p>
+      <p class="sektion-beschr">Pro App das aktuell genutzte Modell und die Kosten. Zeile anklicken = 7-Tage-Verlauf · <strong>Wechseln ▸</strong> = Anbieter-Wechsel (läuft über den Eltern-Chat).</p>
 
       <div class="conn-table-wrap">
-        <table class="conn-table" aria-label="Verbrauch je Buddy">
+        <table class="conn-table" aria-label="Welche App nutzt was">
           <thead>
             <tr>
-              <th>Buddy</th>
+              <th>App</th>
               <th>Funktion</th>
               <th>Aktuell genutzt</th>
-              <th class="num">Calls</th>
               <th class="num">Kosten (€)</th>
-              <th class="act" title="Bearbeiten"></th>
+              <th class="act" title="Wechseln"></th>
             </tr>
           </thead>
-          <tbody id="sek2-body"></tbody>
-          <tfoot>
-            <tr>
-              <td colspan="4">Gesamtkosten LLM (alle Buddys)</td>
-              <td class="num" id="sek2-total">—</td>
-              <td></td>
-            </tr>
-          </tfoot>
+          <tbody id="app-body"></tbody>
         </table>
       </div>
       <p class="table-note">
         Kosten aus <code class="inline">var/llm/provider_calls.jsonl</code> (LLMP-S4) · Tail-Fenster 30 Tage (CONN-4) ·
-        TTS-Verbindung (Azure) nicht erfasst (LLMP-S6, folgt) · Kein Key-Klartext (CONN-7).
+        TTS (Azure) noch nicht erfasst (LLMP-S6, folgt) · Kein Key-Klartext (CONN-7).
       </p>
+    </section>
+
+    <!-- ══ BLOCK ③ — ANBIETER-STATUS (klein, Fußzeile) ══════════════════════ -->
+    <section id="anbieter-status" class="sektion sektion--klein">
+      <div class="sektion-marker">
+        <span class="sektion-nummer sektion-nummer--dim">3</span>
+        <h2 class="sektion-titel sektion-titel--dim">Anbieter-Status</h2>
+      </div>
+      <p class="sektion-beschr sektion-beschr--dim">
+        Alle Apps sprechen über <strong>LiteLLM</strong> als gemeinsames Gateway — die Anbieter unten sind die
+        dahinter konfigurierten Schlüssel, keine getrennten Zugänge.
+      </p>
+      <div class="gateway-zeile">
+        <span class="gateway-badge">Gateway</span>
+        <span class="gateway-name">LiteLLM</span>
+        <span class="gateway-sub">routet alle App-Aufrufe zu den Anbietern</span>
+      </div>
+      <ul class="anbieter-liste" id="anbieter-liste"></ul>
+      <p class="table-note">Kein Key-Klartext, keine Slot-Namen — nur Status „konfiguriert/inaktiv" und nutzende Apps (CONN-7). Neue Schlüssel legst du über den Eltern-Chat an.</p>
     </section>
 
   </main>
@@ -167,8 +164,6 @@
     if (v === null || v === undefined) return '0€';
     return v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€';
   }
-  var EDIT_SVG = '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-
   // ── 7-Tage-Balkendiagramm aus echten daily-Daten (CONN-5) ──────────────────
   function buildChart(daily, title, color) {
     if (!daily || !daily.length) {
@@ -208,46 +203,9 @@
     return '<span class="' + cls + '">' + esc(b.emoji) + ' ' + esc(b.label) + (b.dim ? ' (inaktiv)' : '') + '</span>';
   }
 
-  // ── Sektion 1: Schnittstellen ──────────────────────────────────────────────
-  function renderSchnittstellen(rows) {
-    var body = document.getElementById('sek1-body');
-    var html = '';
-    rows.forEach(function (r, idx) {
-      var chartId = 'chart-s-' + r.key;
-      var vendorCell = r.logo
-        ? '<img class="vendor-logo-sm" src="' + LOGO_BASE + esc(r.logo) + '.svg" alt="' + esc(r.vendor) + '">'
-        : '<span class="vendor-label-generic">' + esc(r.vendor) + '</span>';
-      var statusBadge;
-      if (r.status_kind === 'ok') statusBadge = '<span class="badge badge-ok">' + esc(r.status) + '</span>';
-      else if (r.status_kind === 'tts') statusBadge = '<span class="badge" style="background:#e5ecf8;color:#1a4a9c;border:1px solid #b8cef0;">' + esc(r.status) + '</span>';
-      else statusBadge = '<span class="badge badge-inactive">' + esc(r.status) + '</span>';
-      var abger = r.telemetrie_folgt
-        ? '<span class="tele-hint">Telemetrie folgt</span>'
-        : (r.abgerechnet_eur != null ? esc(eur(r.abgerechnet_eur)) : '<span style="color:var(--text-3);">—</span>');
-
-      html += '<tr class="clickable" data-chart="' + chartId + '" aria-expanded="false">' +
-        '<td data-label="Anbieter"><div class="vendor-cell">' + vendorCell + '</div></td>' +
-        '<td data-label="Status">' + statusBadge + '</td>' +
-        '<td data-label="Buddys"><div class="buddy-chips">' + r.buddys.map(chip).join('') + '</div></td>' +
-        '<td class="num" data-label="Abgerechnet">' + abger + '</td>' +
-        '<td class="act"><button class="edit-btn" data-sheet="s-' + idx + '" title="' + esc(r.vendor) + ' bearbeiten" aria-label="' + esc(r.vendor) + ' bearbeiten">' + EDIT_SVG + '</button></td>' +
-        '</tr>';
-      html += '<tr class="chart-row" id="' + chartId + '"><td class="chart-expand-cell" colspan="5">' +
-        buildChart(r.daily, 'Verlauf — letzte 7 Tage (' + r.vendor + ')', '#47503C') + '</td></tr>';
-    });
-    // Add-Row
-    html += '<tr class="add-row"><td colspan="5" style="text-align:center;padding:var(--space-3) var(--space-4);">' +
-      '<button class="add-row-btn" id="neue-schnittstelle-row"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Neue Schnittstelle anlegen</button></td></tr>';
-    body.innerHTML = html;
-    rows.forEach(function (r, idx) {
-      var b = body.querySelector('.edit-btn[data-sheet="s-' + idx + '"]');
-      if (b) b.addEventListener('click', function (e) { e.stopPropagation(); openSchnittstelleSheet(r); });
-    });
-  }
-
-  // ── Sektion 2: Je Buddy ────────────────────────────────────────────────────
-  function renderJeBuddy(rows, gesamt) {
-    var body = document.getElementById('sek2-body');
+  // ── Block ② — Welche App nutzt was ─────────────────────────────────────────
+  function renderApps(rows) {
+    var body = document.getElementById('app-body');
     var html = '';
     rows.forEach(function (r, idx) {
       var chartId = 'chart-b-' + r.key;
@@ -258,32 +216,63 @@
         genutzt += '<div style="font-size:var(--fs-12);color:var(--text-3);margin-top:4px;">+ Fallback</div>' +
           '<code class="model-mono model-mono--dim">' + esc(r.fallback_modell) + '</code>';
       }
-      var calls = r.calls != null ? r.calls : '<span style="color:var(--text-3);">—</span>';
       var kosten = r.telemetrie_folgt ? '<span class="tele-hint">Telemetrie folgt</span>'
         : (r.kosten_eur != null ? esc(eur(r.kosten_eur)) : '<span style="color:var(--text-3);">—</span>');
       var rowCls = r.funktion_kind === 'tts' ? '' : 'clickable';
       var rowAttrs = r.funktion_kind === 'tts' ? '' : ' data-chart="' + chartId + '" aria-expanded="false"';
 
+      // CONN-6: sichtbare [Wechseln ▸]-Affordanz pro App-Zeile (kein Stift-Icon).
+      var wechselBtn = '<button class="wechsel-btn" data-sheet="b-' + idx + '" title="Anbieter wechseln" aria-label="' + esc(r.buddy) + ' ' + esc(r.funktion) + ' — Anbieter wechseln">Wechseln <span aria-hidden="true">▸</span></button>';
+
       html += '<tr class="' + rowCls + '"' + rowAttrs + '>' +
-        '<td data-label="Buddy"><div class="buddy-cell"><div class="buddy-icon-wrap"' + (r.funktion_kind === 'tts' ? ' style="opacity:.6;"' : '') + ' title="' + esc(r.buddy) + '">' + esc(r.emoji) + '</div>' +
+        '<td data-label="App"><div class="buddy-cell"><div class="buddy-icon-wrap"' + (r.funktion_kind === 'tts' ? ' style="opacity:.6;"' : '') + ' title="' + esc(r.buddy) + '">' + esc(r.emoji) + '</div>' +
         '<span style="font-weight:600;font-size:var(--fs-14);">' + esc(r.buddy) + '</span></div></td>' +
         '<td data-label="Funktion"><span class="' + fnCls + '">' + esc(r.funktion) + '</span></td>' +
         '<td data-label="Genutzt">' + genutzt + '</td>' +
-        '<td class="num" data-label="Calls">' + calls + '</td>' +
         '<td class="num" data-label="Kosten">' + kosten + '</td>' +
-        '<td class="act"><button class="edit-btn" data-sheet="b-' + idx + '" title="' + esc(r.buddy) + ' ' + esc(r.funktion) + ' bearbeiten">' + EDIT_SVG + '</button></td>' +
+        '<td class="act">' + wechselBtn + '</td>' +
         '</tr>';
       if (r.funktion_kind !== 'tts') {
-        html += '<tr class="chart-row" id="' + chartId + '"><td class="chart-expand-cell" colspan="6">' +
+        html += '<tr class="chart-row" id="' + chartId + '"><td class="chart-expand-cell" colspan="5">' +
           buildChart(r.daily, 'Verlauf — letzte 7 Tage (' + r.buddy + ' ' + r.funktion + ')', '#47503C') + '</td></tr>';
       }
     });
     body.innerHTML = html;
     rows.forEach(function (r, idx) {
-      var b = body.querySelector('.edit-btn[data-sheet="b-' + idx + '"]');
+      var b = body.querySelector('.wechsel-btn[data-sheet="b-' + idx + '"]');
       if (b) b.addEventListener('click', function (e) { e.stopPropagation(); openBuddySheet(r); });
     });
-    document.getElementById('sek2-total').textContent = gesamt != null ? eur(gesamt) : '—';
+  }
+
+  // ── Block ③ — Anbieter-Status (LiteLLM-Gateway + konfigurierte Keys, klein) ─
+  function renderAnbieterStatus(rows) {
+    var liste = document.getElementById('anbieter-liste');
+    var html = '';
+    rows.forEach(function (r, idx) {
+      var vendorCell = r.logo
+        ? '<img class="vendor-logo-xs" src="' + LOGO_BASE + esc(r.logo) + '.svg" alt="' + esc(r.vendor) + '">'
+        : '<span class="vendor-label-generic">' + esc(r.vendor) + '</span>';
+      var statusBadge;
+      if (r.status_kind === 'ok') statusBadge = '<span class="badge badge-ok">' + esc(r.status) + '</span>';
+      else if (r.status_kind === 'tts') statusBadge = '<span class="badge" style="background:#e5ecf8;color:#1a4a9c;border:1px solid #b8cef0;">' + esc(r.status) + '</span>';
+      else statusBadge = '<span class="badge badge-inactive">' + esc(r.status) + '</span>';
+      var chips = r.buddys.length
+        ? '<div class="buddy-chips">' + r.buddys.map(chip).join('') + '</div>'
+        : '<span style="color:var(--text-3);font-size:var(--fs-12);">keine aktive App</span>';
+
+      html += '<li class="anbieter-item" data-sheet="s-' + idx + '" tabindex="0" role="button" aria-label="' + esc(r.vendor) + ' — Details">' +
+        '<div class="anbieter-kopf">' + vendorCell + statusBadge + '</div>' +
+        '<div class="anbieter-apps">' + chips + '</div>' +
+        '</li>';
+    });
+    liste.innerHTML = html;
+    rows.forEach(function (r, idx) {
+      var el = liste.querySelector('.anbieter-item[data-sheet="s-' + idx + '"]');
+      if (!el) return;
+      var open = function () { openSchnittstelleSheet(r); };
+      el.addEventListener('click', open);
+      el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
   }
 
   // ── Chart-Toggle (Zeilen-Klick) ─────────────────────────────────────────────
@@ -347,11 +336,16 @@
     openSheet('<h3>' + esc(r.buddy) + ' — ' + esc(r.funktion) + '</h3><div class="sheet-body">' + body + '</div>');
   }
 
-  function openNeueSchnittstelle() {
-    openSheet('<h3>Neue Schnittstelle anlegen</h3><div class="sheet-body">' +
-      '<p>Neue Anbieter-Verbindungen (API-Key + Slot) werden über den <strong>Eltern-Chat</strong> angelegt — nicht direkt auf dieser Seite (V1 read-only, CONN-6).</p>' +
-      '<p>Im Eltern-Chat: <code class="inline">anbieter_wechseln</code> starten (ONB-11/12).</p>' +
-      '<div class="info-hint"><span>In V2 bekommt diese Seite eigene Eingabe-Felder (wartet auf Auth-Schreibpfad #948).</span></div>' + CHAT_LINK + '</div>');
+  // ── Block ① — Gesamtkosten-Karte ──────────────────────────────────────────
+  function renderGesamt(data) {
+    document.getElementById('gesamt-30t').textContent =
+      data.gesamt_llm_eur != null ? eur(data.gesamt_llm_eur) : '0,0000 €';
+    document.getElementById('gesamt-7t').textContent =
+      data.gesamt_7t_eur != null ? eur(data.gesamt_7t_eur) : '0,0000 €';
+    var marker = document.getElementById('daten-fenster');
+    marker.textContent = data.daten_ab
+      ? 'Daten ab ' + data.daten_ab + ' · Fenster ' + data.fenster_tage + ' Tage'
+      : 'Noch keine Daten · Fenster ' + data.fenster_tage + ' Tage';
   }
 
   // ── Boot ────────────────────────────────────────────────────────────────────
@@ -360,20 +354,14 @@
     document.getElementById('sheet-overlay').addEventListener('click', function (e) {
       if (e.target === this) closeSheet();
     });
-    document.getElementById('neue-schnittstelle-top').addEventListener('click', openNeueSchnittstelle);
 
     try {
       var raw = document.getElementById('connector-data').textContent;
       var data = JSON.parse(raw);
-      var marker = document.getElementById('daten-fenster');
-      marker.textContent = data.daten_ab
-        ? 'Daten ab ' + data.daten_ab + ' · letzte ' + data.fenster_tage + ' Tage'
-        : 'Noch keine Daten · Fenster ' + data.fenster_tage + ' Tage';
-      renderSchnittstellen(data.schnittstellen || []);
-      renderJeBuddy(data.je_buddy || [], data.gesamt_llm_eur);
+      renderGesamt(data);
+      renderApps(data.je_buddy || []);
+      renderAnbieterStatus(data.schnittstellen || []);
       wireChartToggles();
-      var rowBtn = document.getElementById('neue-schnittstelle-row');
-      if (rowBtn) rowBtn.addEventListener('click', openNeueSchnittstelle);
     } catch (e) {
       var f = document.getElementById('lade-fehler');
       f.style.display = 'block';
