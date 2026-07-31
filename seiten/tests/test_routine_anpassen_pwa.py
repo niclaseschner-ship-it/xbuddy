@@ -347,6 +347,7 @@ def test_registry_routine_vollstaendiger_eintrag():
 def test_registry_routine_build_manifest_valide():
     """PWAM-5: build_manifest(REGISTRY['routine']) produziert valides JSON ohne Fehler."""
     import json
+
     from seiten import pwa_mantel
     cfg = pwa_mantel.REGISTRY["routine"]
     manifest = pwa_mantel.build_manifest(cfg)
