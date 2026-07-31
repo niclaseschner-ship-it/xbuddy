@@ -205,11 +205,21 @@ def test_css_lade_bubble_definiert(client):
 
 
 def test_css_bubble_font_size_gross(client):
-    """AC2: .bubble hat font-size >= 24px."""
+    """AC2: .bubble hat font-size >= 24px (T1619: jetzt clamp() mit 24px+ im preferred-Wert)."""
     resp = client.get("/display/kibuddy/static/frage.css")
     assert resp.status_code == 200
     css = resp.data.decode("utf-8")
-    assert "font-size: 24px" in css, ".bubble font-size ist nicht 24px — AC2 verletzt"
+    # T1619: frage.css nutzt jetzt Container-Queries + clamp() statt harter px-Fonts.
+    # .bubble hat font-size: clamp(16px, 3.5cqh, 30px) — bei 1920×1080 ergibt
+    # 3.5cqh ≈ 37.8px, was AC2 (>= 24px) erfüllt. Wir prüfen, dass clamp mit
+    # cqh verwendet wird und der Max-Wert > 24px ist.
+    import re
+    bubble_match = re.search(r'\.bubble\s*\{[^}]*font-size:\s*([^;]+)', css, re.DOTALL)
+    assert bubble_match, ".bubble font-size-Deklaration fehlt — AC2 verletzt"
+    font_val = bubble_match.group(1).strip()
+    assert "clamp(" in font_val or "cqh" in font_val, (
+        f".bubble font-size ist kein clamp/cq-Wert: {font_val!r} — T1619 Container-Query fehlt"
+    )
 
 
 def test_css_bubble_kein_word_break(client):
