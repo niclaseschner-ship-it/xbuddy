@@ -470,3 +470,31 @@ def test_ac5_js_laedt_inventar_von_seiten_api():
 # test_shell10_mau_panel_eintrag_hat_shell_urls, test_shell10_mau_shell_url_aus_panel_id_abgeleitet,
 # test_shell10_mau_js_rendert_shell_urls: shell_urls-Enrichment-Loop in get_seiten() entfernt
 # (Loop enrichierte nur typ=panel-Einträge, die mit RAT-31 nicht mehr existieren).
+
+
+# ── T1662: Scroll-Guard (Eltern-View, kein overflow:hidden auf html/body) ─────
+
+def test_t1662_mini_app_uebersicht_css_kein_body_overflow_hidden():
+    """T1662: mini-app-uebersicht.css enthaelt kein html/body { overflow: hidden }.
+
+    Eltern-Views MUESSEN auf Chrome/Blink (Windows + Android) scrollen.
+    overflow:hidden auf html oder body blockiert Scroll hart in Blink —
+    iOS Safari (WebKit) toleriert es via Momentum, Chrome nicht (T1662-Befund).
+    overflow-x: hidden (horizontaler Lock, MAU-7-Viewport-Lock) ist erlaubt.
+    """
+    import re
+    css_path = os.path.join(_SEITEN_DIR, "static", "mini-app-uebersicht.css")
+    with open(css_path, encoding="utf-8") as f:
+        content = f.read()
+
+    def _normiere(s: str) -> str:
+        return re.sub(r'(?<!-)overflow: hidden', 'overflow:hidden', s)
+
+    for selektor in ("html", "body", "html, body", "html,body"):
+        muster = rf'{re.escape(selektor)}\s*\{{[^}}]*\}}'
+        for block in re.findall(muster, content, re.DOTALL):
+            normiert = _normiere(block)
+            assert "overflow:hidden" not in normiert, (
+                f"mini-app-uebersicht.css: '{selektor}'-Block enthaelt overflow:hidden "
+                f"— T1662 Scroll-Guard verletzt (nur overflow-x: hidden erlaubt):\n{block}"
+            )
