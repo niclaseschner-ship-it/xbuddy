@@ -16,17 +16,18 @@
     },
     {
       "slug": "anpassen",
-      "typ": "mini-app",
+      "typ": "pwa",
       "pfad": "/seiten/routine/anpassen",
-      "label": "Routine anpassen",
-      "synonyme": ["routine", "anpassen", "umsortieren", "punkt hinzufügen"],
-      "zeigt": "Routine-Punkte umsortieren, hinzufügen, löschen, Zeiten setzen.",
+      "label": "Morgenroutine anpassen",
+      "synonyme": ["routine", "morgenroutine", "anpassen", "aufgaben", "reihenfolge"],
+      "zeigt": "Morgenroutine der Kinder anpassen: Items umordnen, hinzufügen, entfernen.",
       "zielgruppe": "eltern",
-      "web_app": {
-        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
-        "app_short_name": "routine",
-        "icons": ["arasaac/2418.png"]
-      }
+      "pwa": {
+        "manifest": "/seiten/routine/anpassen/manifest.json",
+        "start_url": "/seiten/routine/anpassen/",
+        "service_worker": "/seiten/routine/anpassen/sw.js"
+      },
+      "auth": "tma"
     }
   ]
 }
