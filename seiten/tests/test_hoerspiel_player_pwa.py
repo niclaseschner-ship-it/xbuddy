@@ -62,9 +62,9 @@ def client():
 # ── AC1 — Registry + build_manifest (Lib-Ebene) ──────────────────────────────
 
 def test_player_ist_siebter_registry_eintrag():
-    """AC1: hoerspiel-player ist in pwa_mantel.REGISTRY (7. Eintrag)."""
+    """AC1: hoerspiel-player ist in pwa_mantel.REGISTRY (8. Eintrag nach T1681 / hoerspiel-eltern)."""
     assert _COMPONENT in pwa_mantel.REGISTRY
-    assert len(pwa_mantel.REGISTRY) == 7
+    assert len(pwa_mantel.REGISTRY) == 8
     cfg = pwa_mantel.REGISTRY[_COMPONENT]
     assert cfg.build_id_source_set  # PWML-3
 
