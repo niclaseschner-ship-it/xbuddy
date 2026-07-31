@@ -115,8 +115,7 @@ def configure(root=None, inventar_path=None, ttl=None,
               funnel_origin=None,
               bot_token=None, init_data_config=None,
               familie_client=None,
-              panel_service_url=None, icon_root=None,
-              router_url=None):  # RAT-31 E6f-C (#1588): SHELL-2-Slot entfernt, Param bleibt als no-op fuer aeltere Test-Aufrufe.
+              panel_service_url=None, icon_root=None):
     """Setzt Aufbau-Wurzel, Inventar-Pfad, TTL und Display-URL-Origins
     (SREG-3, SREG-7).
 
@@ -1492,16 +1491,6 @@ def hoerspiel_player_asset_view(asset):
 #   scope /shell/), eigener SW (Scope /shell/, Service-Worker-Allowed-Header),
 #   Asset-Route analog einkauf_asset_view. Kachel-Scaling shell-seitig via CSS.
 
-
-def _lookup_display_id(panel_id):  # pragma: no cover
-    """SHELL-2 TOMBSTONE — RAT-31 E6f-C (#1588): entfernt.
-
-    Funktion ist tot (kein Produktions-Aufrufer). Bleibt als Stub damit
-    monkeypatch.setattr(seiten_main, '_lookup_display_id', ...) in aelteren
-    Tests (seiten/tests/test_build_id_registry.py) nicht AttributeError wirft.
-    Loeschen sobald alle externen Test-Aufrufer bereinigt sind.
-    """
-    return None
 
 
 _HARD_RESET_HTML = """<!doctype html>
