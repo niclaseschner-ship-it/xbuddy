@@ -25,7 +25,6 @@ anderen Services nötig (RAT-31 E3: Panel-/Geräte-Registry-Snapshots entfernt).
 
 import argparse
 import contextlib
-import functools
 import json
 import logging
 import os
@@ -465,56 +464,33 @@ def _client_ip():
 _AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "observe")
 
 
-def require_dual_gate(mode: str = "observe"):
-    """AUTH-7b-Decorator: Cookie ODER Operator-IP (auth.md AUTH-7 Dual-Gate).
+def _dual_auth_401():
+    """AUTH-8-Re-Pair-Renderer für den Dual-Gate (D1, buddy-variant).
 
-    `mode="observe"` (AUTH-3.a Soft-Rollout, Default für alle 7b-READ-Routen im
-    Erstbau): fehlt jede Quelle, läuft die Route trotzdem (`200`) und der
-    Decorator LOGGT (valide Quelle vorhanden? aus welcher Quelle?) — kein `401`.
-    Der Flip auf `mode="hard"` ist eine spätere operative Zwei-Wege-Tür (Nic am
-    Gerätetest, auth.md AUTH-3.a:263-269), nicht Teil dieses Baus.
-
-    `mode="hard"`: fehlt jede Quelle → `401` mit AUTH-8-Re-Pair-HTML (auth.md
-    AUTH-7:510 — die 401-Antwort IST die Re-Pair-Anweisung).
-
-    Bei validem Cookie wird der Cookie rolling-refreshed (auth.md AUTH-2:78,
-    wie require_init_data / seiten essen-Pfad).
+    Liefert die 401-Antwort mit dem AUTH-8-Re-Pair-HTML byte-gleich zum
+    bisherigen Inline-401 (make_response(_DUAL_GATE_401_HTML, 401) +
+    Content-Type text/html; charset=utf-8). Der injizierte Renderer ist der
+    einzige Ort, an dem der 401-Text lebt — die #1625-Factory inlined ihn NIE.
     """
-    def deco(fn):
-        @functools.wraps(fn)
-        def wrapper(*args, **kwargs):
-            bot_token = _get_bot_token()
-            cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
-            cookie_ok = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
-                cookie_val, bot_token)
-            # RAT-32: Operator-IP entfällt als Zugangs-Alternative (AUTH-7a
-            # gestrichen); ist_operator_ip nur noch fürs Observe-Log.
-            operator_ok = _auth_gate.ist_operator_ip(_client_ip())
+    resp = make_response(_DUAL_GATE_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
 
-            if cookie_ok:
-                # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen.
-                subject = _session_cookie.verify_session(cookie_val, bot_token)
-                resp = make_response(fn(*args, **kwargs))
-                resp.set_cookie(
-                    _session_cookie.COOKIE_NAME,
-                    _session_cookie.sign_session(subject, bot_token),
-                    **_session_cookie.session_cookie_kwargs(),
-                )
-                return resp
 
-            # Keine Cookie-Quelle.
-            if mode == "hard":
-                resp = make_response(_DUAL_GATE_401_HTML, 401)
-                resp.headers["Content-Type"] = "text/html; charset=utf-8"
-                return resp
-            # AUTH-3.a Observe: 200 + Log (kein 401), Beobachtungs-Rollout.
-            logging.warning(
-                "AUTH-3.a Observe (7b): %s — keine valide Quelle "
-                "(cookie_vorhanden=%s, operator_ip=%s) → 200 (Grace, kein 401)",
-                request.path, bool(cookie_val), operator_ok)
-            return fn(*args, **kwargs)
-        return wrapper
-    return deco
+# AUTH-7b-Dual-Gate über die #1625-Factory (auth.md „AUTH-Decorator-Lib", #1383,
+# RAT-32). Ersetzt den bislang hand-kopierten require_dual_gate byte-gleich:
+# Cookie gültig → 200 + Rolling-Refresh (AUTH-2:78); keine Quelle + mode="hard"
+# → _dual_auth_401(); keine Quelle + mode="observe" → 200 + Observe-Log. Der
+# Name `require_dual_gate` BLEIBT (Coverage-AST MODULE_MAP_7B trägt per Namen);
+# die Factory ist parametrisierbar (`require_dual_gate(mode="hard")` /
+# `mode=_AUTH_MODE`), default_mode="observe" wie zuvor. ist_operator_ip
+# (get_client_ip) speist nur noch das Observe-Log (RAT-32, kein Gate).
+require_dual_gate = _auth_gate.make_require_dual_gate(
+    get_bot_token=_get_bot_token,
+    get_client_ip=_client_ip,
+    auth_401=_dual_auth_401,
+    default_mode="observe",
+)
 
 
 def _validate_mini_app_request():
