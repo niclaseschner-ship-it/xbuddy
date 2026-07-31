@@ -310,14 +310,12 @@ Breaking Change):
 `app-panel:kueche`). `router_url` ist die Origin des Routers (Schema +
 Host[:Port], **ohne Pfad**, analog FIG-23). *(#305)*
 
-`display_id` ist **bewusst nicht** mehr in `config.json` (Nic-Entscheid
-2026-06-08 / #414): die für die Aktiv-Kachel-Markierung (PANEL-11)
-maßgebliche `display_id` zieht der Panel-Code beim Bootstrap vom
-Router (ROU-32, `GET /api/v1/router/panels/<source_id>`). Der Router
-ist die EINE Wahrheit für die Panel→Display-Zuordnung
-(`routing.json` `panels`-Eintrag, ROU-18) — Drift zwischen
-„Tile-Tap-Ziel" und „Stream-Subscription" ist damit per Konstruktion
-unmöglich.
+`display_id` ist **bewusst nicht** in `config.json` (Nic-Entscheid
+2026-06-08 / #414, historisch: PANEL-11 zog sie per ROU-32 vom Router).
+~~Der Panel-Code zieht beim Bootstrap `display_id` vom Router (ROU-32,
+`GET /api/v1/router/panels/<source_id>`) und abonniert ROU-22-Display-Events.~~
+**Entfallen durch RAT-31 E6f (#1568, T1601):** ROU-32 und der SSE-Strang
+existieren nicht mehr; die Aktiv-Markierung läuft rein lokal (PANEL-11 SUPERSEDED).
 
 **Kein URL-Parameter-Overlay:** Das App-Panel liest seine Konfiguration
 ausschließlich aus `config.json` — URL-Parameter überschreiben die
@@ -428,13 +426,22 @@ nach `conventions/pwa.md` — nicht vorher.
 ## 6. Aktive-Kachel-Markierung
 
 ### PANEL-11 — Aktive Kachel im Panel-UI optisch markieren
+
+> ⚠️ **SUPERSEDED durch RAT-31 E6f (#1568) + T1601 (#1601), 2026-07-31.**
+> Der Router-SSE-Strang (ROU-22, `GET /api/v1/displays/<id>/events`) und der
+> ROU-32-Display-Lookup (`GET /api/v1/router/panels/<source_id>`) sind entfernt —
+> `attachStream`, `makeStreamHandlers` und der 10s-Watchdog existieren nicht mehr
+> im Code. Aktive Quelle der Markierung ist ausschließlich der **lokale Tap-Aktiv-Marker**
+> (Shell-Flow-Zweig unten, `onTap`/`onClear`). Der Rest dieser Sektion ist
+> historischer Anker. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`.
+
 Wenn der User eine Kachel antippt und das zugeordnete Display den
 entsprechenden Inhalt zeigt, wird **diese Kachel im Panel-UI optisch
 markiert** — sichtbar von der Restmenge unterschieden
 (Hintergrund-Hervorhebung oder Border). Die konkreten Design-Tokens
 kommen im Impl-PR; die Spec verlangt nur „sichtbar unterscheidbar".
 
-**Quelle der Wahrheit der Markierung:** der Panel-Code zieht beim
+~~**Quelle der Wahrheit der Markierung (ENTFALLEN, RAT-31):** der Panel-Code zieht beim
 Laden seine `display_id` vom Router (ROU-32:
 `GET /api/v1/router/panels/<source_id>`, `<source_id>` aus
 `config.json`, PANEL-8) und abonniert dann den **SSE-Zustands-Stream
@@ -446,58 +453,24 @@ Der Panel-Code vergleicht dann die im Stream gelieferte `payload.url`
 mit den `{ app, view, query? }`-Werten seiner Kacheln.
 Die Kachel, deren Konvention `/display/<app>/<view>[?<query>]` (vgl.
 ROU-24) zur aktuellen Display-`payload.url` passt, ist aktiv markiert
-— maximal eine Kachel gleichzeitig.
+— maximal eine Kachel gleichzeitig.~~
 
-- **Display-Ruhe-Zustand** (Stream meldet `null` / Session-Ende,
-  ROU-10/ROU-11/ROU-12) → **keine** Kachel markiert.
-- **Stream-Abbruch** (Netz-Fehler) → die zuletzt bekannte Markierung
-  **bleibt stehen** (analog DC-6 „Inhalt bleibt bei Störung stehen").
-  Re-Verbindung über den Browser-`EventSource`-Standard-Reconnect
-  (analog DC-7); nach erfolgreicher Wiederverbindung richtet sich die
-  Markierung neu nach dem Stream-Zustand.
-- **Display-Inhalt ohne Kachel-Match** (z. B. eine URL, die durch
-  Figuren-Erkennung übersteuert wurde und zu keiner Panel-Kachel passt)
-  → **keine** Kachel markiert (kein Match → kein Highlight).
-- **`panel_cleared`-Tap:** der Panel-Code wartet auf das Stream-Update,
-  das den Wechsel auf `null` meldet, dann verschwindet die Markierung.
-  Ein optimistisches lokales Update (Markierung sofort weg) ist
-  erlaubt, aber das Stream-Update bleibt die Wahrheit — bei Diskrepanz
-  korrigiert sich die Markierung beim nächsten Stream-Ereignis.
-- **`tile_selected`-Tap:** analog. Der Panel-Code darf die Markierung
-  **optimistisch lokal** auf die getappte Kachel setzen, ohne auf das
-  Stream-Update zu warten — der Stream bleibt die Wahrheit und korrigiert
-  die Markierung beim nächsten Ereignis (z. B. wenn die Route durch
-  Figuren-Erkennung übersteuert wurde). Begründung: bei eingefrorenem
-  oder verzögertem SSE-Stream (iOS-Safari-Hintergrund-Tab) bleibt die
-  UI sonst sichtbar auf der alten Kachel kleben (Refs #959).
-
-PANEL-1 bleibt gewahrt: das Panel entscheidet weiterhin **nichts** über
-das Routing — es liest den Display-Zustand nur, um seine eigene UI zu
-spiegeln.
-
-**Shell-Flow-Zweig (RAT-31, `ingest_url` gesetzt).** Läuft das Panel im
+**Shell-Flow-Zweig (RAT-31, `ingest_url` gesetzt) — aktiv.** Läuft das Panel im
 Shell-Flow (eingebettet, `?ingest_url=` gesetzt — vgl. SHELL-4/T1519), dann
 trägt der **lokale Tap den Aktiv-Marker autoritativ**: `onTap`/`onClear`
-setzen die Markierung optimistisch, und es gibt **kein Router-SSE-Abo
-(ROU-22) und keinen ROU-32-Display-Lookup** mehr. Ein Gerät (RAT-31,
+setzen die Markierung optimistisch, und es gibt kein Router-SSE-Abo
+(ROU-22) und keinen ROU-32-Display-Lookup mehr. Ein Gerät (RAT-31,
 `decisions/RAT-31-wirbelsaeule-abriss.md`) ist die einzige Wahrheit über den
 eigenen Anzeige-Zustand; ohne Fremd-Gerät gibt es keinen zu spiegelnden
 externen Zustand.
 
-Die oben beschriebenen **Stream-Korrekturfälle entfallen im Shell-Flow**
-(RAT-31-gedeckt):
-- **Figuren-Erkennungs-Übersteuerung** (Match-los / falsche optimistische
-  Markierung korrigieren) — die Figuren-Erkennung **stirbt** (#1567), es gibt
-  keine übersteuernde Route mehr.
-- **Display-Ruhe-Zustand / `null`** und **Fremd-Übersteuerung** — bei einem
-  Gerät (RAT-31) gibt es keinen fremden Steuernden, der den lokalen Marker
-  überstimmen könnte; der lokale Tap ist final.
+- **`tile_selected`-Tap:** `updateActiveMarker(tile)` wird **optimistisch lokal**
+  und **synchron** vor dem POST gesetzt (Refs #959). Der lokale Tap ist final
+  (RAT-31, kein fremder Steuernder).
+- **`panel_cleared`-Tap:** `updateActiveMarker(null)` wird optimistisch lokal
+  und synchron vor dem POST gesetzt.
 
-Die **Standalone-Flow-Beschreibung oben (Router-SSE, ROU-22/ROU-32,
-Stream-als-Wahrheit) BLEIBT unverändert** für den Nicht-Shell-Fall gültig
-(der Standalone-Pfad stirbt erst mit dem Router selbst, PR-D).
-
-*Tickets:* #58, #1584
+*Tickets:* #58, #1584, #1601
 
 ## 7. Layout (statisch, scroll-frei)
 
@@ -617,21 +590,13 @@ Mindest-Abdeckung:
   Laden aufgerufen; bei `visibilitychange` auf `visible` erneut.
   `requestFullscreen()` wird beim ersten Nutzer-Gesture versucht; ein
   Fehler dabei wirft den Code nicht ab.
-- PANEL-11 — Das Panel zieht beim Laden seine `display_id` vom
-  Router über `GET /api/v1/router/panels/<source_id>` (ROU-32,
-  `<source_id>` aus `config.json`, PANEL-8) und verbindet sich dann
-  mit `/api/v1/displays/<display_id>/events` (ROU-22). Ein Stream-Update mit
-  `payload.url = /display/plan/woche` markiert die zugehörige Kachel
-  (`app: plan`, `view: woche`); ein folgendes Update mit
-  `payload.url = /display/plan/woche?ansicht=klein` verschiebt die
-  Markierung auf die Kachel mit passendem `query`. Ein Stream-Update
-  auf `null` (Session-Ende, ROU-11) entfernt jede Markierung.
-  Display-Inhalt, der zu keiner Kachel passt (z. B. eine URL aus
-  einer anderen App, durch Figuren-Erkennung übersteuert), markiert
-  keine Kachel. Ein simulierter Stream-Abbruch lässt die letzte
-  Markierung sichtbar (analog DC-6); nach erfolgter Reconnect-Phase
-  (analog DC-7) richtet sich die Markierung neu nach dem aktuellen
-  Stream-Zustand.
+- PANEL-11 — ~~Router-SSE-Probe (ROU-22/ROU-32, `attachStream`) — ENTFALLEN
+  (RAT-31 E6f, T1601).~~ **Aktiver Test:** `onTap(tile)` ruft
+  `updateActiveMarker(tile)` synchron VOR `sendEvent` (optimistisches lokales
+  Update, Refs #959). `onClear()` ruft `updateActiveMarker(null)` synchron VOR
+  `sendEvent`. `findActiveTile`-Logik matcht Kacheln korrekt gegen
+  `/display/<app>/<view>[?<query>]`-URLs (Plain-URL, Query-URL, Multi-Segment,
+  Null → kein Match).
 - PANEL-12 — Bei Viewport 880×370 (Landscape-Phone) mit 11 Kacheln (10
   sichtbare + Aus) gilt `document.scrollHeight <= clientHeight` (kein
   vertikales Scrollen) und alle 11 Kacheln sind im DOM vorhanden; die Labels
@@ -831,8 +796,8 @@ Das kollidiert mit der PWA-Selbstgenügsamkeit (PWA-1/PWA-4: „keine externen
 Asset-Quellen, alles im Verzeichnis"): der Token-Strang liegt cross-directory
 und `@import`t Schrift von einem CDN. **Entscheidung (Nic, 2026-06-07):**
 referenzieren ist richtig. Das App-Panel ist eine **inhärent online**
-Steuerfläche — ohne Router-Verbindung kann es weder Kacheln routen (PANEL-1/5)
-noch den Aktiv-Stream halten (PANEL-11); „offline aber gestylt" ist ein Zustand
+Steuerfläche — ohne Seiten-Verbindung kann es weder Kacheln routen (PANEL-1/5)
+noch seinen Zustand ingest-en; „offline aber gestylt" ist ein Zustand
 ohne Mehrwert. Verloren geht nur Offline-**Styling**-Robustheit, **nicht** die
 PWA-Installierbarkeit (Manifest/sw.js/Fullscreen/HTTPS bleiben erhalten,
 PWA-2/PWA-3). Die `sw.js`-Cache-Liste wird um die Token-CSS erweitert, damit der

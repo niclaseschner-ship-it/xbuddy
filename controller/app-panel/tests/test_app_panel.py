@@ -881,20 +881,6 @@ def test_PANEL_10_embedded_suppresses_own_fullscreen_T1529():
 #  PANEL-11 — Aktiv-Markierung aus SSE-Stream
 # ============================================================
 
-def test_PANEL_11_subscribes_to_display_events_stream():
-    """app.js baut die Stream-URL aus dem display_id und ruft EventSource
-    auf — der Pfad /api/v1/displays/.../events muss im Quelltext auftauchen
-    (ROU-22)."""
-    js = read(APPJS_PATH)
-    assert re.search(r"['\"]/api/v1/displays/['\"]", js), \
-        'app.js muss /api/v1/displays/<display_id>/events abonnieren (ROU-22)'
-    assert re.search(r"['\"]/events['\"]", js), \
-        'Stream-Pfad endet auf /events'
-    assert re.search(r"new\s+EventSource\(", js), \
-        'EventSource muss zum Streamen verwendet werden'
-    assert re.search(r"encodeURIComponent\(\s*displayId\s*\)", js), \
-        'display_id muss URL-encoded werden, damit Sonderzeichen tragen'
-
 
 def test_PANEL_11_active_marker_matches_plain_url():
     """payload.url = /display/plan/woche → Kachel { app: plan, view: woche } aktiv."""
@@ -945,34 +931,6 @@ def test_PANEL_11_mismatch_no_active_tile():
     ''')
     assert out['active'] is None
 
-
-def test_PANEL_11_stream_break_keeps_last_marker():
-    """DC-6-Linie: Bei Stream-Abbruch darf die letzte Markierung NICHT
-    gelöscht werden. Dynamische Probe über die Stream-Handler-Fabrik
-    (panelLib.makeStreamHandlers): erst onMessage mit passender Payload-URL
-    setzt die Markierung; danach feuert onError; assert: onError ruft den
-    onActive-Callback nicht (kein Reset auf null)."""
-    out = run_node('''
-        const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
-        ];
-        const calls = [];
-        const handlers = panelLib.makeStreamHandlers(
-            () => tiles,
-            (active) => { calls.push(active && active.key); });
-        // Stream liefert State, der zur Kachel passt → Marker aktiv.
-        handlers.onMessage({ data: JSON.stringify({
-            payload: { url: '/display/plan/woche' }
-        }) });
-        // Stream bricht ab.
-        handlers.onError();
-        console.log(JSON.stringify({ calls }));
-    ''')
-    # Genau ein Aufruf: das onMessage. onError darf onActive NICHT triggern,
-    # damit die letzte Markierung im UI hängen bleibt (DC-6).
-    assert out['calls'] == ['a'], (
-        'onError darf den Marker nicht ändern — letzte Markierung muss bleiben (DC-6). '
-        'Gesehen: %r' % out['calls'])
 
 
 def test_PANEL_11_stream_handlers_registered_on_eventsource():
@@ -1333,104 +1291,6 @@ def test_PANEL_11_onClear_optimistisch_entfernt_markierung():
             pos_update, pos_send)
 
 
-def test_PANEL_11_onTap_optimistisch_markiert_kachel_vor_post_logik():
-    """AC3 (Refs #959): Das optimistische Update-Muster wird durch die
-    exportierte makeStreamHandlers-Logik validiert: onActive(tile) wird
-    synchron aufgerufen, bevor ein asynchrones sendEvent resolven könnte.
-    Probe via Node-Subprozess mit panelLib.makeStreamHandlers.
-
-    Hinweis: updateActiveMarker ist im Bootstrap-IIFE (browser-only), nicht
-    exportiert. Diese Probe nutzt makeStreamHandlers direkt, um zu zeigen,
-    dass die Markierungslogik (onActive) synchron arbeitet — analog dazu
-    muss onTap die DOM-Markierung synchron VOR sendEvent setzen, was AC1
-    als Quelltext-Probe belegt."""
-    out = run_node(r'''
-        const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L',
-              icons: ['arasaac/test.png'], sichtbar: true },
-            { key: 'b', app: 'plan', view: 'tag', label: 'T',
-              icons: ['arasaac/test.png'], sichtbar: true },
-        ];
-        const activeCalls = [];
-        const handlers = panelLib.makeStreamHandlers(
-            function getTiles() { return tiles; },
-            function onActive(t) { activeCalls.push(t && t.key || null); },
-            function onAlive() {}
-        );
-        // Simuliere Stream-Event: Kachel 'a' ist aktiv
-        handlers.onMessage({ data: JSON.stringify({
-            type: 'display_changed',
-            payload: { url: '/display/plan/woche' }
-        })});
-        // onActive muss synchron aufgerufen worden sein (kein await/setTimeout)
-        const syncMarkiert = activeCalls.length === 1 && activeCalls[0] === 'a';
-        console.log(JSON.stringify({ activeCalls, syncMarkiert }));
-    ''')
-    assert out['syncMarkiert'] is True, \
-        'Markierungs-Callback onActive muss synchron aufgerufen werden (AC3, PANEL-11; bekommen: %r)' % out
-
-
-def test_PANEL_11_onClear_optimistisch_entfernt_markierung_logik():
-    """AC4 (Refs #959): Stream-Event mit null-payload (Session-Ende) → onActive(null)
-    wird synchron aufgerufen — Markierung weg, BEVOR POST resolvet.
-    Probe via makeStreamHandlers (exportierte Logik-Schicht)."""
-    out = run_node(r'''
-        const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L',
-              icons: ['arasaac/test.png'], sichtbar: true },
-        ];
-        const activeCalls = [];
-        const handlers = panelLib.makeStreamHandlers(
-            function getTiles() { return tiles; },
-            function onActive(t) { activeCalls.push(t && t.key || null); },
-            function onAlive() {}
-        );
-        // Simuliere panel_cleared-Stream-Event: payload.url = null → kein Match
-        handlers.onMessage({ data: JSON.stringify({
-            type: 'panel_cleared',
-            payload: { url: null }
-        })});
-        // onActive(null) muss synchron aufgerufen worden sein
-        const syncGeclearet = activeCalls.length === 1 && activeCalls[0] === null;
-        console.log(JSON.stringify({ activeCalls, syncGeclearet }));
-    ''')
-    assert out['syncGeclearet'] is True, \
-        'Markierungs-Callback onActive(null) muss synchron aufgerufen werden (AC4, PANEL-11; bekommen: %r)' % out
-
-
-def test_PANEL_11_stream_korrigiert_falsche_optimistische_markierung():
-    """AC5 (Refs #959): optimistisches Update wird durch falsches Stream-Update
-    korrigiert. Szenario: onTap setzt Kachel 'a' optimistisch aktiv; Stream
-    liefert danach Kachel 'b' als aktiv (z.B. Figuren-Erkennung übersteuert) →
-    makeStreamHandlers korrigiert die Markierung auf 'b'.
-    Probe via makeStreamHandlers (exportierte Logik-Schicht)."""
-    out = run_node(r'''
-        const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L',
-              icons: ['arasaac/test.png'], sichtbar: true },
-            { key: 'b', app: 'plan', view: 'tag',   label: 'T',
-              icons: ['arasaac/test.png'], sichtbar: true },
-        ];
-        const activeCalls = [];
-        const handlers = panelLib.makeStreamHandlers(
-            function getTiles() { return tiles; },
-            function onActive(t) { activeCalls.push(t && t.key || null); },
-            function onAlive() {}
-        );
-        // 1. Optimistisches Update: 'a' wird lokal als aktiv gesetzt
-        //    (simuliert durch direkten onActive-Aufruf, analog updateActiveMarker(tile))
-        activeCalls.push('a');  // optimistisch
-        // 2. Stream-Event trifft ein: Router hat auf 'b' geroutet
-        handlers.onMessage({ data: JSON.stringify({
-            type: 'display_changed',
-            payload: { url: '/display/plan/tag' }
-        })});
-        // activeCalls: ['a' (optimistisch), 'b' (Stream-Korrektur)]
-        const korrigiert = activeCalls.length === 2 && activeCalls[1] === 'b';
-        console.log(JSON.stringify({ activeCalls, korrigiert }));
-    ''')
-    assert out['korrigiert'] is True, \
-        'Stream-Event muss falsche optimistische Markierung korrigieren (AC5, PANEL-11; bekommen: %r)' % out
 
 
 # ============================================================
