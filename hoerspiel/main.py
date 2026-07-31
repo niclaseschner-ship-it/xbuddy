@@ -40,7 +40,15 @@ import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from flask import Flask, Response, jsonify, render_template, request, send_from_directory
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    make_response,
+    render_template,
+    request,
+    send_from_directory,
+)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -69,6 +77,7 @@ else:  # python3 hoerspiel/main.py
 # MAD-7 / HSP-39 / T1015: Init-Data-Auth aus tools.initdata (Cluster-A-Option-B
 # 2026-06-18-1720 — kein sys.path-Hack auf eltern-chat mehr).
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
 
 _INIT_DATA_AVAILABLE = True
 
@@ -311,6 +320,69 @@ def require_mini_app_auth(f):
 
 
 # ============================================================
+#  AUTH-3 HART-Cookie — Datenrouten (T1640, auth.md AUTH-3)
+# ============================================================
+# Phase-3-Migration (2026-07-30 gefeuert): die hoerspiel-Datenrouten
+# (config, alben, alben/<id>/manifest, resume, themen, folgen-vorschlag) wandern
+# von AUTH-6/SOFT auf HART-Cookie (auth.md AUTH-3, RAT-32 cookie-only). Der
+# SOFT-Pass-through (require_mini_app_auth) stoppte den Funnel-PII-Leak nicht.
+# Verdrahtung identisch zum #1639-routine-Muster (make_require_init_data-Factory).
+# NICHT auf /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3 (AUTH-4
+# public — <audio>-Element lädt ohne zuverlässiges Cookie) und NICHT auf
+# audio-stream (AUTH-6 public, Phase-4-Trigger). Player-HTML-Shell lebt in seiten.
+
+
+def _get_init_data_config():
+    """Tma-Config (``max_age_seconds``) — gecacht im runtime-Dict oder frisch.
+
+    Getter-Naht für die AUTH-Decorator-Lib-Factory (T1640). Wörtlich der Pfad,
+    den der SOFT-Helper (`_validate_mini_app_request`) inline las
+    (``runtime.get("init_data_config")`` → ``_init_data_mod.load_config()`` + Cache).
+    """
+    cfg = runtime.get("init_data_config")
+    if cfg is None:
+        cfg = _init_data_mod.load_config()
+        runtime["init_data_config"] = cfg
+    return cfg
+
+
+# AUTH-8: 401 rendert eine HTML-Anweisungsseite statt eines rohen Status-Codes
+# (kanonisches Re-Pair-HTML analog photo/essen/routine — hoerspiel hatte unter
+# SOFT keins, weil der SOFT-Pfad nie 401 auf fehlende Quelle warf).
+_AUTH_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
+
+
+def _auth_401():
+    """AUTH-8: 401 mit HTML-Anweisungsseite (nicht roher Status-Code)."""
+    resp = make_response(_AUTH_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+# Decorator: HART-AUTH (auth.md AUTH-2/3/5/8, T1640 Phase-3-Migration). Der Name
+# `require_init_data` trägt den AUTH-9-Coverage-Test per AST-Namen
+# (_AUTH_DECORATORS). Buddy-eigene Getter + `_auth_401` gehen als Closures rein.
+require_init_data = make_require_init_data(
+    get_bot_token=_get_bot_token,
+    get_familie_client=_get_familie_client_auth,
+    get_init_data_config=_get_init_data_config,
+    auth_401=_auth_401,
+)
+
+
+# ============================================================
 #  HSP-3a: Familie-Client-Accessor + Face-Pille-Helfer
 # ============================================================
 
@@ -533,6 +605,7 @@ def folgen_historie(kind_id: str):
 
 
 @app.route("/api/v1/hoerspiel/<kind_id>/alben", methods=["GET", "POST"])
+@require_init_data
 def alben(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -543,6 +616,7 @@ def alben(kind_id: str):
 
 
 @app.route("/api/v1/hoerspiel/<kind_id>/alben/<album_id>/manifest", methods=["GET"])
+@require_init_data
 def album_manifest_get(kind_id: str, album_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -556,6 +630,7 @@ def album_manifest_get(kind_id: str, album_id: str):
 # ---- Schreib-Endpoints (HSP-17, Eltern-Chat-Skill) ----
 
 @app.route("/api/v1/hoerspiel/<kind_id>/folgen-vorschlag", methods=["POST"])
+@require_init_data
 def folgen_vorschlag(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -703,6 +778,7 @@ def _build_config_response(cfg, dcfg, instance_cfg=None) -> dict:
 
 
 @app.route("/api/v1/hoerspiel/<kind_id>/config", methods=["GET", "PATCH"])
+@require_init_data
 def config_endpoint(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -853,6 +929,7 @@ def audio_stream(kind_id: str):
 # ---- Themen-Endpoint (HSP-38, URL-3a, RAT-17) ----
 
 @app.route("/api/v1/hoerspiel/<kind_id>/themen", methods=["GET"])
+@require_init_data
 def themen_endpoint(kind_id: str):
     """HSP-38: GET /api/v1/hoerspiel/<kind_id>/themen → kuratierte Themen-Liste.
 
@@ -898,8 +975,9 @@ def themen_endpoint(kind_id: str):
 def album_audio(kind_id: str, album_id: str, track_filename: str):
     """HSP-37: Audio-Track streamen mit Range-Requests.
 
-    Auth-Check (HSP-39) läuft via require_mini_app_auth-Decorator vor der
-    Range-Logik (401 trumpft 206). send_from_directory blockt Pfad-Traversal.
+    Auth: PUBLIC (AUTH-4, auth.md:366). Das <audio>-Element/Range-Fetch lädt den
+    Track ohne zuverlässiges Cookie — Gaten bräche das Kind-Tablet-Playback
+    (T1640 KRITISCH). send_from_directory blockt Pfad-Traversal.
     `Content-Type: audio/mpeg`, `Cache-Control: private, max-age=86400`.
     """
     err = _assert_self_kind(kind_id)
@@ -922,6 +1000,7 @@ def album_audio(kind_id: str, album_id: str, track_filename: str):
 # ---- Resume-Endpoints (HSP-36) ----
 
 @app.route("/api/v1/hoerspiel/<kind_id>/resume", methods=["GET", "PUT"])
+@require_init_data
 def resume_endpoint(kind_id: str):
     """HSP-36: Resume-Stand lesen (GET) und setzen (PUT).
 

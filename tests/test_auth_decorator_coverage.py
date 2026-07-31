@@ -31,6 +31,7 @@ MODULE_MAP = {
     "kibuddy": REPO_ROOT / "kibuddy" / "main.py",
     "plan": REPO_ROOT / "plan" / "main.py",
     "routine": REPO_ROOT / "routine" / "main.py",
+    "hoerspiel": REPO_ROOT / "hoerspiel" / "main.py",
 }
 
 # Phase-2-Route-Liste routine (#1639, method-explizit gegen die realen
@@ -49,6 +50,27 @@ _ROUTINE_AUTH3_ROUTES = [
     ("/api/v1/routine/items", "POST"),
     ("/api/v1/routine/items", "PUT"),
     ("/api/v1/routine/items/<item_id>", "DELETE"),
+]
+
+# Phase-3-Route-Liste hoerspiel (#1640, method-explizit gegen die realen
+# `@app.route`-Strings in hoerspiel/main.py). Spec-Wahrheit ist die AUTH-3-Prosa
+# in auth.md (Z.203/498: „hoerspiel: config, alben, alben/<id>/manifest, resume,
+# themen, folgen-vorschlag"). Wie bei routine hält der Coverage-Test die
+# method-explizite Endliste hier, bis die #1321-Fence sie enumeriert.
+# KRITISCH — NICHT gelistet (bleiben public):
+#   /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3  → AUTH-4 (Playback!)
+#   /api/v1/hoerspiel/<kind_id>/audio-stream                  → AUTH-6 (Phase-4)
+#   /healthz (SVC-6), /display/hoerspiel/* (Renderer), bible/folgen-historie
+#   (nicht in der AUTH-3-Prosa-Liste — behalten ihre Klasse).
+_HOERSPIEL_AUTH3_ROUTES = [
+    ("/api/v1/hoerspiel/<kind_id>/config", "GET"),
+    ("/api/v1/hoerspiel/<kind_id>/config", "PATCH"),
+    ("/api/v1/hoerspiel/<kind_id>/alben", "GET"),
+    ("/api/v1/hoerspiel/<kind_id>/alben/<album_id>/manifest", "GET"),
+    ("/api/v1/hoerspiel/<kind_id>/resume", "GET"),
+    ("/api/v1/hoerspiel/<kind_id>/resume", "PUT"),
+    ("/api/v1/hoerspiel/<kind_id>/themen", "GET"),
+    ("/api/v1/hoerspiel/<kind_id>/folgen-vorschlag", "POST"),
 ]
 
 # T1389 / AUTH-7b: die Renderer-Routen (Shell/Controller/SSE) leben nicht unter
@@ -153,7 +175,7 @@ def test_jede_auth3_route_traegt_den_decorator():
 
     # Phase-2-Nachzug (#1639): routine-AUTH-3-Routen ergänzen (Prosa-klassifiziert
     # in auth.md, method-explizit hier bis zur Fence-Erweiterung; s. _ROUTINE_AUTH3_ROUTES).
-    routen = routen + _ROUTINE_AUTH3_ROUTES
+    routen = routen + _ROUTINE_AUTH3_ROUTES + _HOERSPIEL_AUTH3_ROUTES
 
     # Cache je Modul.
     dekoriert = {buddy: _decorated_routes(pfad) for buddy, pfad in MODULE_MAP.items()}
