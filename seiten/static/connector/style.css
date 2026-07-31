@@ -5,55 +5,14 @@
    Self-contained — keine externen Fonts (Inline Google-Fonts-Import unten).
 */
 
-/* ── Fonts ──────────────────────────────────────────────────────────────── */
+/* ── Design Tokens + Fonts ───────────────────────────────────────────────── */
+/* DTOK-3 (#1707): den GETEILTEN Token-Strang referenzieren, nicht kopieren.
+   /display/_shared/design/tokens.css ist die EINE Quelle (DTOK-1, ROU-30-served,
+   Superset aller connector-Werte). Kein Inline-:root-Duplikat mehr — Farbänderung
+   lebt an EINEM Ort. connector-spezifische Ergänzungen (Layout/Komponenten) bleiben
+   unten lokal. connector ist network-only (PWAM-3) → kein SW-Precache-Bedarf. */
+@import url('/display/_shared/design/tokens.css');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-/* ── Design Tokens (inline subset — aus tokens.css kopiert) ──────────────── */
-:root {
-  --bg:            #F5F1E8;
-  --bg-soft:       #EFE8DC;
-  --surface:       #FFFFFF;
-  --surface-2:     #F0EBE0;
-  --surface-soft:  #FAF7F2;
-  --border:        #E3DCCF;
-  --border-soft:   #DED6C9;
-  --border-strong: #D5CDBF;
-  --text:          #2B2A28;
-  --text-2:        #6B6761;
-  --text-3:        #9A938A;
-  --primary:       #47503C;
-  --primary-light: #56624B;
-  --primary-ink:   #2E3527;
-  --success:       #5D8F4F;
-  --warning:       #C9913B;
-  --danger:        #B85544;
-  --info:          #668EA8;
-  --clay:          #B06B3C;
-  --lake:          #668EA8;
-  --lavender-earth:#8D829B;
-  --sand:          #D6B98C;
-  --shadow-soft:   0 6px 20px rgba(37,31,24,.04);
-  --shadow:        0 4px 16px rgba(44,42,39,.08);
-  --radius-sm:     12px;
-  --radius-md:     16px;
-  --radius-lg:     20px;
-  --radius-full:   9999px;
-  --space-1:  4px;
-  --space-2:  8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 32px;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --fs-12: 12px;
-  --fs-14: 14px;
-  --fs-16: 16px;
-  --fs-18: 18px;
-  --fs-20: 20px;
-  --fs-24: 24px;
-  --fs-28: 28px;
-}
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
