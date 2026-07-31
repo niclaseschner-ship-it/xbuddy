@@ -24,7 +24,7 @@ import os
 import sys
 import threading
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, make_response, request, send_file
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1, #179)
 # auch beim Direktstart `python3 familie/main.py` gefunden wird — analog zu
@@ -41,6 +41,8 @@ if _REPO_ROOT not in sys.path:
 # `WorkingDirectory=…/familie` im systemd-File.
 from familie import registry as registry_mod  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # ============================================================
@@ -55,10 +57,16 @@ runtime = {
     "registry":         registry_mod.Registry(),
     "foto_verzeichnis": "fotos",
     "registry_path":    None,
+    # MAD-7 / T708-C: Mini-App-Auth (Test-Naht; im Produktiv-Betrieb aus ENV).
+    "bot_token":        None,
+    "init_data_config": None,
+    # T1638: familie_client-Doppel für Tests (None → lokaler Direkt-Read, s. u.)
+    "familie_client":   None,
 }
 
 
-def configure(reg, foto_verzeichnis=None, registry_path=None):
+def configure(reg, foto_verzeichnis=None, registry_path=None,
+              bot_token=None, init_data_config=None, familie_client=None):
     """Setzt die laufende Registry + das aufgelöste Foto-Verzeichnis (FAM-9).
 
     Wird `foto_verzeichnis` nicht übergeben, leitet die Funktion es aus
@@ -68,6 +76,11 @@ def configure(reg, foto_verzeichnis=None, registry_path=None):
     Registry-Verzeichnis auf. Ohne `registry_path` bleibt das alte
     Verhalten (nackter Settings/ENV/Default-Wert) — für Tests, die nur eine
     Registry hereinreichen und das Foto-Verzeichnis selbst absolut machen.
+
+    `bot_token`, `init_data_config` (T1638): Auth-Naht für Tests; im
+    Produktiv-Betrieb aus ENV.
+    `familie_client` (T1638): Test-Doppel; None → lokaler Direkt-Read
+    aus `_aktuelle_registry()` (kein HTTP-Self-Call, kein Deadlock).
     """
     runtime["registry"] = reg
     runtime["registry_path"] = registry_path
@@ -80,6 +93,12 @@ def configure(reg, foto_verzeichnis=None, registry_path=None):
                 reg.settings.foto_verzeichnis, "FAMILIE_FOTOS",
                 DEFAULTS["foto_verzeichnis"])
     runtime["foto_verzeichnis"] = foto_verzeichnis
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+    if init_data_config is not None:
+        runtime["init_data_config"] = init_data_config
+    if familie_client is not None:
+        runtime["familie_client"] = familie_client
 
 
 # Schreib-Serialisierung (FAM-12/FAM-13): Read-Modify-Write der Registry-
@@ -88,6 +107,106 @@ def configure(reg, foto_verzeichnis=None, registry_path=None):
 # der zweite überschreibt den ersten). Das Lock klammert nur den Schreib-
 # Pfad — Lesen bleibt lock-frei (DCOMP-2 Reload-on-Read).
 _write_lock = threading.Lock()
+
+
+# ============================================================
+#  MAD-7 Mini-App-Auth (T1638 — AUTH-3-HART-Cookie, analog routine/main.py)
+# ============================================================
+
+_ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
+
+
+def _get_bot_token():
+    """Bot-Token aus runtime-Dict (Test-Naht) oder ENV (APP-7)."""
+    return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+
+
+class _LocalRegistryFamilieClient:
+    """Test-freier Direkt-Read-Adapter: liest Telegram-IDs aus der laufenden
+    Registry ohne HTTP-Selbst-Call (T1638, kein Deadlock, kein Self-Loop).
+
+    familie IST die Registry — der Decorator braucht nur die Menge der
+    telegram_id-Werte, die direkt aus `_aktuelle_registry()` gelesen werden
+    können. Ein HTTP-Self-Call auf 127.0.0.1:5010 würde nach dem Gaten 401
+    zurückgeben (die Loopback-Bypass-Bedingung gilt nur, wenn remote_addr
+    wirklich 127.0.0.1 ist — das ist beim urllib-Call nicht garantiert,
+    solange der Prozess auf allen Interfaces lauscht). Direkt-Read ist
+    sauberer: kein Netz, keine Race-Condition, keine Abhängigkeit.
+    """
+
+    def get_telegram_ids(self):
+        reg = _aktuelle_registry()
+        ids = set()
+        for p in reg.alle():
+            if p.telegram_id is not None:
+                try:
+                    ids.add(int(p.telegram_id))
+                except (TypeError, ValueError):
+                    pass
+        return ids or None
+
+
+def _get_familie_client():
+    """Liefert den Familie-Client — Test-Doppel aus runtime oder Direkt-Read-Adapter.
+
+    Im Produktiv-Betrieb: `_LocalRegistryFamilieClient` liest die Telegram-IDs
+    direkt aus der laufenden Registry (kein HTTP-Self-Call, T1638).
+    In Tests: ein injiziertes Doppel aus `runtime["familie_client"]`.
+    """
+    cached = runtime.get("familie_client")
+    if cached is not None:
+        return cached
+    return _LocalRegistryFamilieClient()
+
+
+def _get_init_data_config():
+    """Tma-Config (`max_age_seconds`) — gecacht im runtime-Dict oder frisch.
+
+    Analog routine/main.py:_get_init_data_config (AUTH-Decorator-Lib).
+    """
+    cfg = runtime.get("init_data_config")
+    if cfg is None:
+        cfg = _init_data_mod.load_config()
+        runtime["init_data_config"] = cfg
+    return cfg
+
+
+# AUTH-8: 401 rendert eine Anweisungsseite statt eines rohen Status-Codes
+# (kanonisches Re-Pair-HTML analog routine/hoerspiel — T1638).
+_AUTH_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
+
+
+def _auth_401():
+    """AUTH-8: 401 mit HTML-Anweisungsseite (nicht roher Status-Code)."""
+    resp = make_response(_AUTH_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+# Decorator: HART-AUTH (auth.md AUTH-2/3/5/8, T1638). Der Name
+# `require_init_data` BLEIBT (AUTH-9-Copetrage-Test trägt per AST-Namen);
+# die Buddy-eigenen Getter + `_auth_401` gehen als Closures rein.
+# Loopback-Bypass (AUTH-5): interne Buddies (plan/kibuddy/eltern-chat/
+# hoerspiel) lesen familie via 127.0.0.1:5010 ohne XFF → pass-through.
+# Foto-Route mit Cookie: Browser-<img> sendet Cookie same-origin → 200.
+require_init_data = make_require_init_data(
+    get_bot_token=_get_bot_token,
+    get_familie_client=_get_familie_client,
+    get_init_data_config=_get_init_data_config,
+    auth_401=_auth_401,
+)
 
 
 # ============================================================
@@ -122,12 +241,14 @@ def _aktuelle_registry():
 
 
 @app.route("/api/v1/familie/personen", methods=["GET"])
+@require_init_data
 def get_personen():
     """FAM-7: alle Personen der Familie (ohne Foto-Binär)."""
     return jsonify([p.to_dict() for p in _aktuelle_registry().alle()])
 
 
 @app.route("/api/v1/familie/personen/<person_id>", methods=["GET"])
+@require_init_data
 def get_person(person_id):
     """FAM-7: eine Person je id. Unbekannte id: 404."""
     person = _aktuelle_registry().get(person_id)
@@ -137,6 +258,7 @@ def get_person(person_id):
 
 
 @app.route("/api/v1/familie/foto/<person_id>", methods=["GET"])
+@require_init_data
 def get_foto(person_id):
     """FAM-8: Profilfoto über HTTP.
 
@@ -176,6 +298,7 @@ def _bad_request(msg):
 
 
 @app.route("/api/v1/familie/personen", methods=["POST"])
+@require_init_data
 def post_person():
     """FAM-12: Person anlegen. JSON-Body `{name, art?, ring?, foto?, email?,
     telegram_id?}`, Antwort 200 mit dem Personen-JSON inkl. vergebener
@@ -226,6 +349,7 @@ def post_person():
 
 
 @app.route("/api/v1/familie/personen/<person_id>/foto", methods=["POST"])
+@require_init_data
 def post_foto(person_id):
     """FAM-13: Profilfoto setzen. Multipart-Feld `foto`. Schreibt das Foto
     atomar in `<foto_verzeichnis>/<id>/<dateiname>` und aktualisiert das
