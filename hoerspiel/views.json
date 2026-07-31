@@ -1,6 +1,21 @@
 {
   "views": [
     {
+      "slug": "hoerspiel-eltern",
+      "typ": "pwa",
+      "pfad": "/seiten/hoerspiel/paula/eltern",
+      "label": "Hörspiel verwalten",
+      "synonyme": ["hörspiel", "einstellungen", "folgen", "alben verwalten", "hoerspiel verwalten"],
+      "zeigt": "Hörspiel-Einstellungen und Folgen für ein Kind verwalten (Eltern-Ansicht).",
+      "zielgruppe": "eltern",
+      "pwa": {
+        "manifest": "/seiten/hoerspiel/paula/eltern/manifest.json",
+        "start_url": "/seiten/hoerspiel/paula/eltern",
+        "service_worker": "/seiten/hoerspiel/paula/eltern/sw.js"
+      },
+      "auth": "tma"
+    },
+    {
       "slug": "alben-paula",
       "pfad": "/display/hoerspiel/paula/alben",
       "label": "Paulas Hörspiele",
