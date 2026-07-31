@@ -1203,48 +1203,140 @@ html, body {
       /* Add-Row als Block */
       .conn-table .add-row { display: table-row; }
 
-      /* ── Sektion 2: Je-Buddy-Tabelle ── */
-      /* Gleiche Mechanik: thead verstecken, Zeilen als Karte */
-      .conn-table[aria-label="Verbrauch je Buddy"] thead { display: none; }
-      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) {
-        display: block;
-        padding: var(--space-3) var(--space-4);
-        border-bottom: 1px solid var(--border);
-        position: relative;
+      /* Block ②-Tabelle „Welche App nutzt was": die Wechseln-Affordanz bleibt
+         inline im Fluss (kein absolut-positioniertes Icon), damit sie auf dem
+         Handy als volle Text-Zeile sicht- und tippbar ist. */
+      .conn-table[aria-label="Welche App nutzt was"] tbody tr:not(.chart-row) td.act {
+        position: static;
+        padding: var(--space-2) 0 0;
+        width: 100%;
       }
-      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td {
-        display: flex;
-        align-items: flex-start;
-        gap: var(--space-3);
-        padding: var(--space-1) 0;
-        border: none;
-        text-align: left;
+      .conn-table[aria-label="Welche App nutzt was"] tbody tr:not(.chart-row) td.act .wechsel-btn {
+        width: 100%;
+        justify-content: center;
       }
-      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td[data-label]::before {
-        content: attr(data-label);
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.07em;
-        text-transform: uppercase;
-        color: var(--text-3);
-        min-width: 80px;
-        flex-shrink: 0;
-        padding-top: 2px;
-      }
-      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td.act {
-        position: absolute;
-        top: var(--space-3);
-        right: var(--space-4);
-        padding: 0;
-        width: auto;
-      }
-      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td.act::before {
-        display: none;
-      }
-      .conn-table[aria-label="Verbrauch je Buddy"] td.num { text-align: left; }
-
-      /* tfoot: als Block-Karte */
-      .conn-table tfoot tr { display: block; padding: var(--space-3) var(--space-4); }
-      .conn-table tfoot td { display: block; padding: 0; border: none; }
-      .conn-table tfoot td.num { font-size: var(--fs-16); padding-top: var(--space-1); }
     }
+
+/* ══ #1669 — 3-Block-Umbau ═════════════════════════════════════════════════ */
+
+/* ── Block ① — Gesamtkosten-Karte (prominent, oben) ───────────────────────── */
+.gesamt-karte {
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: var(--space-6) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.gesamt-label {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+.gesamt-zahlen {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-7);
+  flex-wrap: wrap;
+}
+.gesamt-primaer, .gesamt-sekundaer { display: flex; flex-direction: column; gap: 2px; }
+.gesamt-wert {
+  font-size: var(--fs-28);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.gesamt-wert-sm {
+  font-size: var(--fs-20);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.1;
+}
+.gesamt-span {
+  font-size: var(--fs-12);
+  color: rgba(255, 255, 255, 0.66);
+  font-weight: 500;
+}
+.gesamt-karte .daten-fenster {
+  align-self: flex-start;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+/* ── Block ② — Wechseln-Affordanz (CONN-6) ───────────────────────────────── */
+.wechsel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-13, 13px);
+  font-weight: 600;
+  color: var(--primary);
+  background: transparent;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-full);
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease;
+}
+.wechsel-btn:hover { background: #eef3ea; }
+
+/* ── Block ③ — Anbieter-Status (klein, Fußzeile) ─────────────────────────── */
+.sektion--klein { opacity: 0.96; }
+.sektion-nummer--dim { background: var(--text-3); }
+
+.gateway-zeile {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+}
+.gateway-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+}
+.gateway-name { font-size: var(--fs-16); font-weight: 700; color: var(--text); }
+.gateway-sub { font-size: var(--fs-12); color: var(--text-3); }
+
+.anbieter-liste {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.anbieter-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  transition: box-shadow 140ms ease;
+}
+.anbieter-item:hover, .anbieter-item:focus-visible {
+  box-shadow: var(--shadow-soft);
+  outline: none;
+  border-color: var(--border-strong);
+}
+.anbieter-kopf { display: flex; align-items: center; gap: var(--space-3); }
+.anbieter-apps { display: flex; align-items: center; }
+.vendor-logo-xs { height: 20px; width: auto; max-width: 84px; object-fit: contain; }
