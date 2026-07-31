@@ -109,3 +109,46 @@ Filesystem ist Drop-In-Switch + `cp -a`, **kein** Code-Change. URL-Pfad
   nginx, systemd) sind BUD-1a-Standard, keine neue Disziplin.
 - **Industrie-Reflex (Multi-Tenancy-Service-Mehrmandanten):** vermieden —
   Hardware-Trennung pro Familie (apps.md:90) ist die anti-Reflex-Linie.
+
+## Amendment 2026-07-31 — Weg C: Instanz-Liste + Klarnamen werden Config (#1656)
+
+**Reaktivierungs-Trigger gefeuert.** Der in Pkt.2 gesetzte Wiederaufnahme-Trigger
+„dritte Instanz" **hat gefeuert** — `niclas` ist live: dritter nginx-Origin in
+`deploy/nginx/xbuddy-origin.conf`, Port 5056 in `conventions/ports.md`,
+`hoerspiel_url_origin_niclas` in `eltern-chat/config.py`. Das ist eine
+**lizenzierte** Wiederaufnahme (RAT-17 Pkt.2 nennt genau diesen Trigger), **keine
+verbotene Re-Litigation**.
+
+**Setzung (eng gescopet).** Die **read-only Instanz-LISTE + die Klarnamen** werden
+aus dem Code in Config gehoben — sie driften heute 4× dupliziert
+(`eltern-chat/tasks.py:43`, `seiten/main.py:1106`, `hoerspiel/config.py`,
+`app.js`/`window.__HSP_INSTANZEN__`; belegt: `controller/app-panel/app.js` kennt
+`niclas` NICHT, obwohl live). Config-out geht in **eine gitignored
+`instanzen.json`** (live) + eine getrackte generische **`instanzen.example.json`**,
+aus der die Backends **lesen**.
+
+**Technische Slugs BLEIBEN.** Kein Live-Rename von `paula`/`neko`/`niclas` — sie
+sind opake Strings, an nginx/systemd/URL/Cookie gekoppelt (atomar-oder-404). Der
+Antiberater brach den Slug-Rename-Weg (C3) als Live-Betriebs-Bruch; er ist
+verworfen.
+
+**Config-Guard bekräftigt (Pkt.2, HART).** Die Config-Quelle **liest/zeigt** nur,
+sie generiert **NIE** Ports/Routing/nginx/systemd. Der in Option B verworfene
+Port-Offset-Algorithmus / das „erzeugte Routing" **bleibt verworfen**. `port` und
+`origin` in der Datei sind **Lese-Spiegel** der handverdrahteten Realität
+(`ports.md`/nginx bleiben SSoT für den Betrieb), kein Generator-Input.
+Kill-Kriterium (übernommen aus der Runde): *„Config-Quelle will Ports/Routing
+generieren → zurück."*
+
+**C4-Anker (unverändert).** Config-out senkt Klon-Kosten für eine andere Familie,
+ersetzt **NICHT** Ein-Pi-pro-Familie (`apps.md:90` /
+`project_familie_2_3_eigener_bot`). RAT-4/Multi-Tenancy bleibt **zu**.
+
+**Wo es landet.** Neue Konvention `conventions/instanzen-config.md`
+(ID-Präfix `INST`, Config-nur-lesen als Vertrag) + `instanzen.example.json` /
+`instanzen.json`. Backend-Migration folgt als **eigene Welle** nach Ratifikation.
+
+**Evidenz.**
+`brainstorm/berater-runde/20260731-0100-RATIFIZIERT-config-separation-weg-c.md`
+(Nic „ja b", Antiberater-geprüft: C3 gebrochen, C2 gestärkt, C4-Anker gefixt).
+Tickets: #1656 (Weg-C-Fundament), Part of #1309.
