@@ -547,7 +547,8 @@ def test_heartbeat_written_after_successful_poll(tmp_path):
         ), "Heartbeat-Datei wurde nach erfolgreichem Poll nicht geschrieben"
 
         # Inhalt: parseable Integer-Timestamp.
-        content = open(heartbeat_path, encoding="utf-8").read().strip()
+        with open(heartbeat_path, encoding="utf-8") as _hb:
+            content = _hb.read().strip()
         ts = int(content)   # wirft ValueError wenn kein Integer
 
         # Timestamp muss aktuell sein (max 5 s alt).
