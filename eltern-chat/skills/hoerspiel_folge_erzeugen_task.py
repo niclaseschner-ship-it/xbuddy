@@ -227,8 +227,8 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         # Origin je kind_id DIREKT aus der zentralen instanzen.json-Registry
         # (tools.instanzen trägt slug+origin; HOERSPIEL_INSTANZEN bleibt bewusst
         # kind_id/name-only, INST-1-Grenze). Kein hardcodiertes Slug-Dict.
-        from tools import instanzen as _instanzen
         from skills.hoerspiel_client import HoerspielClient as _HoerspielClient
+        from tools import instanzen as _instanzen
         _origin_by_kind_id = {
             e["slug"]: _hoerspiel_origin_mit_schema(e.get("origin", ""))
             for e in _instanzen.lade_instanzen("hoerspiel")

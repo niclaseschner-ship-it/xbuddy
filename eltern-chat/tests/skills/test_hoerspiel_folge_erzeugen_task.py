@@ -19,13 +19,22 @@ import threading
 import time
 
 import pytest
-
 import skills.hoerspiel_folge_erzeugen as hfe_mod
 from skills.hoerspiel_folge_erzeugen_task import (
     HoerspielFolgeErzeugenTask,
     _HfeJobStore,
 )
 from tasks import TurnContext
+
+# Reuse Fakes aus den existierenden Tests — gleicher Stil. Bare-Modulname
+# (analog test_hoerspiel_folge_erzeugen_emil.py): eltern-chat/tests/skills
+# liegt im prepend-Importpfad; der ambige `tests.skills.`-Paketpfad kollidiert
+# im repo-weiten Lauf mit dem Wurzel-`tests`-Namespace (#52-Muster, T1310).
+from test_hoerspiel_folge_erzeugen import (
+    FakeHoerspielClient,
+    FakeTelegram,
+    _immer_mitglied,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -42,16 +51,6 @@ def _instanzen_ohne_origin(monkeypatch):
             {"slug": "emil", "port": 0, "origin": "", "display_name": "Kind Drei"},
         ],
     )
-
-# Reuse Fakes aus den existierenden Tests — gleicher Stil. Bare-Modulname
-# (analog test_hoerspiel_folge_erzeugen_emil.py): eltern-chat/tests/skills
-# liegt im prepend-Importpfad; der ambige `tests.skills.`-Paketpfad kollidiert
-# im repo-weiten Lauf mit dem Wurzel-`tests`-Namespace (#52-Muster, T1310).
-from test_hoerspiel_folge_erzeugen import (
-    FakeHoerspielClient,
-    FakeTelegram,
-    _immer_mitglied,
-)
 
 
 def _ctx(chat_id=55, from_user_id=7):
