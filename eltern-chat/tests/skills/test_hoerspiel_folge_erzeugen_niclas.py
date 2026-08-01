@@ -8,7 +8,6 @@ ist durchgefädelt. Die eine autoritative eltern-chat-Instanz-Liste ist
 Kein Netz, kein Telegram — Fakes aus der bestehenden HFE-Suite.
 """
 
-import os
 
 from skills.hoerspiel_folge_erzeugen_task import HoerspielFolgeErzeugenTask
 from tasks import HOERSPIEL_INSTANZEN, TurnContext
@@ -19,16 +18,16 @@ from test_hoerspiel_folge_erzeugen import (
 )
 
 
-def _make_task(*, emil_origin="http://127.0.0.1:5056"):
+def _make_task():
+    # Option C (#1732): keine hoerspiel_url_origin_*-kwargs mehr — die per-kind_id-
+    # Origins kommen aus der zentralen instanzen-Registry (instanzen.test.json trägt
+    # mia/finn/emil mit Origins 5053/5055/5056).
     return HoerspielFolgeErzeugenTask(
         tg=FakeTelegram(),
         hoerspiel_client=FakeHoerspielClient(),
         display_url_origin="https://app.example.com",
         is_member_fn=_immer_mitglied,
         mini_app_base_url="https://mini.example.com",
-        hoerspiel_url_origin="http://127.0.0.1:5053",
-        hoerspiel_url_origin_finn="http://127.0.0.1:5055",
-        hoerspiel_url_origin_emil=emil_origin,
     )
 
 
@@ -58,9 +57,20 @@ def test_client_map_kennt_emil():
     assert task._client_by_kind_id["emil"] is not task._hoerspiel_client
 
 
-def test_emil_ohne_origin_faellt_auf_mia_fallback():
-    """Leere emil-Origin → Mia-Client-Fallback (kein Crash, HSP-43-symmetrisch)."""
-    task = _make_task(emil_origin="")
+def test_emil_ohne_origin_faellt_auf_mia_fallback(monkeypatch):
+    """Leere emil-Origin in der Registry → Default-Client-Fallback (kein Crash,
+    HSP-43-symmetrisch). Option C (#1732): der Fallback greift bei leerem
+    instanzen-`origin`, nicht mehr bei leerem Config-Feld."""
+    import tools.instanzen as _inst
+    monkeypatch.setattr(
+        _inst, "lade_instanzen",
+        lambda klasse="hoerspiel", pfad=None: [
+            {"slug": "mia", "port": 5053, "origin": "127.0.0.1:5053", "display_name": "Kind Eins"},
+            {"slug": "finn", "port": 5055, "origin": "127.0.0.1:5055", "display_name": "Kind Zwei"},
+            {"slug": "emil", "port": 0, "origin": "", "display_name": "Kind Drei"},
+        ],
+    )
+    task = _make_task()
     assert task._client_by_kind_id["emil"] is task._hoerspiel_client
 
 
@@ -83,15 +93,14 @@ def test_propose_emil_nicht_als_unbekannt_abgelehnt():
         pass
 
 
-def test_config_slot_emil_default_5056():
-    """AC3: config.resolve liefert hoerspiel_url_origin_emil (Default 5056)."""
-    import config as ec_config
-    os.environ["ELTERNCHAT_BOT_TOKEN"] = "test-token-1263"
-    try:
-        cfg = ec_config.resolve(config_path="/nonexistent-1263.json")
-    finally:
-        del os.environ["ELTERNCHAT_BOT_TOKEN"]
-    assert cfg.hoerspiel_url_origin_emil == "http://127.0.0.1:5056"
+def test_emil_origin_kommt_aus_instanzen_registry():
+    """Option C (#1732): die emil-Origin steht in der zentralen instanzen-Registry
+    (instanzen.test.json, slug 'emil'), NICHT mehr im entfernten Config-Slot
+    hoerspiel_url_origin_emil. Das ist die eine Quelle (INST-1), kein Doppel."""
+    from tools import instanzen as _inst
+    origins = {e["slug"]: e.get("origin", "") for e in _inst.lade_instanzen("hoerspiel")}
+    assert origins.get("emil"), "emil muss eine origin in instanzen.json tragen"
+    assert "5056" in origins["emil"]
 
 
 def test_agent_prompt_kennt_emil():

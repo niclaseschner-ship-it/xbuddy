@@ -103,13 +103,13 @@ _HFE_FINN_ORIGIN = "http://127.0.0.1:5055"
 
 
 def test_build_catalog_durchgereicht_finn_origin():
-    """T954 / AC-1 / RAT-17 / #910 / entry_path_probe: build_catalog reicht
-    hoerspiel_url_origin_finn an HoerspielFolgeErzeugenTask durch —
-    task._client_by_kind_id["finn"]._origin zeigt auf den Finn-Default
-    (http://127.0.0.1:5055), NICHT auf Mia-Origin oder leer.
+    """Option C (#1732) / RAT-17 / #910 / entry_path_probe: die Finn-Origin kommt
+    aus der zentralen instanzen-Registry (instanzen.test.json, slug 'finn' → 5055) —
+    task._client_by_kind_id["finn"]._origin zeigt auf http://127.0.0.1:5055,
+    NICHT auf Mia-Origin oder leer.
 
-    Verriegelt Watchdog-Befund #1: Finn-Origin wurde vor T954-Fix nicht
-    an HoerspielFolgeErzeugenTask weitergereicht — stiller Mia-Fallback.
+    Verriegelt Watchdog-Befund #1 (stiller Mia-Fallback) jetzt registry-getrieben:
+    kein hoerspiel_url_origin_finn-Durchreichen mehr.
 
     entry_path_probe_result: probed.
     """
@@ -118,7 +118,6 @@ def test_build_catalog_durchgereicht_finn_origin():
     catalog = build_catalog(
         tg, "/instanz/rootCA.pem",
         hoerspiel_url_origin=_HFE_MIA_ORIGIN,
-        hoerspiel_url_origin_finn=_HFE_FINN_ORIGIN,
         family_group_chat_id_getter=lambda: "-100",
     )
     task = catalog._tasks.get("hoerspiel_folge_erzeugen")
