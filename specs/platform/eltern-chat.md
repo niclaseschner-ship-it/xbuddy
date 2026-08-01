@@ -2023,7 +2023,8 @@ Test-Familie migrierte währenddessen, der Bot fiel mit einer toten Chat-ID aus.
 Ein Wrapper um `provider.generate(...)` in `eltern-chat/agent.py` misst die
 Wall-Clock per `time.monotonic()` und liest die Token-Counts aus dem Provider-
 Response (anbieter-neutrales `ProviderUsage`-Feld). Die Pricing-Tabelle steht
-als Konstante in `eltern-chat/providers/pricing.py` pro Modell-ID
+als Konstante in der unified-Quelle `tools/llm/pricing.py` (`estimate_cost`,
+#1636 — die frühere eltern-chat-Zweitkopie ist aufgelöst) pro Modell-ID
 `(input_per_million, cached_input_per_million, output_per_million)` in USD;
 der EUR-Wechselkurs ist eine feste Konstante `1.0` (V1-Vereinfachung). Die
 Persistenz liegt in `conversations.db` in einer eigenen Tabelle

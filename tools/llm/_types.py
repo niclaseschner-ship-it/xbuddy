@@ -92,7 +92,7 @@ class ProviderCallEvent(TypedDict, total=False):
     `correlation_id` (Caller-Sache; eltern-chat=turn_id, hoerspiel=
     episode_id, kibuddy=chat_id), `cache_read_tokens`,
     `cache_creation_tokens`, `est_cost_eur` (None bei unbekanntem Modell,
-    analog `eltern-chat/providers/pricing.estimate_cost`).
+    aus `pricing.estimate_cost` — der unified Kosten-Quelle, #1636).
 
     `modality` (T1410, additiv, LLMP-S6): "tts" | "stt" für Audio-Calls
     (`get_speech` / `get_transcription`). Chat-/Text-Calls setzen es nicht —
