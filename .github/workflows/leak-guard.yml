@@ -1,0 +1,53 @@
+name: leak-guard
+
+# Leak-Guard (#1724, Part of #1309 public) — scannt jeden PR mit gitleaks gegen
+# das repo-eigene Custom-PII-Ruleset (.gitleaks.toml, aus dem ratifizierten
+# Gate-1-Set): Chat-ID, Heim-IP, Tailnet-Identifier, private Mail, Klarnamen.
+#
+# ⚠️ NOCH NICHT REQUIRED. Bis #1719 den Baum auf generische Werte scrubbt, trägt
+# HEAD ~2143 Treffer (überwiegend die funktionalen Slugs mia/finn/emil, plus
+# die echten Secrets demo-tailnet/IP/chat-id) — der Job ist bis dahin bewusst ROT
+# als Fortschritts-Anzeige des Clean. ERST NACH #1719 (grün auf HEAD) in die
+# required-checks aufnehmen (Branch-Protection, analog RAT-30). Vorher würde er
+# alle Merges blockieren.
+#
+# gitleaks läuft als selbst-heruntergeladenes Binary (kein Docker) — analog zum
+# `uvx ruff`-Muster, robust auf den self-hosted-Runnern.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: "8.21.2"
+
+jobs:
+  leak-guard:
+    # Leere Null-Diff-Claim-Flip-PRs überspringen (RAT-34, wie ruff.yml).
+    if: ${{ github.event.pull_request.changed_files != 0 }}
+    runs-on: [self-hosted, win-wsl]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: gitleaks-Binary holen
+        run: |
+          set -eu
+          arch="$(uname -m)"
+          case "$arch" in
+            x86_64|amd64) gz="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" ;;
+            aarch64|arm64) gz="gitleaks_${GITLEAKS_VERSION}_linux_arm64.tar.gz" ;;
+            *) echo "Unbekannte Arch: $arch" >&2; exit 1 ;;
+          esac
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${gz}"
+          curl -sSL -o /tmp/gitleaks.tar.gz "$url"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          chmod +x /tmp/gitleaks
+
+      - name: gitleaks detect (Custom-PII-Ruleset .gitleaks.toml)
+        run: |
+          # --no-git: Arbeitsbaum/HEAD scannen (deterministisch, „grün auf HEAD"
+          # ist das Abnahme-Kriterium nach #1719). --redact: Rohwerte nicht ins
+          # Log spülen. Exit != 0 bei Treffer.
+          /tmp/gitleaks detect --no-git --config .gitleaks.toml --redact --no-banner
