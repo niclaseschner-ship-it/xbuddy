@@ -18,6 +18,7 @@ Abgedeckte ACs (T1023):
 import threading
 import time
 
+import pytest
 import skills.hoerspiel_folge_erzeugen as hfe_mod
 from skills.hoerspiel_folge_erzeugen_task import (
     HoerspielFolgeErzeugenTask,
@@ -34,6 +35,22 @@ from test_hoerspiel_folge_erzeugen import (
     FakeTelegram,
     _immer_mitglied,
 )
+
+
+@pytest.fixture(autouse=True)
+def _instanzen_ohne_origin(monkeypatch):
+    """Task-Logik-Tests nutzen den FakeHoerspielClient für ALLE kind_ids — dazu
+    liefert die zentrale instanzen-Registry hier leere Origins (Option C #1732:
+    leerer Origin → Default-/Fake-Client-Fallback statt echter HoerspielClient)."""
+    import tools.instanzen as _inst
+    monkeypatch.setattr(
+        _inst, "lade_instanzen",
+        lambda klasse="hoerspiel", pfad=None: [
+            {"slug": "mia", "port": 0, "origin": "", "display_name": "Kind Eins"},
+            {"slug": "finn", "port": 0, "origin": "", "display_name": "Kind Zwei"},
+            {"slug": "emil", "port": 0, "origin": "", "display_name": "Kind Drei"},
+        ],
+    )
 
 
 def _ctx(chat_id=55, from_user_id=7):

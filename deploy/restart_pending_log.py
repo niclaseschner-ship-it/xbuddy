@@ -48,6 +48,23 @@ MAPPING_ROW_RE = re.compile(
 )
 
 
+def _hoerspiel_service_names() -> list[str]:
+    """Alle Hörspiel-systemd-Service-Namen aus der zentralen instanzen.json-Registry
+    (Option C #1732): Primär `xbuddy-hoerspiel` (instanzen[0], kein Suffix) + je
+    weitere Instanz `xbuddy-hoerspiel-{slug}`. Kein Hardcode — trägt die echten
+    Live-Slugs. Fehlt/kaputt die Registry, mindestens den Primär-Service."""
+    names = ["xbuddy-hoerspiel"]
+    try:
+        from tools import instanzen as _inst
+        for e in _inst.lade_instanzen("hoerspiel")[1:]:
+            slug = (e.get("slug") or "").strip()
+            if slug:
+                names.append(f"xbuddy-hoerspiel-{slug}")
+    except Exception:  # Registry fehlt → nur Primär-Service
+        pass
+    return names
+
+
 def load_mapping():
     """Parse Mapping-Tabelle aus deploy/systemd/README.md. Returns list of
     (path_prefix, restart_cmd) tuples. Bei Fehler: leere Liste (Default-
@@ -79,9 +96,12 @@ def services_for_paths(changed_paths, mapping):
     services = set()
     for path in changed_paths:
         if path.startswith("hoerspiel/"):
-            # Shared-Code: BEIDE Services (Kind-Daten leben nicht im Repo).
-            services.add("sudo systemctl restart xbuddy-hoerspiel")
-            services.add("sudo systemctl restart xbuddy-hoerspiel-finn")
+            # Shared-Code: ALLE Hörspiel-Services (Kind-Daten leben nicht im Repo).
+            # Registry-getrieben (Option C #1732): Primär `xbuddy-hoerspiel` +
+            # je weitere Instanz `xbuddy-hoerspiel-{slug}` aus instanzen.json —
+            # kein Hardcode, trägt die echten Live-Slugs.
+            for _svc in _hoerspiel_service_names():
+                services.add(f"sudo systemctl restart {_svc}")
             continue
         for path_token, cmd in mapping:
             # path_token kann "router/" oder "deploy/nginx/xbuddy-origin.conf"
