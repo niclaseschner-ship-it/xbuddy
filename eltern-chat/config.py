@@ -139,18 +139,10 @@ DEFAULTS = {
     # zum Pi-Setup (PORT-2 Hörspiel-Buddy Mia auf 5053). Leer ⇒ Aufgabe NICHT im
     # Katalog (AND-Guard mit family_group_chat_id_getter).
     "hoerspiel_url_origin": "http://127.0.0.1:5053",
-    # RAT-17 / #910: zweite Hörspiel-Buddy-Origin (Finn-Instanz). Resolution-Logik
-    # im Skill (HFE-3, E-HFE-6): kind_id="mia" → hoerspiel_url_origin,
-    # kind_id="finn" → hoerspiel_url_origin_finn. Option A handverdrahtet (kein
-    # Registry-Dict). Default 5055 = PORT-2-Slot Hörspiel-Buddy Finn. Leer ⇒
-    # Finn-Anfragen scheitern mit Fehler-Text im Tool-Result.
-    "hoerspiel_url_origin_finn": "http://127.0.0.1:5055",
-    # HSP-43 / #1263: dritte Hörspiel-Buddy-Origin (Emil-Instanz, erwachsen).
-    # Resolution-Logik im Skill (HFE-3, E-HFE-6): kind_id="emil" →
-    # hoerspiel_url_origin_emil. Handverdrahtet wie finn (kein Registry-Dict).
-    # Default 5056 = PORT-2-Slot Hörspiel-Buddy Emil (Backend manuell provisioniert,
-    # HSP-44). Leer ⇒ emil-Anfragen scheitern mit Fehler-Text im Tool-Result.
-    "hoerspiel_url_origin_emil": "http://127.0.0.1:5056",
+    # Option C (#1732): die per-kind_id-Origins der weiteren Instanzen kommen aus
+    # der zentralen instanzen.json-Registry (`origin`-Feld) — keine handverdrahteten
+    # hoerspiel_url_origin_finn/_emil-Felder mehr. hoerspiel_url_origin bleibt als
+    # Katalog-Gate + Default-Client (HFE-9 / #729).
     # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts, über den die
     # KibuddyAufnahmeQuelleSetzenTask die Aufnahme-Quelle schreibt
     # (PUT /api/v1/kibuddy/config KAQS-5). Per-Instanz-Wert; Default passt
@@ -201,8 +193,6 @@ class Config:
                  mini_app_einkauf_url="",
                  mini_app_base_url="",
                  hoerspiel_url_origin="",
-                 hoerspiel_url_origin_finn="",
-                 hoerspiel_url_origin_emil="",
                  kibuddy_origin_url="",
                  wetter_origin_url=""):
         self.bot_token = bot_token
@@ -236,10 +226,8 @@ class Config:
         self.mini_app_base_url = mini_app_base_url  # leer → RAO/HOE NICHT im Katalog
         # HFE-9 / #729: Origin des Hörspiel-Buddys Mia (HFE-3/HFE-5, HSP-17).
         self.hoerspiel_url_origin = hoerspiel_url_origin  # leer → HFE NICHT im Katalog
-        # RAT-17 / #910: zweite Origin für Finn-Instanz (Option A handverdrahtet, E-HFE-6).
-        self.hoerspiel_url_origin_finn = hoerspiel_url_origin_finn  # leer → Finn-Fehler-Text
-        # HSP-43 / #1263: dritte Origin für Emil-Instanz (handverdrahtet wie finn).
-        self.hoerspiel_url_origin_emil = hoerspiel_url_origin_emil  # leer → Emil-Fehler-Text
+        # Option C (#1732): weitere Instanz-Origins aus instanzen.json-Registry,
+        # keine hoerspiel_url_origin_finn/_emil-Felder mehr.
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-24/25).
         self.kibuddy_origin_url = kibuddy_origin_url      # leer → KAQS NICHT im Katalog
         # WRO-5 / #1094: Origin des Garderoben-Editors (/display/wetter/regeln)
@@ -392,10 +380,6 @@ def resolve(config_path, zd=None):
         mini_app_base_url=str(values["mini_app_base_url"]).strip().rstrip("/"),
         # HFE-9 / #729: Origin des Hörspiel-Buddys Mia.
         hoerspiel_url_origin=str(values["hoerspiel_url_origin"]).strip().rstrip("/"),
-        # RAT-17 / #910: zweite Origin für Finn-Instanz (Option A handverdrahtet).
-        hoerspiel_url_origin_finn=str(values["hoerspiel_url_origin_finn"]).strip().rstrip("/"),
-        # HSP-43 / #1263: dritte Origin für Emil-Instanz (handverdrahtet wie finn).
-        hoerspiel_url_origin_emil=str(values["hoerspiel_url_origin_emil"]).strip().rstrip("/"),
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-25).
         kibuddy_origin_url=str(values["kibuddy_origin_url"]).strip().rstrip("/"),
         # WRO-5 / #1094: Origin des Wetter-Buddys (WRO-8 AND-Guard).
