@@ -83,8 +83,9 @@ class CookieNachschickenTask(WriteTask):
                 "Schickt einen frischen Pairing-Link (Cookie) für ein Gerät "
                 "der Familie per Privatchat. Aufrufen, wenn jemand sagt »schick "
                 "nochmal cookies«, »erneuere das pairing«, »neu koppeln« oder "
-                "»der pairing-link ist abgelaufen«. Nur Erwachsene der Familie "
-                "dürfen das."),
+                "»der pairing-link ist abgelaufen«. Auch der Pfad für das "
+                "proaktive Pairing-Angebot bei Einrichtungs-/Zugriffs-Bedarf "
+                "(EC-44). Nur Erwachsene der Familie dürfen das."),
             parameters={"type": "object", "properties": {}})
         self._tg = tg
         self._pairing_bot_token = pairing_bot_token
