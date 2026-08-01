@@ -111,16 +111,18 @@ vollständige, neue `tiles`-Liste der Instanz entgegen und schreibt sie.
   Begründung, `tiles.json` **byte-unverändert**. Kein Schreibziel/Instanz
   unbekannt → **404**. Schreibfehler am Dateisystem → **500** mit JSON-Fehler
   (Geist von GER-6/DCOMP-4).
-- **AUTH-7b hart ab Tag 0** (AUTH-3.a, `auth.md` AUTH-7 / RAT-32; ratifiziert
-  /berater-runde #1389, #1400): PBE-4 ist ein **WRITE** — ist der panel-Service
-  funnel-erreichbar, gilt **keine Observe-Grace**. Das Dual-Gate
-  (`@require_dual_gate(mode="hard")`) verlangt einen gültigen Session-Cookie
-  (gekoppeltes Gerät): Cookie gültig → `200` **+ Rolling-Refresh**; keine
-  Cookie-Quelle → **`401`** (AUTH-8-Re-Pair, kein Schreibvorgang). Operator-IP ist
-  **kein** Zugangsweg mehr (RAT-32, nur Observe-Log). Der Bot-Token (Cookie-Signatur-
-  Key) kommt per-Instanz aus `ELTERNCHAT_BOT_TOKEN` (systemd-Drop-In). Nur der
-  Schreib-Endpunkt ist hart gegated; die Lese-`tiles.json`/`config.json` bleiben
-  unberührt.
+- **Auth: same-origin-Cookie hart (AUTH-3, PBE-3)** — der Schreib-Endpunkt trägt
+  den Factory-Auth-Decorator der seiten-Shell (`make_require_dual_gate(mode="hard")`,
+  #1625-Factory, #1400) und steht in der **AUTH-3-Liste** (`auth.md` → panel
+  Schreib-Endpunkt, via #1731) wie jeder AUTH-3-Buddy. Gültiger Session-Cookie
+  (gekoppeltes Gerät, dieselbe AUTH-2/AUTH-3-Cookie-Grenze) → `200` **+ Rolling-
+  Refresh**; fehlende/ungültige Identität → **`401`** (kein Schreibvorgang). Der
+  Bot-Token (Cookie-Signatur-Key) kommt per-Instanz aus `ELTERNCHAT_BOT_TOKEN`
+  (systemd-Drop-In). **Kanal/Netz allein ist nicht das Gate** (Nic-Setzung „a"
+  2026-07-31, #1400 → „a": die tote #1389-„7b-Dual-Gate"/funnel-Erreichbarkeits-
+  Prämisse ist ersetzt). Nur der Schreib-Endpunkt ist gegated; die Lese-
+  `tiles.json`/`config.json` bleiben **außerhalb AUTH-3** (cookieloses Kiosk-
+  Display, PBE-3) — ihre Funnel-Exposition ist die separate AUTH-7-Frage.
 
 *Wenn* der Endpunkt eine gültige `tiles`-Liste für eine existierende Instanz
 erhält, *dann* liegt nach der Antwort `200` der neue Stand atomar in der
