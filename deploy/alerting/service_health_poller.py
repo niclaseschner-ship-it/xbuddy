@@ -98,8 +98,28 @@ _ZD_SLOT_OWNER_CHAT_ID = "alerting-owner-chat-id"
 # ENV-Variable für den Bot-Token (nie im Repo).
 ENV_ALERTING_BOT_TOKEN = "ALERTING_BOT_TOKEN"
 
+def _hoerspiel_instanz_services() -> list[tuple[int, str]]:
+    """Sekundäre Hörspiel-Instanz-Services aus der zentralen instanzen.json-Registry
+    (Option C #1732): instanzen[1:] → (port, f"xbuddy-hoerspiel-{slug}"). instanzen[0]
+    ist der Primär-Service `xbuddy-hoerspiel` (kein Suffix, in der Basis-Liste). So
+    tragen die Service-Namen die echten Live-Slugs, kein Hardcode."""
+    try:
+        from tools import instanzen as _inst
+        insts = _inst.lade_instanzen("hoerspiel")
+    except Exception:  # noqa: BLE001 — Registry fehlt/kaputt → nur Basis-Services
+        return []
+    out: list[tuple[int, str]] = []
+    for e in insts[1:]:
+        port = e.get("port") or 0
+        slug = (e.get("slug") or "").strip()
+        if port and slug:
+            out.append((int(port), f"xbuddy-hoerspiel-{slug}"))
+    return out
+
+
 # HTTP-Services (port → service-name), SVC-6 /healthz.
-# Quelle: conventions/ports.md PORT-2.
+# Quelle: conventions/ports.md PORT-2 (Basis) + instanzen.json-Registry (Hörspiel-
+# Instanzen, Option C #1732).
 _HTTP_SERVICES: list[tuple[int, str]] = [
     (5010, "xbuddy-familie"),
     (5030, "xbuddy-wetter"),
@@ -109,9 +129,7 @@ _HTTP_SERVICES: list[tuple[int, str]] = [
     (5052, "xbuddy-essen"),
     (5053, "xbuddy-hoerspiel"),
     (5054, "xbuddy-kibuddy"),
-    (5055, "xbuddy-hoerspiel-finn"),
-    (5056, "xbuddy-hoerspiel-emil"),
-]
+] + _hoerspiel_instanz_services()
 
 # Heartbeat-Services (service-name → relativer Pfad unter XBUDDY_DATA_DIR).
 # SVC-8: Bot-Services ohne HTTP-Stack schreiben Heartbeat statt /healthz.

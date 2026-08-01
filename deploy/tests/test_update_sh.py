@@ -47,9 +47,22 @@ def _derive(*paths):
 
 # ── --derive: geteilter Mapper ─────────────────────────────────────────────
 
-def test_derive_hoerspiel_beide_instanzen():
-    # RAT-17: hoerspiel/-Repo-Touch trifft Mia UND Finn.
-    assert _derive("hoerspiel/main.py") == {"xbuddy-hoerspiel", "xbuddy-hoerspiel-finn"}
+def test_derive_hoerspiel_beide_instanzen(tmp_path):
+    # RAT-17 / Option C (#1732): hoerspiel/-Repo-Touch trifft ALLE Hörspiel-
+    # Instanz-Services — registry-getrieben aus instanzen.json (Primär +
+    # je Instanz `xbuddy-hoerspiel-{slug}`), kein Hardcode. Fixture-Registry
+    # mit zwei Instanzen (mia primär, finn) → beide Services.
+    import json as _json
+    reg = tmp_path / "instanzen.json"
+    reg.write_text(_json.dumps({"hoerspiel": [
+        {"slug": "mia", "port": 5053, "origin": "127.0.0.1:5053", "display_name": "Kind Eins"},
+        {"slug": "finn", "port": 5055, "origin": "127.0.0.1:5055", "display_name": "Kind Zwei"},
+    ]}), encoding="utf-8")
+    res = _run("--derive", "hoerspiel/main.py",
+               env={"INSTANZEN_CONFIG_FILE": str(reg)})
+    assert res.returncode == 0, res.stderr
+    got = {ln for ln in res.stdout.splitlines() if ln.strip()}
+    assert got == {"xbuddy-hoerspiel", "xbuddy-hoerspiel-finn"}
 
 
 def test_derive_unbekannter_pfad_leer():
