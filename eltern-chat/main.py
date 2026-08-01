@@ -596,11 +596,22 @@ def _run_agent(msg, ctx):
         _persist_telemetry(ctx, turn_id, msg.chat_id, result.telemetry)
         return
 
+    # E-EC-13 (Ehrlichkeits-Guard, #1118): Solange ein unbestätigter Schreib-
+    # Vorschlag offen ist, darf der freie LLM-Text keinen Vollzug behaupten.
+    # mistral halluziniert »vertont/fertig« trotz des Loop-internen Hinweises
+    # _proposal_pending (belegt #1118) — deshalb ein deterministischer
+    # Post-LLM-Filter außerhalb des Agent-Loops (E-EC-4-Linie, Pendant zum
+    # EC-41-strip_markdown_buttons). Der einzige echte Erfolgs-Weg bleibt
+    # _execute_confirmed hinter der deterministischen Bestätigung.
+    reply_text = result.reply_text
+    if ctx.pending.open_count(msg.chat_id) > 0:
+        reply_text = confirm.honest_no_false_success(reply_text)
+
     # EC-23/AC2 (#268): Erfolgs-Pfad ohne schreibende Aufgabe — Suffix an die
     # Sendung. Der finale Assistant-Text steckt bereits im Transkript (oben
     # persistiert, OHNE Suffix — R7); hier wird nur noch gesendet.
     _send(ctx, msg.chat_id,
-          _maybe_append_telemetry(result.reply_text, result.telemetry))
+          _maybe_append_telemetry(reply_text, result.telemetry))
     _persist_telemetry(ctx, turn_id, msg.chat_id, result.telemetry)
 
 

@@ -28,6 +28,50 @@ def test_E_EC_7_partial_match_is_not_confirmation():
     assert confirm.is_confirmation("jacke") is False
 
 
+# -- E-EC-7-Nachschärfung (#1118): Mehrwort-Bestätigung -----------
+
+def test_E_EC_7_mehrwort_bestaetigung_ist_confirmation():
+    """#1118-Regression: »Ja mach« & Co. bestätigen (token-weise, Füller)."""
+    for text in ("Ja mach", "ja bitte", "mach gerne", "ja mach bitte",
+                 "ok gerne", "ja!", "ja 👍", "mach los"):
+        assert confirm.is_confirmation(text) is True, text
+
+
+def test_E_EC_7_mehrwort_mit_fremdwort_bleibt_keine_bestaetigung():
+    """Jedes Fremdwort ⇒ False — Ablehnungs-Phrasen & Hedges bleiben abgewiesen."""
+    for text in ("ja aber lieber Dienstag", "doch nicht", "lass mal",
+                 "mach mal langsam", "ja aber ok", "das nicht", " nein danke",
+                 "mach das"):  # »das« ist kein Füller ⇒ False
+        assert confirm.is_confirmation(text) is False, text
+
+
+def test_E_EC_7_nur_fueller_ohne_bestaetigungswort_ist_keine_bestaetigung():
+    """»bitte gerne« ohne echtes Bestätigungswort bestätigt nicht."""
+    assert confirm.is_confirmation("bitte gerne") is False
+
+
+# -- E-EC-13 (#1118): kein falscher Erfolg bei offenem Vorschlag --
+
+def test_E_EC_13_erfolgsbehauptung_wird_ersetzt():
+    """»vertont/fertig«-Halluzination → ehrlicher Bestätigungs-Hinweis."""
+    for text in ("Die Folge wird jetzt vertont – 1–5 Minuten.",
+                 "Alles erledigt!", "Ist fertig, viel Spaß!",
+                 "Der Termin ist eingetragen."):
+        out = confirm.honest_no_false_success(text)
+        assert out == confirm._HONEST_PENDING_REPLY, text
+
+
+def test_E_EC_13_rueckfrage_bleibt_unangetastet():
+    """Endet auf »?« = legitimer Re-Propose → nicht zensiert."""
+    text = "Soll ich die Folge vertonen?"
+    assert confirm.honest_no_false_success(text) == text
+
+
+def test_E_EC_13_neutraler_text_bleibt_unangetastet():
+    text = "Das Wetter wird morgen sonnig."
+    assert confirm.honest_no_false_success(text) == text
+
+
 # -- PendingStore: eindeutige Zuordnung Bestätigung -> Vorschlag --
 
 def _proposal(chat="c1", msg_id=10, task="t", args=None):

@@ -1895,6 +1895,18 @@ Eine Nachricht, die keinem Bestätigungswort entspricht, ist keine Bestätigung;
 wird als normale Anfrage an den Agenten behandelt und der offene Vorschlag bleibt
 unbestätigt.
 
+**Nachschärfung (2026-08-01, #1118 — Mehrwort-Bestätigung).** Der Abgleich ist
+**token-weise**, nicht nur Ganz-String: Eine Nachricht bestätigt auch, wenn sie
+sich vollständig aus Bestätigungswörtern und den engen Füllwörtern `bitte`,
+`gerne` zusammensetzt und mindestens ein Bestätigungswort enthält (»ja mach«,
+»ja bitte«, »mach gerne«); Satzzeichen werden je Token abgestreift. Enthält die
+Nachricht **irgendein** Fremdwort (inkl. jeder Ablehnungs-Phrase, s. u.), ist sie
+**keine** Bestätigung (»ja aber lieber Dienstag«, »doch nicht«, »lass mal«
+bleiben False). Das Füller-Set ist bewusst eng — nur eindeutig affirmative
+Partikel ohne Kollision mit der Ablehnungs-Wortliste; `mal`/`doch`/`das`/`dann`
+sind ausgeschlossen. (Vorher reiner Ganz-String-Vergleich: »Ja mach« fiel durch,
+`execute()` lief nie, der Bot behauptete fälschlich Erfolg — Regression #1118.)
+
 **Ablehnungs-Wortliste (Pendant zu CONFIRM_WORDS).** In der
 zweistufigen Variante (EC-10) leert eine ausdrückliche **Ablehnung**
 den `PendingStore` ohne Schreibakt — der offene Vorschlag verfällt.
@@ -2060,3 +2072,29 @@ Gemessen (/arbeitstag 2026-06-01, instrumentierte Probe, 110 Verbindungsversuche
 IPv4 ist für einen ausgehenden Client zu Telegram der universell zuverlässige Pfad; IPv6' Vorteile (Adressraum, eingehende Erreichbarkeit ohne NAT) greifen hier nicht.
 
 **Offen/Folge:** Trifft derselbe Blackhole später einen anderen ausgehenden Pfad (Plan→Google-Kalender, Anbieter-LLM — heute nicht beobachtet), wird eine komponentenübergreifende Transport-Bauregel in `conventions/` erwogen — nicht auf Vorrat.
+
+### E-EC-13 — Kein falscher Erfolg bei offenem, unbestätigtem Vorschlag
+*Datum:* 2026-08-01
+
+Solange für einen Chat ein **unbestätigter** schreibender Vorschlag offen ist
+(`PendingStore.open_count > 0`), darf der freie Agent-Antworttext **keinen
+Vollzug der pendenden Aufgabe behaupten**. Ein deterministischer Post-LLM-Filter
+außerhalb des Agent-Loops (E-EC-4-Linie, Pendant zum EC-41-`strip_markdown_buttons`)
+prüft den finalen Antworttext gegen eine enge Erfolgs-Wortliste (`vertont`,
+`fertig`, `erledigt`, `eingetragen`, `angelegt`, `hinzugefügt`, `gespeichert`,
+`in der App`, `ist erstellt`) und **ersetzt** ihn bei einem Treffer durch einen
+festen Bestätigungs-Hinweis. Endet der Text auf »?«, greift der Filter nicht
+(legitime Re-Propose-Rückfrage). Der einzige Weg zu einer Erfolgs-Meldung bleibt
+der ausgeführte `execute()`-Pfad hinter der deterministischen Bestätigung
+(EC-10/E-EC-7).
+
+**Warum außerhalb des Loops:** Der Loop-interne Hinweis `_proposal_pending`
+(»Aufgabe NICHT ausgeführt«) existiert bereits und wird vom Modell ignoriert —
+`mistral-medium-2508` halluzinierte trotzdem »ist fertig« (Regression #1118). Nur
+ein mechanischer Post-Filter ist modell-unabhängig (Constitution Rang 1
+Zuverlässigkeit vor Rang 2 Einfachheit).
+
+**Verworfen:** (a) ein zweiter Prompt-/System-Hinweis im Loop — koppelt an
+LLM-Compliance, dieselbe versagende Achse; (b) ein Re-propose-blockierendes
+Agent-Gate (E-EC-7 »Verworfen«) — blockt die Familie am Stapel; der Post-Filter
+blockt nichts, er zensiert nur die Falschaussage.
