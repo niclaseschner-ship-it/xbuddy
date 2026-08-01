@@ -1137,6 +1137,71 @@ def routine_anpassen_asset_view(asset):
 
 
 # ============================================================
+#  #1715 (ESB-1.a, Zweig A) — Wetter-Regeln-Mini-App (seiten-gehostet)
+# ============================================================
+# Surface (analog routine): HTML-Shell + PWA-Mantel-Assets; die Datenrouten
+# /api/v1/wetter/regeln leben im wetter-Service (AUTH-3). MAD-7: HTML public,
+# JS macht ensureAuth über die Datenroute.
+_WETTER_REGELN_MIME = {".css": "text/css", ".png": "image/png",
+                       ".js": "application/javascript"}
+
+
+def _wetter_regeln_asset_root():
+    override = runtime.get("wetter_regeln_asset_dir") if isinstance(runtime, dict) else None
+    return override or os.path.join(os.path.dirname(__file__), "static", "wetter")
+
+
+def _wetter_regeln_build_id():
+    return pwa_mantel.build_id_for("wetter-regeln", _wetter_regeln_asset_root())
+
+
+@app.route("/seiten/wetter/regeln/", methods=["GET"])
+def wetter_regeln_view_trailing_slash():
+    """Trailing-Slash-Alias (manifest start_url) → HTML-Shell."""
+    return wetter_regeln_view()
+
+
+@app.route("/seiten/wetter/regeln", methods=["GET"])
+def wetter_regeln_view():
+    """#1715 (ESB-1.a): HTML-Shell des Garderoben-Editors (MAD-7: public, JS
+    macht ensureAuth über /api/v1/wetter/regeln). PWA-Mantel via Lib."""
+    resp = make_response(render_template(
+        "wetter-regeln.html", build_id=_wetter_regeln_build_id()))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
+@app.route("/seiten/wetter/regeln/<path:asset>", methods=["GET"])
+def wetter_regeln_asset_view(asset):
+    """PWA-Mantel-Assets: manifest.json/sw.js aus der Lib, css/icons statisch."""
+    from flask import abort, send_from_directory
+
+    cfg = pwa_mantel.REGISTRY["wetter-regeln"]
+    if asset == "manifest.json":
+        resp = make_response(json.dumps(pwa_mantel.build_manifest(cfg)), 200)
+        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+    if asset == "sw.js":
+        body = pwa_mantel.render_sw("wetter-regeln", build_id=_wetter_regeln_build_id())
+        resp = make_response(body, 200)
+        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        resp.headers["Service-Worker-Allowed"] = cfg.sw_scope
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+    root = os.path.realpath(_wetter_regeln_asset_root())
+    target = os.path.realpath(os.path.join(root, asset))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target) or os.path.basename(target).startswith("_"):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mimetype = _WETTER_REGELN_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(root, asset, mimetype=mimetype)
+
+
+# ============================================================
 #  HSP-33 / T1681 — Hörspiel-Eltern-PWA (ESB-1..4 / PWAM-5)
 # ============================================================
 #
