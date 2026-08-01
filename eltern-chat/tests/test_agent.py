@@ -1056,3 +1056,39 @@ def test_EC40_1283_description_traegt_positives_trigger_vokabular():
     assert "einstellungen" in desc, (
         "EC-40/T1283: Direkt-Settings-Trigger 'einstellungen' fehlt in description — "
         "Settings-Trigger-Familie muss beide Schreibweisen tragen")
+
+
+# ============================================================
+#  EC-44 / #1718 — Proaktives Pairing-Angebot bei App-Einrichtung
+# ============================================================
+def test_EC_44_system_prompt_proaktives_pairing_angebot():
+    """AC (EC-44): Der SYSTEM_PROMPT trägt das proaktive Pairing-Angebot als
+    ANGEBOT (nie Behauptung), mit genau EINER Rückfrage, konservativem Start
+    (nur Einrichtungs-Wunsch) und Verweis auf die bestehenden Skills."""
+    prompt = agent.SYSTEM_PROMPT
+    low = prompt.lower()
+    # Klausel benannt.
+    assert "EC-44" in prompt
+    # Angebot, NIE Behauptung — die verbotene Behauptung ist explizit genannt.
+    assert "Behauptung" in prompt
+    assert "nicht gekoppelt" in low
+    # Genau EINE Rückfrage / einmal anbieten.
+    assert "EINE" in prompt or "EINMAL" in prompt
+    # Konservativer Start: Einrichtungs-Wunsch JA, reines "geht nicht" NICHT.
+    assert "Einrichtungs" in prompt or "einrichten" in low
+    assert "geht nicht" in low  # als explizit ausgeschlossene Klasse benannt
+    # Kein neuer Mechanismus: verweist auf die bestehenden Skills.
+    assert "geraet_anlegen" in prompt
+    assert "cookie_nachschicken" in prompt
+
+
+def test_EC_44_skill_descriptions_nennen_das_angebot():
+    """AC (EC-44): Beide Pairing-Skills tragen den EC-44-Halbsatz in ihrer
+    Description (proaktives Angebot als zusätzlicher Aufruf-Pfad)."""
+    import inspect
+
+    from skills import cookie_nachschicken_task, geraet_anlegen_task
+    cns = inspect.getsource(cookie_nachschicken_task)
+    gaa = inspect.getsource(geraet_anlegen_task)
+    assert "EC-44" in cns and "proaktive" in cns
+    assert "EC-44" in gaa and "proaktive" in gaa
