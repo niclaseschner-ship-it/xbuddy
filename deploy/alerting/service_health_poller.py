@@ -129,7 +129,8 @@ _HTTP_SERVICES: list[tuple[int, str]] = [
     (5052, "xbuddy-essen"),
     (5053, "xbuddy-hoerspiel"),
     (5054, "xbuddy-kibuddy"),
-] + _hoerspiel_instanz_services()
+    *_hoerspiel_instanz_services(),
+]
 
 # Heartbeat-Services (service-name → relativer Pfad unter XBUDDY_DATA_DIR).
 # SVC-8: Bot-Services ohne HTTP-Stack schreiben Heartbeat statt /healthz.
