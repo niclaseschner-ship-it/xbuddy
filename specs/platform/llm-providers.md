@@ -56,7 +56,7 @@ alle sechs Sichten — kein Adapter-Code pro Buddy
   `cache_control` ist bewusst **kein** Boot-Fail-Minimum (LLMP-S7:
   Required-Set ist Boot-Fail-Minimum, kein Nutzungs-Whitelist) —
   LLMP-S9-Capability-Matrix-Review 2026-06-24 (eltern-chat dual-provider):
-  Mistral unterstützt kein Prompt-Caching (`eltern-chat/providers/pricing.py:27`,
+  Mistral unterstützt kein Prompt-Caching (`tools/llm/pricing.py`, #1636 unified,
   `eltern-chat/providers/mistral.py:77-80`) und würde mit `cache_control` im
   Required-Set einen `LLMCapabilityError` beim Boot werfen. Vendoren mit
   Caching (Anthropic) setzen Cache-Marker weiterhin.

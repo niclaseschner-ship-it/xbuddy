@@ -27,8 +27,8 @@ class ProviderCall:
     """Telemetrie eines einzelnen `provider.generate(...)`-Aufrufs (EC-23).
 
     `wall_ms` ist die Wall-Clock-Dauer dieses Aufrufs in Millisekunden.
-    `est_cost_usd`/`est_cost_eur` sind die geschätzten Kosten (siehe
-    `providers/pricing.py`) — None, wenn das Modell unbekannt ist (AC5)
+    `est_cost_usd`/`est_cost_eur` sind die geschätzten Kosten (unified-Quelle
+    `tools.llm.estimate_cost`, #1636) — None, wenn das Modell unbekannt ist (AC5)
     oder wenn der Call fehlgeschlagen ist (Stub-Call bei ProviderError).
     """
     model_id: str

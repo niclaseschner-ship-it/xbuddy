@@ -26,6 +26,7 @@ from ._types import (
     ProviderCallEvent,
     ProviderError,
 )
+from .pricing import estimate_cost
 from .public_api import (
     get_agent,
     get_chat,
@@ -40,6 +41,7 @@ __all__ = [
     "LLMProvider",
     "ProviderCallEvent",
     "ProviderError",
+    "estimate_cost",
     "get_agent",
     "get_chat",
     "get_completion",
