@@ -1529,6 +1529,18 @@ _HARD_RESET_HTML = """<!doctype html>
 </body></html>"""
 
 
+def _reset_default_panel_slug() -> str:
+    """Primärer (erster) Kind-Slug aus der zentralen instanzen.json-Registry
+    (Option C #1732) für den hard-reset-Default-Panel. Fallback 'mia' (INST-6)."""
+    try:
+        insts = instanzen.lade_instanzen("hoerspiel")
+        if insts and insts[0].get("slug"):
+            return insts[0]["slug"]
+    except Exception:  # Registry fehlt → INST-6-Default
+        pass
+    return "mia"
+
+
 @app.route("/api/v1/seiten/reset", methods=["GET"])
 # PUBLIC (AUTH-4): reiner Client-Reset (deregistriert ALLE Service-Worker +
 # loescht ALLE Cache-Storage-Eintraege dieses Origins), keine Datenexposition.
@@ -1536,11 +1548,15 @@ _HARD_RESET_HTML = """<!doctype html>
 # + no-store. Der xbuddy_session-Cookie bleibt unberuehrt (separater Speicher).
 # (#1461 — "wirklich echtes, hartes Neu-Laden von allem")
 def hard_reset_purge():
-    to = request.args.get("to", "/shell/mias-panel-01")
+    # Option C (#1732): Default-Panel aus dem Primär-Kind-Slug der zentralen
+    # instanzen.json-Registry (Panel-Namensschema `<slug>s-panel-01`) statt
+    # hardcodiertem Slug — zeigt auf die real existierende Live-Instanz.
+    _default_panel = "/shell/%ss-panel-01" % _reset_default_panel_slug()
+    to = request.args.get("to", _default_panel)
     # Open-Redirect-Schutz: nur eigene relative Pfade, Zeichen-Allowlist.
     to = "".join(c for c in to if c.isalnum() or c in "/_-")
     if not to.startswith("/") or to.startswith("//"):
-        to = "/shell/mias-panel-01"
+        to = _default_panel
     resp = make_response(_HARD_RESET_HTML.replace("__TO__", to))
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"

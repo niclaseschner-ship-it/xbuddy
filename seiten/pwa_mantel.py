@@ -327,6 +327,24 @@ def render_sw(component: str, build_id: str | None = None) -> str:
     return js
 
 
+def _hoerspiel_primary_slug() -> str:
+    """Primärer (erster) Hörspiel-Instanz-Slug aus der zentralen instanzen.json-
+    Registry (Option C #1732) — treibt den PWA-Default-Einstieg (start_url). So
+    zeigt der installierte Mantel auf die real existierende Live-Instanz statt auf
+    einen hardcodierten Slug. Fallback 'mia' (INST-6-Default), falls Registry leer."""
+    try:
+        from tools import instanzen as _inst
+        insts = _inst.lade_instanzen("hoerspiel")
+        if insts and insts[0].get("slug"):
+            return insts[0]["slug"]
+    except Exception:  # Registry fehlt → INST-6-Default
+        pass
+    return "mia"
+
+
+_HOERSPIEL_PRIMARY = _hoerspiel_primary_slug()
+
+
 # Registrierte Konsumenten (conventions/pwa-mantel.md PWAM-1-Tabelle).
 # build_id_source_set: Dateinamen relativ zum jeweiligen Asset-Root (der
 # Aufrufer liefert den Root an build_id_for — connector ist Override-aware).
@@ -438,7 +456,7 @@ REGISTRY: dict[str, MantelConfig] = {
         build_id_source_set=("eltern.js", "eltern.css"),
         name="Hörspiel verwalten · XBuddy",
         short_name="Hörspiel",
-        start_url="/seiten/hoerspiel/mia/eltern",
+        start_url=f"/seiten/hoerspiel/{_HOERSPIEL_PRIMARY}/eltern",
         icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
         display="fullscreen",
         theme_color="#47503C",
@@ -447,7 +465,7 @@ REGISTRY: dict[str, MantelConfig] = {
         # Offline-Fallback bleibt ueber den Cache erhalten.
         html_cache_mode="network-first",
         stop_prefixes=("/api/v1/hoerspiel/",),
-        sw_script_route="/seiten/hoerspiel/mia/eltern/sw.js",
+        sw_script_route=f"/seiten/hoerspiel/{_HOERSPIEL_PRIMARY}/eltern/sw.js",
         sw_scope="/seiten/hoerspiel/",
     ),
     # ── Hörspiel-Player (HSP-47) — erster Voll-Konsument ÜBER die Lib ──

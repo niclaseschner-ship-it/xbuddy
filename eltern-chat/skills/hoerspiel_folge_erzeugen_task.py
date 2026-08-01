@@ -38,6 +38,16 @@ _HFE_KIND_IDS = [i["kind_id"] for i in HOERSPIEL_INSTANZEN]
 _HFE_NAMEN = [i["name"] for i in HOERSPIEL_INSTANZEN]
 
 
+def _hoerspiel_origin_mit_schema(origin: str) -> str:
+    """Instanz-`origin` aus der zentralen instanzen.json-Registry (z. B.
+    "127.0.0.1:5053", ohne Schema) zu einer nutzbaren Client-URL machen (Option C,
+    #1732). Leer bleibt leer → Default-Client-Fallback."""
+    origin = (origin or "").strip().rstrip("/")
+    if origin and "://" not in origin:
+        origin = "http://" + origin
+    return origin
+
+
 def _oder_liste(items) -> str:
     """»a, b oder c« — Aufzählung für Description/Rückfrage (HSP-43)."""
     items = list(items)
@@ -122,10 +132,7 @@ class HoerspielFolgeErzeugenTask(WriteTask):
 
     def __init__(self, tg, hoerspiel_client, display_url_origin: str = "",
                  family_group_chat_id_getter=None, is_member_fn=None,
-                 mini_app_base_url: str = "",
-                 hoerspiel_url_origin: str = "",
-                 hoerspiel_url_origin_finn: str = "",
-                 hoerspiel_url_origin_emil: str = ""):
+                 mini_app_base_url: str = ""):
         super().__init__(
             name="hoerspiel_folge_erzeugen",
             description=(
@@ -211,17 +218,20 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
         self._mini_app_base_url = mini_app_base_url or ""
-        # E-HFE-6 / RAT-17 / #910 / HSP-43 (#1263): Mini-Map kind_id →
+        # E-HFE-6 / RAT-17 / #910 / HSP-43 / Option C (#1732): Mini-Map kind_id →
         # HoerspielClient-Instanz. Ermöglicht dem Task, bei jedem propose()-Aufruf
         # den passenden Client anhand der kind_id zu wählen (Option A: je Client eine
-        # Origin). Die kind_ids kommen aus der Instanz-Konstante (_HFE_KIND_IDS); die
-        # Origin je kind_id ist HANDVERDRAHTET (kein Registry-Dict): mia = 5053,
-        # finn = 5055, emil = 5056. Leer → Mia-Client-Fallback (hoerspiel_client).
+        # Origin). Kein hardcodiertes Slug-Dict mehr: die Origin je kind_id kommt aus
+        # der zentralen `instanzen.json`-Registry (HOERSPIEL_INSTANZEN trägt das
+        # `origin`-Feld). Leer/kein Origin → Default-Client-Fallback (hoerspiel_client).
+        # Origin je kind_id DIREKT aus der zentralen instanzen.json-Registry
+        # (tools.instanzen trägt slug+origin; HOERSPIEL_INSTANZEN bleibt bewusst
+        # kind_id/name-only, INST-1-Grenze). Kein hardcodiertes Slug-Dict.
         from skills.hoerspiel_client import HoerspielClient as _HoerspielClient
+        from tools import instanzen as _instanzen
         _origin_by_kind_id = {
-            "mia":  (hoerspiel_url_origin or "").rstrip("/"),
-            "finn":   (hoerspiel_url_origin_finn or "").rstrip("/"),
-            "emil": (hoerspiel_url_origin_emil or "").rstrip("/"),
+            e["slug"]: _hoerspiel_origin_mit_schema(e.get("origin", ""))
+            for e in _instanzen.lade_instanzen("hoerspiel")
         }
         self._client_by_kind_id: dict = {}
         for _kid in _HFE_KIND_IDS:

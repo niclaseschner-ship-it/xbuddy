@@ -39,6 +39,23 @@ from skills.hoerspiel_folge_erzeugen import execute, propose
 from skills.hoerspiel_folge_erzeugen_task import HoerspielFolgeErzeugenTask
 from tasks import Proposal, TurnContext, WriteTask
 
+
+@pytest.fixture(autouse=True)
+def _instanzen_ohne_origin(monkeypatch):
+    """Diese Suite nutzt den FakeHoerspielClient für ALLE kind_ids — dazu liefert
+    die zentrale instanzen-Registry hier leere Origins (Option C #1732: leerer
+    Origin → Default-/Fake-Client-Fallback statt echter HoerspielClient)."""
+    import tools.instanzen as _inst
+    monkeypatch.setattr(
+        _inst, "lade_instanzen",
+        lambda klasse="hoerspiel", pfad=None: [
+            {"slug": "mia", "port": 0, "origin": "", "display_name": "Kind Eins"},
+            {"slug": "finn", "port": 0, "origin": "", "display_name": "Kind Zwei"},
+            {"slug": "emil", "port": 0, "origin": "", "display_name": "Kind Drei"},
+        ],
+    )
+
+
 # ============================================================
 #  Doppelungen — FakeHoerspielClient (CLIENT-1)
 # ============================================================
@@ -1032,9 +1049,8 @@ def test_task_mini_map_kind_id_mia_nutzt_mia_client():
         return 404, b"{}"
 
     tg = FakeTelegram()
-    # Task mit expliziten Origins konstruieren — Mini-Map baut eigene Clients.
+    # Task mit explizitem Mia-Origin — der Test überschreibt den Mia-Slot direkt.
     mia_origin = "http://127.0.0.1:5053"
-    finn_origin = "http://127.0.0.1:5055"
     # Basis-Client (Fallback) ohne Transport — Mia-Client via Mini-Map hat Transport.
     basis_client = FakeHoerspielClient()
     mia_client = HoerspielClient(
@@ -1046,10 +1062,10 @@ def test_task_mini_map_kind_id_mia_nutzt_mia_client():
         display_url_origin="https://app.example.com",
         is_member_fn=_immer_mitglied,
         mini_app_base_url="https://mini.example.com",
-        hoerspiel_url_origin=mia_origin,
-        hoerspiel_url_origin_finn=finn_origin,
     )
-    # Überschreiben: Mia-Slot auf kontrollierten Client setzen.
+    # Überschreiben: Mia-Slot auf kontrollierten Client setzen (Option C #1732:
+    # die Origins kommen sonst aus der instanzen-Registry, hier via autouse-
+    # Fixture leer → Fallback; der Test setzt den Mia-Client explizit).
     task._client_by_kind_id["mia"] = mia_client
 
     ctx = _ctx(chat_id=42, from_user_id=7)
