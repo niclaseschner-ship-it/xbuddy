@@ -49,7 +49,7 @@ Optionen:
   --out DIR           Ausgabe-Verzeichnis (Default: tools/ca/out)
   --san LISTE         SAN-Einträge der Origin, komma-getrennt
                       (Default: DNS:localhost,DNS:xbuddy-hub.local,IP:127.0.0.1)
-                      Beispiel: --san "DNS:xbuddy-hub.local,IP:192.168.178.78"
+                      Beispiel: --san "DNS:xbuddy-hub.local,IP:192.168.0.78"
   --server-cn NAME    Common Name des Server-Certs (Default: xbuddy-hub)
   --ca-days N         Laufzeit der Root-CA in Tagen (Default: 3650, ~10 Jahre)
   --server-days N     Laufzeit des Server-Certs in Tagen (Default: 365, max 398 — CAV-8)
@@ -62,7 +62,7 @@ Ergebnis im Ausgabe-Verzeichnis:
   server-key.pem      Server-Schlüssel   — GEHEIM, für nginx (ssl_certificate_key)
 
 Beispiel (Pi mit fester LAN-IP):
-  tools/ca/make-ca.sh --san "DNS:xbuddy-hub.local,IP:192.168.178.78"
+  tools/ca/make-ca.sh --san "DNS:xbuddy-hub.local,IP:192.168.0.78"
 EOF
 }
 

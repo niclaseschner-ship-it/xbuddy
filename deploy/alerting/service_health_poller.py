@@ -46,8 +46,8 @@ Service-Liste und Schwellwerte:
     127.0.0.1:5052  xbuddy-essen
     127.0.0.1:5053  xbuddy-hoerspiel
     127.0.0.1:5054  xbuddy-kibuddy
-    127.0.0.1:5055  xbuddy-hoerspiel-neko
-    127.0.0.1:5056  xbuddy-hoerspiel-niclas
+    127.0.0.1:5055  xbuddy-hoerspiel-finn
+    127.0.0.1:5056  xbuddy-hoerspiel-emil
 
   Heartbeat-Services (SVC-8, Bot ohne HTTP):
     eltern-chat → <XBUDDY_DATA_DIR>/eltern-chat/heartbeat
@@ -109,8 +109,8 @@ _HTTP_SERVICES: list[tuple[int, str]] = [
     (5052, "xbuddy-essen"),
     (5053, "xbuddy-hoerspiel"),
     (5054, "xbuddy-kibuddy"),
-    (5055, "xbuddy-hoerspiel-neko"),
-    (5056, "xbuddy-hoerspiel-niclas"),
+    (5055, "xbuddy-hoerspiel-finn"),
+    (5056, "xbuddy-hoerspiel-emil"),
 ]
 
 # Heartbeat-Services (service-name → relativer Pfad unter XBUDDY_DATA_DIR).

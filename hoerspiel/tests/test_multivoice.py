@@ -74,12 +74,12 @@ def test_kein_praefix_default_voice():
 
 
 def test_unbekannter_sprecher_default_voice():
-    """AC (c): Unbekannter Sprecher ('PAULA: ...') → Default-voice, Text unverändert."""
-    calls = _synth_calls(_bundle("PAULA: Hallo!"), "shimmer", voices=VOICES_MAP)
+    """AC (c): Unbekannter Sprecher ('MIA: ...') → Default-voice, Text unverändert."""
+    calls = _synth_calls(_bundle("MIA: Hallo!"), "shimmer", voices=VOICES_MAP)
     assert len(calls) == 1
     text, voice = calls[0]
     assert voice == "shimmer", "Unbekannter Sprecher → Default-voice"
-    assert text == "PAULA: Hallo!", "Unbekannter Sprecher: Text NICHT verändern"
+    assert text == "MIA: Hallo!", "Unbekannter Sprecher: Text NICHT verändern"
 
 
 def test_mischung_bekannter_und_unbekannter_sprecher():
@@ -147,12 +147,12 @@ def test_load_instance_laedt_voices(tmp_path):
     """load_instance liest voices-Map aus instance.json."""
     instance_path = tmp_path / "instance.json"
     instance_path.write_text(json.dumps({
-        "kind_id": "niclas",
-        "name": "Niclas",
+        "kind_id": "emil",
+        "name": "Emil",
         "alter": 35,
         "voices": {"KIM": "shimmer", "RUBEN": "onyx"},
     }))
-    cfg = config_mod.load_instance(str(tmp_path), "niclas")
+    cfg = config_mod.load_instance(str(tmp_path), "emil")
     assert cfg.voices == {"KIM": "shimmer", "RUBEN": "onyx"}
 
 
@@ -160,11 +160,11 @@ def test_load_instance_voices_keine_in_kind_instance(tmp_path):
     """load_instance ohne voices-Feld → voices=None (Kind-Instanzen unverändert)."""
     instance_path = tmp_path / "instance.json"
     instance_path.write_text(json.dumps({
-        "kind_id": "paula",
-        "name": "Paula",
+        "kind_id": "mia",
+        "name": "Mia",
         "alter": 7,
     }))
-    cfg = config_mod.load_instance(str(tmp_path), "paula")
+    cfg = config_mod.load_instance(str(tmp_path), "mia")
     assert cfg.voices is None
 
 
@@ -172,13 +172,13 @@ def test_load_instance_ungueltige_voice_wirft(tmp_path):
     """load_instance mit ungültiger Voice in der Map → ValueError."""
     instance_path = tmp_path / "instance.json"
     instance_path.write_text(json.dumps({
-        "kind_id": "niclas",
-        "name": "Niclas",
+        "kind_id": "emil",
+        "name": "Emil",
         "alter": 35,
         "voices": {"KIM": "alloy"},  # 'alloy' ist nicht in VALID_VOICES
     }))
     with pytest.raises(ValueError, match="nicht unterstützt"):
-        config_mod.load_instance(str(tmp_path), "niclas")
+        config_mod.load_instance(str(tmp_path), "emil")
 
 
 # ── baue_album Integration: voices=None ist byte-gleich zu heute ─────────────
@@ -191,7 +191,7 @@ def test_baue_album_voices_none_bytegleich(data_root, fake_llm, fixed_now):
     text = "KIM: hallo\n\nRUBEN: welt"
     album_builder.baue_album(
         titel="T", text=text, voice="shimmer", idee="x",
-        data_root=data_root, kind_id="paula",
+        data_root=data_root, kind_id="mia",
         llm=fake_llm, tts_engine=tts_a, now=fixed_now,
         voices=None,
     )
@@ -204,7 +204,7 @@ def test_baue_album_voices_none_bytegleich(data_root, fake_llm, fixed_now):
 
     album_builder.baue_album(
         titel="T", text=text, voice="shimmer", idee="x",
-        data_root=data_root, kind_id="paula",
+        data_root=data_root, kind_id="mia",
         llm=fake_llm, tts_engine=tts_b, now=fixed_now,
         # kein voices-Parameter — heutiger Pfad
     )

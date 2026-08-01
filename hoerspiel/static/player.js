@@ -58,9 +58,9 @@ function instanzen() {
 
 /**
  * Aktives Kind beim Laden bestimmen (HSP-49): ?kind=<id> falls in der Liste,
- * sonst 1. Eintrag, sonst Fallback 'paula' (Dev/Standalone).
+ * sonst 1. Eintrag, sonst Fallback 'mia' (Dev/Standalone).
  * @param {Array} liste  window.__HSP_INSTANZEN__
- * @param {string} search  location.search (z.B. "?kind=neko")
+ * @param {string} search  location.search (z.B. "?kind=finn")
  */
 function initialKindId(liste, search) {
   const ids = (liste || []).map(i => i && i.kind_id).filter(Boolean);
@@ -69,7 +69,7 @@ function initialKindId(liste, search) {
     const wunsch = decodeURIComponent(m[1]);
     if (ids.includes(wunsch)) return wunsch;
   }
-  return ids.length > 0 ? ids[0] : 'paula';
+  return ids.length > 0 ? ids[0] : 'mia';
 }
 
 /** Nächstes Kind im Ring (Umschalter iteriert die Liste, kein 2-Hardcode). */
@@ -477,7 +477,7 @@ function updateMediaSession(album, track, playing) {
 
 const S = {
   liste: [],
-  kindId: 'paula',
+  kindId: 'mia',
   alben: [],
   cache: null,
   aktivAlbum: null,      // {..album, tracks:[]}

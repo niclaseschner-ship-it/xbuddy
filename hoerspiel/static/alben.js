@@ -1,19 +1,19 @@
-/* HSP-2/3/4/4a/4b/19-23 — Werft-Iter-3 (Gate-B) Paula-View. */
+/* HSP-2/3/4/4a/4b/19-23 — Werft-Iter-3 (Gate-B) Mia-View. */
 
 'use strict';
 
 /* ── KIND_ID aus URL (HSP-26, URL-3a) ────────────────────────────────
    Pattern: /display/hoerspiel/<kind_id>/alben → kind_id ist Segment 3
-   (0-basiert nach dem ersten Slash). Fallback: 'paula' für Dev/Standalone. */
+   (0-basiert nach dem ersten Slash). Fallback: 'mia' für Dev/Standalone. */
 const KIND_ID = (() => {
   const m = location.pathname.match(/^\/display\/hoerspiel\/([^/]+)\/alben/);
-  return m ? m[1] : 'paula';
+  return m ? m[1] : 'mia';
 })();
 
 /* ── MOCK-DATEN (Entry-Path-Probe ohne Backend) ──────────────────────
    MOCK_ALBEN: Listen-Form (Summary, ohne tracks).
    MOCK_MANIFESTE: id → Manifest mit tracks (HSP-17 Liste-vs-Manifest).
-   Mock-URLs tragen KIND_ID damit Neko-Demo nicht paula-spezifische Pfade zeigt. */
+   Mock-URLs tragen KIND_ID damit Finn-Demo nicht mia-spezifische Pfade zeigt. */
 const COVER_DEFAULT = `/display/hoerspiel/${KIND_ID}/data/shared-assets/cover-default.jpg`;
 
 const MOCK_ALBEN = [

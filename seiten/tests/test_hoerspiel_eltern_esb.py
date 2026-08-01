@@ -13,7 +13,7 @@ Deckt:
   - AC_ENTRY: HTML traegt manifest-Link, SW-Registrierung, theme-color, __HSP_INSTANZEN__.
 
 Entry-Path-Probe (AC_ENTRY):
-  expected_entry_point = GET /seiten/hoerspiel/paula/eltern → 200 text/html.
+  expected_entry_point = GET /seiten/hoerspiel/mia/eltern → 200 text/html.
 """
 
 import json
@@ -32,7 +32,7 @@ sys.path.insert(0, _REPO_ROOT)
 from seiten import main as seiten_main  # noqa: E402
 from seiten import pwa_mantel  # noqa: E402
 
-_KIND_ID = "paula"
+_KIND_ID = "mia"
 _ENTRY_PATH = f"/seiten/hoerspiel/{_KIND_ID}/eltern"
 _ASSET_PREFIX = f"/seiten/hoerspiel/{_KIND_ID}/eltern/"
 _COMPONENT = "hoerspiel-eltern"
@@ -106,9 +106,9 @@ def test_html_route_200(client):
     assert "text/html" in resp.mimetype
 
 
-def test_html_route_neko_200(client):
-    """ESB-1: kind_id='neko' funktioniert auch (Route ist kind_id-generisch)."""
-    resp = client.get("/seiten/hoerspiel/neko/eltern")
+def test_html_route_finn_200(client):
+    """ESB-1: kind_id='finn' funktioniert auch (Route ist kind_id-generisch)."""
+    resp = client.get("/seiten/hoerspiel/finn/eltern")
     assert resp.status_code == 200
     assert "text/html" in resp.mimetype
 

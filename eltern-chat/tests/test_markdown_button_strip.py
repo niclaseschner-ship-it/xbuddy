@@ -1,7 +1,7 @@
 """Tests für _markdown_button_strip — EC-41 mechanische Sperre.
 
 specs/platform/eltern-chat.md EC-41 + Live-Befund-Anker:
-conversations.db chat 464143432 seq 601/603/605 (Refs #1075).
+conversations.db chat <chat-id> seq 601/603/605 (Refs #1075).
 
 Die Test-Inputs sind ECHTE Halluzinationen aus den drei Live-Versuchen
 (Pre-Härtung, Post-Mittelfeld-EC-41, Post-Position-1-EC-41) — keine erfundenen
@@ -11,7 +11,7 @@ Beispiele.
 from _markdown_button_strip import strip_markdown_buttons
 
 # ============================================================
-#  Reale Halluzinations-Beispiele aus chat 464143432
+#  Reale Halluzinations-Beispiele aus chat <chat-id>
 # ============================================================
 
 # seq 605 (Live-Test 1, vor Härtung):

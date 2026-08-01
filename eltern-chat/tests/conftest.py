@@ -40,7 +40,7 @@ from tools.zugangsdaten import ENV_STORE_FILE  # noqa: E402
 # INST-1 (#1656): tasks.HOERSPIEL_INSTANZEN liest seit Welle 2b die Instanz-Liste
 # über tools.instanzen. agent.py und skills/hoerspiel_folge_erzeugen_task.py leiten
 # ihre Namens-/enum-Listen beim Modul-IMPORT aus dieser Liste ab. Damit die Suite
-# gegen die realen Slugs (paula/neko/niclas, PORT-2) prüft — statt gegen den
+# gegen die realen Slugs (mia/finn/emil, PORT-2) prüft — statt gegen den
 # INST-6-kind1/kind2-Default —, muss INSTANZEN_CONFIG_FILE VOR dem ersten
 # `import agent`/`import tasks` gesetzt sein. conftest.py lädt pytest vor allen
 # Test-Modulen, deshalb hier auf Modul-Ebene (nicht als Fixture — eine Fixture

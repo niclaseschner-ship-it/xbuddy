@@ -306,7 +306,7 @@ Inhalt sitzt unter `/display/<app>/<view>`), bekommen aber ohne
 explizites `allow=` keinen Mikro- oder Autoplay-Zugriff.
 
 Begründung: Live-Bug 2026-06-16 (#960) — KIBuddy V1 lief am Pi-Display
-und auf Paulas Tablet nicht, obwohl getUserMedia-Permission auf dem
+und auf Mias Tablet nicht, obwohl getUserMedia-Permission auf dem
 Top-Frame gewährt war (Pi-Kiosk per `--use-fake-ui-for-media-stream`,
 Tablet per User-Tap-Grant). Erst die Ergänzung des iframe-`allow`-
 Attributs öffnete den Permission-Pfad.
@@ -360,7 +360,7 @@ statt Reflow. Das Render-Gate (RAT-24) einer responsive-View prüft daher
 **Füllung** (Content-Bounding-Box == Viewport, kein Leerband, kein Overflow),
 nicht nur Breite.
 
-Pilot dieser Iteration: `essen/wunsch` am Paula-Tablet (1920×1200, RAT-25) —
+Pilot dieser Iteration: `essen/wunsch` am Mia-Tablet (1920×1200, RAT-25) —
 der Content wird im Zuge von #1218 fluid gebaut, alle übrigen Views bleiben
 fixed (DC-15).
 

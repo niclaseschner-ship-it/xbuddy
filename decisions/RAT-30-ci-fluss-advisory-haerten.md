@@ -20,10 +20,10 @@ Beide laufen in Sekunden und sind deterministisch (ruff gepinnt `0.15.15`, kein 
 - **Aktivierung:** NICHT in diesem PR. Die 10-grün-Messung beginnt erst zu laufen, nachdem die push:[main]-Trigger raus sind (dieser PR). Kein `gh api`-PATCH aufs Ruleset hier.
 - **Flip-Kommando (Referenz, wenn die Serie steht):** die beiden Check-Namen zu `required_status_checks` des Rulesets hinzufügen, z. B.
   ```
-  gh api -X PUT repos/niclaseschner-ship-it/xbuddy/rulesets/17352637 \
+  gh api -X PUT repos/<your-org>/xbuddy/rulesets/17352637 \
     --input <ruleset.json>   # required_status_checks.required_status_checks[] += {context: "ruff"}, {context: "lint-imports"}
   ```
-  (Ruleset zuerst per `gh api repos/niclaseschner-ship-it/xbuddy/rulesets/17352637` ziehen, `required_status_checks`-Regel um die zwei Kontexte ergänzen, zurück-PUTten — closes-guard bleibt erhalten.)
+  (Ruleset zuerst per `gh api repos/<your-org>/xbuddy/rulesets/17352637` ziehen, `required_status_checks`-Regel um die zwei Kontexte ergänzen, zurück-PUTten — closes-guard bleibt erhalten.)
 - **Brick-Notausgang (ratifiziert):** dokumentiertes Ruleset-Rollback — den jeweiligen required-Check wieder **entfernen** (gleiches PUT ohne den Kontext), sobald ein STYLE-2-konformer PR nur wegen Altlast/Queue-Stau blockiert. Zwei-Wege-Tür.
 
 ### Teil 2 — push:[main]-Dreifachlauf → EIN beobachteter `main-health.yml` (**umgesetzt**)

@@ -34,10 +34,10 @@ from tools.initdata import session_cookie  # noqa: E402
 TEST_BOT_TOKEN = "123456:ABCdef_testtoken"
 
 # AUTH-3-Datenroute (GET alben liefert auch mit leerem data_root 200 → []).
-_DATA_ROUTE = "/api/v1/hoerspiel/paula/alben"
+_DATA_ROUTE = "/api/v1/hoerspiel/mia/alben"
 # KRITISCH: Audio-mp3 bleibt PUBLIC (AUTH-4). 404 (kein Album) beweist, dass der
 # View OHNE Auth-401 erreicht wird — die Auth-Membran greift nicht.
-_AUDIO_ROUTE = "/api/v1/hoerspiel/paula/alben/x1/audio/track-01.mp3"
+_AUDIO_ROUTE = "/api/v1/hoerspiel/mia/alben/x1/audio/track-01.mp3"
 
 
 def _bau_init_data(bot_token=TEST_BOT_TOKEN, user_id=42):

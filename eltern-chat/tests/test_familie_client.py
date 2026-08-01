@@ -47,15 +47,15 @@ def test_alle_personen_passes_through_list():
 def test_person_anlegen_posts_json_and_reads_back_id():
     transport, calls = _fake_transport([
         (200, json.dumps({
-            "id": "person-niclas-01", "name": "Niclas",
+            "id": "person-emil-01", "name": "Emil",
             "ring": "blue", "art": "erwachsene",
         }).encode("utf-8")),
     ])
     client = FamilieClient("http://x", transport=transport)
-    res = client.person_anlegen(name="Niclas", art="erwachsene", ring="blue")
-    assert res["id"] == "person-niclas-01"
+    res = client.person_anlegen(name="Emil", art="erwachsene", ring="blue")
+    assert res["id"] == "person-emil-01"
     body = json.loads(calls[0]["body"].decode("utf-8"))
-    assert body == {"name": "Niclas", "art": "erwachsene", "ring": "blue"}
+    assert body == {"name": "Emil", "art": "erwachsene", "ring": "blue"}
     assert calls[0]["content_type"] == "application/json"
 
 

@@ -11,8 +11,8 @@ transport=Callable als Test-Naht, 2-s-Timeout (außer Album-Bau: 600 s),
 eigene Fehler-Klasse.
 
 `kind_id` wird bei Konstruktion gesetzt — jede Client-Instanz gehört
-zu genau einem Hörspiel-Buddy. Die Origin-Auflösung (kind_id="paula" →
-hoerspiel_url_origin, kind_id="neko" → hoerspiel_url_origin_neko) liegt
+zu genau einem Hörspiel-Buddy. Die Origin-Auflösung (kind_id="mia" →
+hoerspiel_url_origin, kind_id="finn" → hoerspiel_url_origin_finn) liegt
 im aufrufenden Skill (RAT-17 Option A, E-HFE-6).
 """
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 HTTP_TIMEOUT_SECONDS = 2.0
 
 # Folgen-Vorschlag triggert LLM-Call (Claude-Opus, 20–90 s laut HFE-3).
-# niclas-Recherche-Vorschlag ~180s+ (2026-07-27, #1467); async ist der Folge-Fix (OPEN-HSP-L).
+# emil-Recherche-Vorschlag ~180s+ (2026-07-27, #1467); async ist der Folge-Fix (OPEN-HSP-L).
 HTTP_TIMEOUT_VORSCHLAG_SEKUNDEN = 360.0
 
 # Album-Bau blockiert 1–5 min (V1 synchron, OPEN-HSP-L) — eigener Timeout.
@@ -52,7 +52,7 @@ class HoerspielClient:
 
     `origin_url` ist die Basis-Origin des Hörspiel-Buddys (z. B.
     `http://127.0.0.1:5053`). `kind_id` ist die Instanz-Identität (z. B.
-    "paula" oder "neko") — alle Pfade tragen kind_id als URL-Segment
+    "mia" oder "finn") — alle Pfade tragen kind_id als URL-Segment
     (URL-3a, RAT-17, #910).
 
     `transport` ist die Test-Naht: ein Callable
@@ -60,7 +60,7 @@ class HoerspielClient:
     (CLIENT-1). Bleibt der Wert None, nutzt der Client `urllib.request`.
     """
 
-    def __init__(self, origin_url: str, kind_id: str = "paula",
+    def __init__(self, origin_url: str, kind_id: str = "mia",
                  transport=None,
                  timeout: float = HTTP_TIMEOUT_SECONDS,
                  vorschlag_timeout: float = HTTP_TIMEOUT_VORSCHLAG_SEKUNDEN,

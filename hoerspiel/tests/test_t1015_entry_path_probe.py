@@ -138,7 +138,7 @@ def test_entry_path_probe_require_init_data_ruft_familie_client(tmp_path):
 
         init_data = _build_init_data_string("test-bot-token:abc", user_id=42)
         with hoerspiel_main.app.test_request_context(
-            "/api/v1/hoerspiel/paula/alben",
+            "/api/v1/hoerspiel/mia/alben",
             method="GET",
             headers={"Authorization": "tma " + init_data,
                      "X-Forwarded-For": "1.2.3.4"},

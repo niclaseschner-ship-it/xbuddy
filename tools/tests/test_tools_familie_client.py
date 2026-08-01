@@ -31,7 +31,7 @@ def _fake_personen() -> list[dict]:
          "telegram_id": 42},
         {"id": "p2", "name": "Lea", "ring": "rose", "art": "erwachsene",
          "telegram_id": 7},
-        {"id": "k1", "name": "Paula", "ring": "yellow", "art": "kinder",
+        {"id": "k1", "name": "Mia", "ring": "yellow", "art": "kinder",
          "telegram_id": 99},
     ]
 

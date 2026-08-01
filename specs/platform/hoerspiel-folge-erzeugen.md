@@ -2,7 +2,7 @@
 
 > Status: V1 · Refs #729
 
-Damit ein Elternteil im Eltern-Chat eine neue Hörspiel-Folge für Paula
+Damit ein Elternteil im Eltern-Chat eine neue Hörspiel-Folge für Mia
 anstoßen kann, definiert diese Spec **Hörspiel-Folge erzeugen als
 aufrufbare Funktion**: Sie nimmt eine Folgen-Idee entgegen, lässt vom
 Hörspiel-Buddy einen Folgentext erzeugen, legt ihn dem Elternteil mit
@@ -12,7 +12,7 @@ Schnittstelle-Beitrag** des Hörspiel-Buddys (APP-4, gepflegt vom
 Hörspiel-Buddy-Owner).
 
 Die Funktion ist **trigger-agnostisch** (analog WZE-1, EZG-1): wer sie
-aufruft — eine Eltern-Chat-Aufgabe in V1, ein Sprach-Trigger für Paula in
+aufruft — eine Eltern-Chat-Aufgabe in V1, ein Sprach-Trigger für Mia in
 V2 (OPEN-HSP-B) — ist nicht Teil ihres Vertrags. **Der LLM-Aufruf lebt
 nicht in dieser Funktion** (E-HFE-1, HSP-10/11). Sie ist ein dünner
 Konsument zweier Hörspiel-Buddy-Endpoints (`POST /folgen-vorschlag`,
@@ -51,7 +51,7 @@ nach erfolgreichem Build.
   2026-06-15 (Refs #848, schließt OPEN-HSP-N #750) lebt der Wechsel in
   der Eltern-Mini-App (HSP-34 `PATCH /config`), nicht in einem
   Chat-Skill. Dieser Skill hier wechselt weder Provider noch Modell.
-- **Sprach-Trigger für Paula** — V2 (OPEN-HSP-B); bedient denselben
+- **Sprach-Trigger für Mia** — V2 (OPEN-HSP-B); bedient denselben
   Vorschlag-Endpoint.
 
 ---
@@ -97,7 +97,7 @@ skill-eigener Exception-Typ.
 
 **Eingang:** die vom Agent extrahierte Folgen-Idee **und** der `kind_id`
 der gewünschten Hörspiel-Instanz (Pflicht-Argument seit RAT-17 /
-specs/buddies/hoerspiel.md HSP-28a — V1: `paula` oder `neko`). Der
+specs/buddies/hoerspiel.md HSP-28a — V1: `mia` oder `finn`). Der
 `kind_id` kommt vom aktiven Face-Pille-State der Mini-App oder, wo
 keine Mini-App-Auswahl vorliegt, aus dem Chat-Kontext (LLM-Entscheidung
 durch den Eltern-Chat-Agent-Prompt). Der Skill validiert nicht — er
@@ -122,13 +122,13 @@ fungiert vor dem Vorschlag-Endpoint-Aufruf als zwei-stufiger Filter:
    nach RAT-17). Der Buddy liest das Alter aus seiner instance.json
    und liefert die kuratierte Themen-Liste je Alter — **kein** Query-
    Parameter, **keine** Skill-Modul-Konstante für das Alter (vor
-   RAT-17 trug der Skill `PAULA_ALTER = 4` als V1-Hardcode; dieser
+   RAT-17 trug der Skill `MIA_ALTER = 4` als V1-Hardcode; dieser
    Cross-Service-Schnitt ist mit RAT-17 / #910 aufgelöst). Antwort-
    Form trägt Alter + Name des Kindes mit zurück, damit der Tool-
    Result-Text personalisierbar bleibt:
 
    ```
-   200 {"kind_id": "paula", "name": "Paula", "alter": 4,
+   200 {"kind_id": "mia", "name": "Mia", "alter": 4,
         "themen": ["Mut beim Probieren", "Streit vertragen", …]}
    404 wenn kind_id unbekannt (kein hoerspiel-Pfad für diesen Wert)
    422 wenn Alter der Instanz nicht in instance.json.themen_je_alter
@@ -300,7 +300,7 @@ verankert, nicht im Skill, EC-30-Trennlinie):
 
 - „Schreib eine Folge in der …"
 - „Eine neue Folge über …"
-- „Mach Paula eine Folge zu …"
+- „Mach Mia eine Folge zu …"
 - „Hörspiel-Folge: <Idee>"
 - „Neues Hörbuch über …"
 
@@ -308,9 +308,9 @@ verankert, nicht im Skill, EC-30-Trennlinie):
 Agent ruft `propose()` mit leerer Idee, was die Themen-Liste auslöst):
 
 - „Welche Themen gibt es?"
-- „Was könnte ich Paula erzählen?"
+- „Was könnte ich Mia erzählen?"
 - „Vorschläge?"
-- „Mach Paula eine Folge." (ohne Inhalts-Stichwort)
+- „Mach Mia eine Folge." (ohne Inhalts-Stichwort)
 
 **Eltern-Signal-Phrasen** (HFE-3 erweitert — beenden die Diskussion und
 triggern den Vorschlag-Endpoint):
@@ -610,9 +610,9 @@ Vorsynthese-Disziplin laufen).
 
 ### E-HFE-6 — kind_id-Lookup statt Modul-Konstante (RAT-17)
 *Datum:* 2026-06-15 · Refs #910, RAT-17. Vor RAT-17 trug der Skill
-`PAULA_ALTER = 4` als V1-Modul-Konstante; die zweite Hörspiel-Instanz
-Neko brach diese Form (Skill hätte für Neko 4-Jährige-Themen geliefert,
-unabhängig von Nekos echtem Alter). Mit RAT-17 wird `kind_id` zum
+`MIA_ALTER = 4` als V1-Modul-Konstante; die zweite Hörspiel-Instanz
+Finn brach diese Form (Skill hätte für Finn 4-Jährige-Themen geliefert,
+unabhängig von Finns echtem Alter). Mit RAT-17 wird `kind_id` zum
 Pflicht-Argument des Skills, und das Alter zieht der Buddy implizit aus
 seiner instance.json. **Wahl der Endpoint-Form (architecture_class:
 wahl, Nic-Verdikt 2026-06-15-22:50): Variante B** — kind_id im URL-Pfad

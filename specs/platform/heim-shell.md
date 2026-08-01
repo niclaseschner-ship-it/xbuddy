@@ -16,7 +16,7 @@
 >
 > Status: V1-Pilot (RAT-25) → Ziel-Default (RAT-29) → self-contained (RAT-31) · Refs #1182 #1339
 > Architektur ratifiziert via /berater-runde 2026-06-30 (siehe RAT-25), fortgeschrieben RAT-29/RAT-31.
-> Deliberation: `brainstorm/berater-runde/20260630-151000-RATIFIZIERT-pwa-shell-paula.md`,
+> Deliberation: `brainstorm/berater-runde/20260630-151000-RATIFIZIERT-pwa-shell-mia.md`,
 > `brainstorm/berater-runde/20260727-144443-RATIFIZIERT-wirbelsaeule-abriss.md`
 > Gate-B-Mockups: `specs/mockups/heim-shell/`
 
@@ -26,7 +26,7 @@ links, gerouteter Buddy-View rechts**. Sie ist **kein neuer Routing-Kern** —
 der Live-Refresh läuft same-origin über `seiten/` (SHELL-4, RAT-31 E2); der
 frühere Router-Fanout und der `display_id`-Lookup (SHELL-2) sind entfernt.
 
-**V1-Pilot-Scope:** EIN Testgerät (Paula-Tablet `tablet-tablet-paula-01`,
+**V1-Pilot-Scope:** EIN Testgerät (Mia-Tablet `tablet-tablet-mia-01`,
 1920×1200), **LAN-only** (kein Funnel). Einstieg über `panel_id`; rechtes
 Buddy-Pane per SSE-getriebenem `iframe.src`-Swap (SHELL-4, RAT-31 E2) — kein
 `display_id`-Router-Lookup mehr (SHELL-2 entfernt, #1568/#1590). Reversibel:
@@ -64,7 +64,7 @@ Test-Anker: seiten/tests/test_heim_shell.py::test_shell1_route_html
 ### SHELL-9 — IDs aus Daten, kein Hardcode (n=1)
 Weder `panel_id` noch Geräte-IDs stehen im Shell-Code. Die `panel_id` kommt
 aus der URL; `display_id` wird nicht mehr nachgeschlagen (SHELL-2 obsolet,
-RAT-31 E6f-C). Die konkreten Pilot-IDs (`paulas-panel-01`) leben in den
+RAT-31 E6f-C). Die konkreten Pilot-IDs (`mias-panel-01`) leben in den
 Registry-Daten (xbuddy-data, GER-4 / PREG). Was je Familie variiert, ist
 Config/Daten, nicht Code (Familie-3-Probe).
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell9_keine_hardcode_ids
@@ -160,7 +160,7 @@ Shell öffnen, 50 Tile-Taps + Netz-Cut/-Wiederkehr; Active-Tile bleibt konsisten
 keine Doppel-Reloads, EventSource-Zahl wächst nach Reconnects nicht (Kill-Kriterium).
 
 > **RAT-35 n=3-Abnahme (#1602):** Nics realer Betrieb ist **Pi + 2 Tablets = n=3**
-> am selben Link (`/shell/paulas-panel-01`) — die RAT-35-Isolation muss über die
+> am selben Link (`/shell/mias-panel-01`) — die RAT-35-Isolation muss über die
 > 2-Shell-Probe hinaus bei drei Geräten halten. Der **Server-Anteil** ist
 > automatisiert (`test_t1602_publish_n3_erreicht_nur_eigene_sid` — Trigger auf A
 > erreicht B **und** C nicht; `test_t1602_reconnect_zyklus_n3_leakt_keine_sessions`
@@ -298,7 +298,7 @@ URL-Karten je Geräte-Paar. Kein JS-Hardcode der panel_id — abgeleitet aus dem
 `instanz`-Feld (SREG-4), Origins aus dem Runtime-Dict (SREG-7).
 
 Installierbarkeit als PWA (WebAPK) erfolgt über ein Shell-Manifest je
-`panel_id` (analog PWA-1); für den Pilot ist `start_url = /shell/paulas-panel-01`.
+`panel_id` (analog PWA-1); für den Pilot ist `start_url = /shell/mias-panel-01`.
 Test-Anker (MAU): seiten/tests/test_mini_app_uebersicht.py::test_shell10_mau_panel_eintrag_hat_shell_urls
 Test-Anker (HTML): seiten/tests/test_heim_shell.py::test_shell10_url_in_uebersicht
 

@@ -34,12 +34,12 @@
     <div class="topbar">
       <div class="pille" id="pille" role="button" title="Kind wechseln">
         <span class="face" id="face">P</span>
-        <span class="who tag-caveat" id="who">Paula</span>
+        <span class="who tag-caveat" id="who">Mia</span>
         <span class="swap">↔ wechseln</span>
       </div>
       <a class="gear" href="./settings.html" title="Einstellungen"><span id="i-gear"></span></a>
     </div>
-    <div class="sectionlabel" id="secLabel">Paulas Folgen</div>
+    <div class="sectionlabel" id="secLabel">Mias Folgen</div>
     <div class="scroll">
       <div class="grid" id="grid"></div>
     </div>
@@ -80,7 +80,7 @@ function render(){
     grid.appendChild(t);
   });
 }
-document.getElementById('pille').addEventListener('click',()=>{HSP.setKind(HSP.current()==='paula'?'neko':'paula');render();});
+document.getElementById('pille').addEventListener('click',()=>{HSP.setKind(HSP.current()==='mia'?'finn':'mia');render();});
 HSP.load().then(()=>{ico();render();});
 </script>
 </body>

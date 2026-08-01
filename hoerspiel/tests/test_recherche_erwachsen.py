@@ -112,10 +112,10 @@ class FakeStore:
 
 
 # Bible/Historie mit Familien-Daten — dürfen NIE in die web_search-Anfrage geraten.
-_BIBLE_MIT_FAMILIE = ("Paula (4 Jahre) wohnt im Dreisamtal. Geheimwort: "
-                      "Vögelchen. Neko ist die Katze der Familie Eschner.")
-_HISTORIE_MIT_FAMILIE = "## Folge 1: Paula und Neko im Garten"
-_FAMILIEN_TOKEN = ["Paula", "Neko", "Eschner", "Dreisamtal", "Vögelchen",
+_BIBLE_MIT_FAMILIE = ("Mia (4 Jahre) wohnt im Beispieltal. Geheimwort: "
+                      "Vögelchen. Finn ist die Katze der Familie Sonntag.")
+_HISTORIE_MIT_FAMILIE = "## Folge 1: Mia und Finn im Garten"
+_FAMILIEN_TOKEN = ["Mia", "Finn", "Sonntag", "Beispieltal", "Vögelchen",
                    "Geheimwort", "familie"]
 
 
@@ -183,7 +183,7 @@ def test_kind_bleibt_single_shot_ohne_recherche_schema():
     agent = FakeAgent()
     vorschlag = llm_service.erzeuge_folgen_vorschlag(
         idee="Stigi findet eine Feder", bible="", historie="",
-        naechste_nummer=1, llm=llm, name="Paula", alter=4,
+        naechste_nummer=1, llm=llm, name="Mia", alter=4,
         zielgruppe="kind", agent=agent)
     assert llm.last_structured_schema == llm_service.FOLGEN_INPUT_SCHEMA
     assert "meta" not in llm.last_structured_schema["properties"]
@@ -217,7 +217,7 @@ def test_recherche_laeuft_NIE_bei_kind():
     llm_service.erzeuge_folgen_vorschlag(
         idee="Eine harmlose Kinder-Idee", bible=_BIBLE_MIT_FAMILIE,
         historie=_HISTORIE_MIT_FAMILIE, naechste_nummer=1, llm=llm,
-        name="Paula", alter=4, zielgruppe="kind", agent=agent)
+        name="Mia", alter=4, zielgruppe="kind", agent=agent)
     assert agent.step_calls == [], "HSP-58-BRUCH: web_search lief bei Kind-Instanz"
 
 
@@ -229,7 +229,7 @@ def test_websearch_payload_enthaelt_KEINE_familiendaten():
     llm_service.erzeuge_folgen_vorschlag(
         idee="Quantencomputing und seine gesellschaftlichen Risiken",
         bible=_BIBLE_MIT_FAMILIE, historie=_HISTORIE_MIT_FAMILIE,
-        naechste_nummer=1, llm=llm, name="Niclas", alter=39,
+        naechste_nummer=1, llm=llm, name="Emil", alter=39,
         zielgruppe="erwachsen", agent=agent)
 
     assert agent.step_calls, "Recherche muss gelaufen sein"

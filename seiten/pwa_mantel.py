@@ -438,7 +438,7 @@ REGISTRY: dict[str, MantelConfig] = {
         build_id_source_set=("eltern.js", "eltern.css"),
         name="Hörspiel verwalten · XBuddy",
         short_name="Hörspiel",
-        start_url="/seiten/hoerspiel/paula/eltern",
+        start_url="/seiten/hoerspiel/mia/eltern",
         icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
         display="fullscreen",
         theme_color="#47503C",
@@ -447,7 +447,7 @@ REGISTRY: dict[str, MantelConfig] = {
         # Offline-Fallback bleibt ueber den Cache erhalten.
         html_cache_mode="network-first",
         stop_prefixes=("/api/v1/hoerspiel/",),
-        sw_script_route="/seiten/hoerspiel/paula/eltern/sw.js",
+        sw_script_route="/seiten/hoerspiel/mia/eltern/sw.js",
         sw_scope="/seiten/hoerspiel/",
     ),
     # ── Hörspiel-Player (HSP-47) — erster Voll-Konsument ÜBER die Lib ──

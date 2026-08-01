@@ -622,7 +622,7 @@ def test_KAV_7_successful_exchange_writes_four_keys_with_correct_schema():
         zd=zd, next_message=nm,
         exchange=fake_exchange_ok(refresh="RT-1", access="AT-1",
                                   expires_in=3600),
-        fetch_email=fake_fetch_email("paula@example.com"),
+        fetch_email=fake_fetch_email("mia@example.com"),
         clock=_fixed_clock(fixed))
     # Refresh-Token in der von PLAN-16 erwarteten Form.
     assert zd.get(ZD_NAME_OAUTH_TOKEN) == {"refresh_token": "RT-1"}
@@ -630,7 +630,7 @@ def test_KAV_7_successful_exchange_writes_four_keys_with_correct_schema():
     # Expires-at = clock() + expires_in Sekunden, ISO-8601.
     assert zd.get(ZD_NAME_ACCESS_TOKEN_EXPIRES_AT) == \
         "2026-05-26T13:00:00+00:00"
-    assert zd.get(ZD_NAME_ACCOUNT_EMAIL) == "paula@example.com"
+    assert zd.get(ZD_NAME_ACCOUNT_EMAIL) == "mia@example.com"
 
 
 def test_KAV_7_token_values_not_in_logs(caplog):
@@ -706,11 +706,11 @@ def test_KAV_8_confirmation_contains_account_email_when_available():
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
         zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(refresh="SECRET-RT"),
-        fetch_email=fake_fetch_email("paula@example.com"),
+        fetch_email=fake_fetch_email("mia@example.com"),
         fetch_calendars=fake_fetch_calendars(),
         write_plan_json=fake_write_plan_json())
     msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
-    assert any("paula@example.com" in m for m in msgs)
+    assert any("mia@example.com" in m for m in msgs)
     # Refresh-Token taucht in keiner Nachricht auf (ZD-6).
     assert not any("SECRET-RT" in m for m in msgs)
 
@@ -933,7 +933,7 @@ def test_KAV_X_user_selects_calendar_writes_chosen_id():
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
         zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
-        fetch_email=fake_fetch_email("paula@example.com"),
+        fetch_email=fake_fetch_email("mia@example.com"),
         fetch_calendars=fetch, write_plan_json=write)
     assert result.ergebnis == ERGEBNIS_VERBUNDEN
     assert len(write.calls) == 1
@@ -1120,7 +1120,7 @@ def test_KAV_Y_bestaetigung_frei_von_manuellem_restart_hint():
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
         zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
-        fetch_email=fake_fetch_email("paula@example.com"),
+        fetch_email=fake_fetch_email("mia@example.com"),
         fetch_calendars=fake_fetch_calendars(),
         write_plan_json=fake_write_plan_json())
     msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]

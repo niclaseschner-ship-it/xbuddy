@@ -1,12 +1,12 @@
 # Hörspiel-Buddy — Spec     (ID-Präfix: HSP)
 
-> Status: V1 · Refs #729, #907 (Mehr-Instanz-Cut Paula + Neko, RAT-17), #1263 (dritte Instanz „Niclas" Erwachsener, n≥3-Modell, HSP-28a reaktiviert)
+> Status: V1 · Refs #729, #907 (Mehr-Instanz-Cut Mia + Finn, RAT-17), #1263 (dritte Instanz „Emil" Erwachsener, n≥3-Modell, HSP-28a reaktiviert)
 
 ## Problem & North-Star-Bezug
 
-Jedes Kind in der Familie hat sein eigenes Hörspiel-Universum: Paula (4)
+Jedes Kind in der Familie hat sein eigenes Hörspiel-Universum: Mia (4)
 hört seit Monaten „Stigi, Malini & Vögelchen — Geschichten aus dem Garten
-im Dreisamtal", Neko bekommt mit V1 (RAT-17) seine eigene Welt. Folgen
+im Beispieltal", Finn bekommt mit V1 (RAT-17) seine eigene Welt. Folgen
 wurden bisher lokal geschrieben und über das Handy eines Elternteils
 abgespielt. Drei Probleme:
 
@@ -33,8 +33,8 @@ Funktion (LLM-gestützte Folgen-Erzeugung, TTS-Album-Bau, Resume-
 Verwaltung) und stellt das Ergebnis über seine Display-View bereit
 (HSP-1, APP-1).
 
-Der Buddy läuft mit **mehreren expliziten Instanzen** (V1: Paula + Neko;
-ab #1263 zusätzlich Niclas als gleichrangige Erwachsenen-Instanz),
+Der Buddy läuft mit **mehreren expliziten Instanzen** (V1: Mia + Finn;
+ab #1263 zusätzlich Emil als gleichrangige Erwachsenen-Instanz),
 handverdrahtet je Instanz (eigene systemd-Unit, eigener Port, eigene
 Origin-Pfade nach URL-3a). Eine **hörspiel-lokale Instanz-Liste** trägt
 die Laufzeit-Iteration über die verdrahteten Instanzen (HSP-43); eine
@@ -71,7 +71,7 @@ ID-Präfix HFE).
 - **OPEN-HSP-C** — Bilder synchron zum Track-Inhalt (Bilderbuch-Modus).
   Braucht die Track-Granularität, die V1 schon legt.
 - **OPEN-HSP-D** — Aussprache-Lexikon für Eigennamen (Stigi, Schmuggli,
-  Dreisamtal …) das die TTS-Vorlage vor der Synthese anwendet.
+  Beispieltal …) das die TTS-Vorlage vor der Synthese anwendet.
 - **OPEN-HSP-E** — mehrere Hörspiel-Serien parallel (V1: eine Serie,
   „Stigi & Co.").
 - **OPEN-HSP-F** — Premium-Voice-Upgrade zu ElevenLabs oder einer Custom-
@@ -81,7 +81,7 @@ ID-Präfix HFE).
   geteilte Familien-Tablet im Browser an; ein eigenes Kind-Gerät ist
   Hardware-/Onboarding-Frage). Bei geteiltem Tablet steuert die Face-
   Pille (HSP-3a / #911) den Wechsel zwischen den beiden Hörspiel-
-  Instanzen Paula ↔ Neko.
+  Instanzen Mia ↔ Finn.
 - **OPEN-HSP-H** — Concurrency-Lock am TTS-Adapter bei der heutigen 3-RPM-
   Quota; bei höherer Quota entfällt das.
 - **OPEN-HSP-I** — Album-Sortierung in der Kachel-View (neuestes zuerst /
@@ -129,7 +129,7 @@ ID-Präfix HFE).
   ✓ (HSP-47..55); per-Kind-eigenes-Gerät + geräteübergreifender Resume-Sync
   weiterhin offen.
 - **OPEN-HSP-W** — Orchestrator-Deploy: `instance.json` je Instanz
-  (paula/neko/niclas) mit `serien_name`/`ton`/`perspektive` befüllen,
+  (mia/finn/emil) mit `serien_name`/`ton`/`perspektive` befüllen,
   damit die `Serie:`-Zeile im LLM-Prompt erscheint. Folge von T1336
   (DEFAULT_SERIEN_RAHMEN neutralisiert, HSP-45-Abschnitt). Trigger: Deploy-
   Runbook nach T1336-Merge.
@@ -148,8 +148,8 @@ API für den Eltern-Chat-Skill bereit (BUD-1b, HSP-17).
 
 ### HSP-2 — Single-Page-View `alben`, Splitscreen aus Kacheln + Player
 Die Hör-View liegt unter `/display/hoerspiel/<kind_id>/alben` (BUD-1, URL-3a,
-RAT-17, #965) — z. B. `/display/hoerspiel/paula/alben` oder
-`/display/hoerspiel/neko/alben`. Sie ist **eine Canvas**: links das
+RAT-17, #965) — z. B. `/display/hoerspiel/mia/alben` oder
+`/display/hoerspiel/finn/alben`. Sie ist **eine Canvas**: links das
 Album-Kachel-Raster, rechts der Player als **immer sichtbare vertikale
 Säule**. Kein Routing zu Sub-Seiten, keine Menüführung — statisches
 Dashboard (HSP-3). Statische Assets unter
@@ -192,7 +192,7 @@ ist V1 **nicht** vorgesehen — der Resume-Stand lebt im Player rechts
 (E-HSP-9, zieht E-HSP-4 nach).
 
 *Test-Implikation:* GET `/display/hoerspiel/<kind_id>/alben` (z. B.
-`/display/hoerspiel/paula/alben`) rendert
+`/display/hoerspiel/mia/alben`) rendert
 (a) mindestens eine Album-Kachel pro freigegebenem Album, oder genau 10
 sichtbare Kachel-Slots inkl. „Ältere Folgen"-Slot bei mehr als 10
 freigegebenen Alben, (b) den Player-Bereich mit dem letzten Stand
@@ -221,9 +221,9 @@ Auf dem geteilten Familien-Tablet (V1-Default, OPEN-HSP-G) trägt die
 Kinder-View **oben rechts eine Face-Pille** (Ring + Foto + Name des
 aktiven Kindes, gelesen aus `xbuddy-data/familie/familie.json` via
 einem schlanken `familie_client` analog `plan/familie_client.py`).
-Tap auf die Pille wechselt zur anderen Hörspiel-Instanz (Paula ↔ Neko)
+Tap auf die Pille wechselt zur anderen Hörspiel-Instanz (Mia ↔ Finn)
 per **vollständiger Navigation** auf die andere Kind-URL
-(`/display/hoerspiel/paula/alben` ↔ `/display/hoerspiel/neko/alben`) —
+(`/display/hoerspiel/mia/alben` ↔ `/display/hoerspiel/finn/alben`) —
 kein State-Wechsel innerhalb derselben Seite, keine Resume-Marken-
 Vermischung (localStorage-Namensräume sind URL-getrennt, HSP-23).
 Auf einem kind-eigenen Gerät ohne Sharing kann die Pille entfallen
@@ -233,7 +233,7 @@ oder reine Anzeige sein.
 Statt einer Pillen-Reihe der übrigen Instanzen zeigt die Pille immer das
 **aktive Kind** (Ring + Foto + Name) mit einem „wechseln"-Hinweis.
 Ein Tap führt per **vollständiger Navigation** zum **nächsten Kind im Ring**
-(Ring-Reihenfolge aus `config.INSTANZEN`, wrap-around, z. B. paula→neko→niclas→paula),
+(Ring-Reihenfolge aus `config.INSTANZEN`, wrap-around, z. B. mia→finn→emil→mia),
 gefiltert auf im Familie-Snapshot vorhandene Personen (PLAN-20-Geist).
 EINE Pille statt Reihe beseitigt den visuellen Widerspruch bei n≥3
 („zwei Knöpfe die sich widersprechen"). Die getrennte localStorage-
@@ -244,7 +244,7 @@ fix/hoerspiel-switcher-cycle, supersedes ENTSCHEID-1263 F2.)
 **Bewusst keine Pille im Eltern-Mini-App-Header** (RAT-17 + #911 Nic-
 Wahl Variante C, 2026-06-16): die Eltern-Mini-App ist URL-parametrisch
 pro Kind (HSP-33-Form `<funnel>/seiten/hoerspiel/<kind_id>/eltern`),
-der Wechsel zwischen Paula und Neko läuft über zwei Web-App-Menu-
+der Wechsel zwischen Mia und Finn läuft über zwei Web-App-Menu-
 Buttons im Telegram-Bot, nicht über ein UI-Element in der App. Damit
 bleibt die Eltern-App single-tenant intern, und die Face-Pille-Form
 hat n=1 gebautes Beispiel (Kinder-View) statt zwei mit unterschiedlicher
@@ -684,7 +684,7 @@ Skill die Bible über `GET /bible`, nicht aus dem Dateisystem.
 ## 6. Kinder-View — Kacheln und Player
 
 (Die Klauseln in diesem Abschnitt sprechen vom „Kind" als generischem
-Akteur — V1 sind das Paula und Neko, jede Instanz mit ihrer eigenen
+Akteur — V1 sind das Mia und Finn, jede Instanz mit ihrer eigenen
 Album-Liste und Resume-Marke.)
 
 ### HSP-19 — Album-Kachel
@@ -732,7 +732,7 @@ Die Wiedergabe verwendet die **MediaSession-API** des Browsers und ein
 
 V1-Annahme: das Kind nutzt die App im Browser oder als „Zum Home-Bildschirm
 hinzufügen"-PWA — bei zwei Instanzen je Kind eine eigene URL
-(`/display/hoerspiel/paula/alben`, `/display/hoerspiel/neko/alben`).
+(`/display/hoerspiel/mia/alben`, `/display/hoerspiel/finn/alben`).
 Eigenes Kind-Gerät = OPEN-HSP-G.
 
 **Audio-Ausgabe — lokal am App-Gerät (Audio-Ziel-Weiche SUPERSEDED 2026-07-27).**
@@ -755,7 +755,7 @@ Granularität (E-HSP-4).
 
 V1 hält die Resume-Marke im Browser-`localStorage` pro Album. Ein Server-
 seitiger Resume-State (Multi-User, Multi-Gerät-Sync) ist OPEN-HSP-G-Folge.
-Da die zwei Instanzen Paula/Neko unter getrennten URLs leben, hat jede
+Da die zwei Instanzen Mia/Finn unter getrennten URLs leben, hat jede
 ihren eigenen `localStorage`-Namensraum — kein Mischen über den Wechsel.
 
 **Wenn** das Kind die View wieder aufruft und für ein Album ein Resume-
@@ -779,7 +779,7 @@ ein Rollover-Test beim Merge grün ist und Stunden später rot wird.)
 ### HSP-25 — Daten-Layout (mit `<kind_id>`-Owner-Achse, RAT-17)
 Der Hörspiel-Buddy hält drei Klassen Daten im Per-Instanz-Daten-Bereich
 **je Kind** (BUD-2a, gitignored über `hoerspiel/.gitignore` per BUD-2b).
-Die `<kind_id>` (V1: `paula`, `neko` — FK in `xbuddy-data/familie/familie.json`)
+Die `<kind_id>` (V1: `mia`, `finn` — FK in `xbuddy-data/familie/familie.json`)
 ist die alleinige Owner-Achse:
 
 ```
@@ -844,15 +844,15 @@ Die Domänen-Daten (`bible.md`, `folgen-historie.md`, `pikto-mapping.json`,
 beim Einrichten ins `xbuddy-data/hoerspiel/<kind_id>/`-Verzeichnis
 gelegt — **kein automatisches Migration-Skript V1**, **keine** Bootstrap-
 Generalisierung (Premature Generalization, RAT-17). Der bestehende
-`deploy/hoerspiel/bootstrap.sh` ist Paula-spezifisch und wird **nicht**
-generalisiert — Neko + spätere Instanzen werden manuell initialisiert.
+`deploy/hoerspiel/bootstrap.sh` ist Mia-spezifisch und wird **nicht**
+generalisiert — Finn + spätere Instanzen werden manuell initialisiert.
 
-Quell-Pfade für die **Paula-Instanz** (`xbuddy-data/hoerspiel/paula/…`):
+Quell-Pfade für die **Mia-Instanz** (`xbuddy-data/hoerspiel/mia/…`):
 
 - `bible.md` ← Inhalt aus
-  `brainstorm/ideas/paula-hoerspiel-app/welt_und_charaktere.md`
+  `brainstorm/ideas/mia-hoerspiel-app/welt_und_charaktere.md`
 - `folgen-historie.md` ← Inhalt aus
-  `brainstorm/ideas/paula-hoerspiel-app/folgen_historie.md`
+  `brainstorm/ideas/mia-hoerspiel-app/folgen_historie.md`
 - `pikto-mapping.json` ← per Hand für die historischen Folgen 14–22
   (HSP-5a-V1)
 - `shared-assets/cover-default.jpg` ← produziertes ChatGPT-Aquarell
@@ -864,7 +864,7 @@ Quell-Pfade für die **Paula-Instanz** (`xbuddy-data/hoerspiel/paula/…`):
   Copy-Paste-Schritt durch den Hub-Owner als Quell-Text für die
   Vorsynthese (HSP-29)
 
-Quell-Pfade für die **Neko-Instanz** (`xbuddy-data/hoerspiel/neko/…`):
+Quell-Pfade für die **Finn-Instanz** (`xbuddy-data/hoerspiel/finn/…`):
 Bibel + Folgen-Historie + Cover schreibt Nic per Hand (RAT-17
 Entscheidung 5 — kein LLM-Bible-Buddy-Flow in V1). Folge-Ticket #912
 trägt diesen Inhalts-Schritt; Service-Skelett (#909) legt nur die
@@ -873,9 +873,9 @@ Verzeichnis-Struktur an.
 Ein automatisches Migrations-Werkzeug (Setup-Skript) ist V2-Material
 (OPEN-HSP-Q).
 
-**Bestehender Paula-Daten-Umzug (Single-Tenant → `<kind_id>=paula`)**
+**Bestehender Mia-Daten-Umzug (Single-Tenant → `<kind_id>=mia`)**
 folgt SVC-5 wörtlich (Ticket #908): `cp -a` der Alt-Pfade nach
-`xbuddy-data/hoerspiel/paula/`, Drop-In `20-data-path.conf` umstellen,
+`xbuddy-data/hoerspiel/mia/`, Drop-In `20-data-path.conf` umstellen,
 Smoke-Test, **dann erst** Alt-Pfad entfernen. Restic-Snapshot davor als
 Gürtel, nicht als Rollback-Mechanismus.
 
@@ -893,16 +893,16 @@ Segment im Display-Pfad (URL-3a-Form, RAT-17):
   "voice": "shimmer",
   "erstellt-am": "2026-06-12",
   "freigegeben": true,
-  "cover-asset": "/display/hoerspiel/paula/data/shared-assets/cover-default.jpg",
+  "cover-asset": "/display/hoerspiel/mia/data/shared-assets/cover-default.jpg",
   "tracks": [
     {"id": "intro-shimmer", "position": 1, "art": "intro",
-     "audio-asset": "/display/hoerspiel/paula/data/shared-assets/intro_shimmer.mp3",
+     "audio-asset": "/display/hoerspiel/mia/data/shared-assets/intro_shimmer.mp3",
      "dauer-sek": 18},
     {"id": "folge-22-track-02", "position": 2, "art": "inhalt",
-     "audio-asset": "/display/hoerspiel/paula/data/alben/folge-22/audio/track-02.mp3",
+     "audio-asset": "/display/hoerspiel/mia/data/alben/folge-22/audio/track-02.mp3",
      "dauer-sek": 215, "titel": null},
     {"id": "outro-shimmer", "position": "N", "art": "outro",
-     "audio-asset": "/display/hoerspiel/paula/data/shared-assets/outro_shimmer.mp3",
+     "audio-asset": "/display/hoerspiel/mia/data/shared-assets/outro_shimmer.mp3",
      "dauer-sek": 22}
   ]
 }
@@ -919,7 +919,7 @@ View-URLs für das Frontend.
 
 API-Pfade folgen analog der URL-3a-Form:
 `/api/v1/hoerspiel/<kind_id>/<resource>` (z. B.
-`/api/v1/hoerspiel/paula/alben`, `/api/v1/hoerspiel/neko/folgen-vorschlag`).
+`/api/v1/hoerspiel/mia/alben`, `/api/v1/hoerspiel/finn/folgen-vorschlag`).
 
 ---
 
@@ -936,7 +936,7 @@ Drei Konfig-Ebenen, klar getrennt nach Lebenszyklus (RAT-17):
   (Port, Data-Root, Secrets-Slots).
 - `xbuddy-data/hoerspiel/<kind_id>/instance.json` — **Per-Kind-Instanz-
   Daten-Konfig** (kind-spezifische Werte, je Instanz eigene Datei).
-  Heimat aller Werte, die zwischen Paula und Neko unterschiedlich sind:
+  Heimat aller Werte, die zwischen Mia und Finn unterschiedlich sind:
   Serien-Name, Voice-Default, kognitive Stufe, Themen-Liste je Alter,
   Cover-Pfad-Override. Alle diese Werte sind **instanz-eigen** — es gibt
   für sie **keinen** plattformweiten Code-Default (für `serien_name` gilt
@@ -945,7 +945,7 @@ Drei Konfig-Ebenen, klar getrennt nach Lebenszyklus (RAT-17):
   kein Default. Beispiel:
   ```json
   {
-    "kind_id": "paula",
+    "kind_id": "mia",
     "serien_name": "<serien-name-dieser-instanz>",
     "default_voice": "shimmer",
     "stage": "toddler",
@@ -1025,7 +1025,7 @@ ab, den `PATCH /config` in HTTP 422 übersetzt.
 
 `instance.json.themen_je_alter` ist eine Map `alter → string[]` mit
 kuratierten Themen-Vorschlägen für die HFE-Diskussion (HFE-3). V1 für
-Paula (Alter 4) gepflegt; Nekos Themen-Liste wird im Zuge von #912 von
+Mia (Alter 4) gepflegt; Finns Themen-Liste wird im Zuge von #912 von
 Nic per Hand gesetzt. Erweiterung auf andere Alter ist Familien-Tätigkeit
 (Edit der JSON pro Instanz), keine Code-Pflicht.
 
@@ -1092,25 +1092,25 @@ Folgen-Build durchführen — schlägt die ID 404 oder 422, ist sie aus
 
 ## 10. Service & Registrierung
 
-### HSP-28 — Eigener Service, fester Port (Paula-Instanz)
-Die Paula-Instanz läuft als eigener Prozess `xbuddy-hoerspiel.service`
+### HSP-28 — Eigener Service, fester Port (Mia-Instanz)
+Die Mia-Instanz läuft als eigener Prozess `xbuddy-hoerspiel.service`
 (SVC-1..4, `Restart=on-failure`, Logs an stdout/stderr) und bindet nur an
 `127.0.0.1` (PORT-3). Port **5053** (PORT-2, `xbuddy-hoerspiel`,
 eingetragen in `conventions/ports.md`).
 
-### HSP-28a — Mehr-Instanz-Realität: Paula + Neko + Niclas handverdrahtet (RAT-17, reaktiviert #1263)
+### HSP-28a — Mehr-Instanz-Realität: Mia + Finn + Emil handverdrahtet (RAT-17, reaktiviert #1263)
 
 **Reaktivierungs-Vermerk (#1263, RATIFIZIERT 2026-07-03).** Der in der
 V1-Fassung dieser Klausel gesetzte Wiederaufnahme-Trigger („wenn ein
 drittes Kind … hinzukommt, wird der Cut neu beraten") ist **gefeuert**:
-Niclas kommt als dritte, gleichrangige Hörspiel-Instanz (Erwachsener)
+Emil kommt als dritte, gleichrangige Hörspiel-Instanz (Erwachsener)
 hinzu. Nic-Verdikt: der Cut wird **hörspiel-lokal** über eine
 **Instanz-Liste mit Laufzeit-Iteration** (HSP-43) aufgelöst — **keine**
 generische RAT-17-Registry. (ENTSCHEID-1263 → Nic-Verdikt → „hörspiel-
 lokale Liste = nur Runtime-Iteration, keine RAT-17-Registry".)
 
-Der Buddy läuft mit **drei expliziten Hörspiel-Instanzen** Paula, Neko und
-Niclas. Diese sind **handverdrahtet** — kein Port-Offset-Algorithmus,
+Der Buddy läuft mit **drei expliziten Hörspiel-Instanzen** Mia, Finn und
+Emil. Diese sind **handverdrahtet** — kein Port-Offset-Algorithmus,
 keine generische „Buddy-mit-n-Instanzen"-Konvention. Jede Instanz ist ein
 eigener Eintrag an den bekannten Stellen (`conventions/ports.md`,
 `conventions/urls.md`, `deploy/nginx/xbuddy-origin.conf`,
@@ -1119,11 +1119,11 @@ Pflicht-Checkliste je neuer Instanz steht in HSP-44.
 
 | Instanz | systemd-Unit                       | Port | Daten-Pfad                          | Origin-Pfade (URL-3a)                                          |
 |---------|------------------------------------|------|-------------------------------------|----------------------------------------------------------------|
-| Paula   | `xbuddy-hoerspiel.service`         | 5053 | `xbuddy-data/hoerspiel/paula/`      | `/display/hoerspiel/paula/<view>` · `/api/v1/hoerspiel/paula/<resource>` |
-| Neko    | `xbuddy-hoerspiel-neko.service`    | 5055 | `xbuddy-data/hoerspiel/neko/`       | `/display/hoerspiel/neko/<view>` · `/api/v1/hoerspiel/neko/<resource>`   |
-| Niclas  | `xbuddy-hoerspiel-niclas.service`  | 5056 | `xbuddy-data/hoerspiel/niclas/`     | `/display/hoerspiel/niclas/<view>` · `/api/v1/hoerspiel/niclas/<resource>` |
+| Mia   | `xbuddy-hoerspiel.service`         | 5053 | `xbuddy-data/hoerspiel/mia/`      | `/display/hoerspiel/mia/<view>` · `/api/v1/hoerspiel/mia/<resource>` |
+| Finn    | `xbuddy-hoerspiel-finn.service`    | 5055 | `xbuddy-data/hoerspiel/finn/`       | `/display/hoerspiel/finn/<view>` · `/api/v1/hoerspiel/finn/<resource>`   |
+| Emil  | `xbuddy-hoerspiel-emil.service`  | 5056 | `xbuddy-data/hoerspiel/emil/`     | `/display/hoerspiel/emil/<view>` · `/api/v1/hoerspiel/emil/<resource>` |
 
-*(Port-Reconcile #1263: Neko real 5055 laut `conventions/ports.md:27`, nicht 5054; Niclas 5056 als nächster freier aus dem PORT-2-Block.)*
+*(Port-Reconcile #1263: Finn real 5055 laut `conventions/ports.md:27`, nicht 5054; Emil 5056 als nächster freier aus dem PORT-2-Block.)*
 
 **RAT-17-Registry bleibt vertagt.** Die Wiederaufnahme in #1263 hat den
 Cut **hörspiel-lokal** aufgelöst (Instanz-Liste als Runtime-Iteration,
@@ -1135,10 +1135,10 @@ Registry-Beratung aus.
 
 **Service-Vorlage-Ablage (Realitäts-Vermerk):** beide Hörspiel-Service-
 Vorlagen lagen am Repo-Root (`xbuddy-hoerspiel.service`,
-`xbuddy-hoerspiel-neko.service`) und wichen damit von BUD-1a ab
+`xbuddy-hoerspiel-finn.service`) und wichen damit von BUD-1a ab
 („Service-Vorlage neben dem Code"). Mit Ticket #1014 (SVC-2-Move)
 wurden sie nach `hoerspiel/hoerspiel.service` und
-`hoerspiel/hoerspiel-neko.service` verschoben — Pattern-Bruch aufgelöst.
+`hoerspiel/hoerspiel-finn.service` verschoben — Pattern-Bruch aufgelöst.
 
 ### HSP-29 — Vorsynthese der Shared-Assets als Setup-Schritt
 Vor der ersten Folge in einer Familien-Instanz müssen die vier Shared-
@@ -1159,7 +1159,7 @@ Auto-Rebuild beim Album-Bau (Trennung der Verantwortung).
 Der Slug `hoerspiel` wird im Origin-Routing (URL-14) registriert, damit
 `/display/hoerspiel/<kind_id>/alben` und `/api/v1/hoerspiel/<kind_id>/*`
 über die Origin erreichbar sind (URL-3a, RAT-17, #965). V1-Instanzen:
-`/display/hoerspiel/paula/alben`, `/display/hoerspiel/neko/alben`.
+`/display/hoerspiel/mia/alben`, `/display/hoerspiel/finn/alben`.
 Diese Verkabelung ist **Integration**, nicht App-Eigentum
 — Gegenstand des arbeitstag-Track-Schnitts (F4/F5).
 
@@ -1173,10 +1173,10 @@ dünner Telegram-Adapter, der `/<kind_id>/folgen-vorschlag` und
 ### HSP-31 — Kachel-Icon der Display-View
 Pro Instanz trägt `hoerspiel/views.json` einen eigenen Eintrag mit
 `kind_id`-tragender `pfad`-Form (URL-3a, RAT-17, #965). V1-Einträge:
-`slug: "alben-paula"` → `pfad: "/display/hoerspiel/paula/alben"` und
-`slug: "alben-neko"` → `pfad: "/display/hoerspiel/neko/alben"`.
-**#1263:** ein dritter Eintrag `slug: "alben-niclas"` →
-`pfad: "/display/hoerspiel/niclas/alben"` kommt hinzu (HSP-44-Checkliste
+`slug: "alben-mia"` → `pfad: "/display/hoerspiel/mia/alben"` und
+`slug: "alben-finn"` → `pfad: "/display/hoerspiel/finn/alben"`.
+**#1263:** ein dritter Eintrag `slug: "alben-emil"` →
+`pfad: "/display/hoerspiel/emil/alben"` kommt hinzu (HSP-44-Checkliste
 Punkt 4). Sein `zielgruppe`-Feld ist **deskriptiv** — es blendet die
 Instanz nicht aus einer Ansicht aus (HSP-46).
 Jeder Eintrag trägt `icons[]` mit dem Pfad **`arasaac/5915.png`**
@@ -1245,7 +1245,7 @@ und nicht Teil der V1-Standard-Test-Suite.
 
 Der Hörspiel-Buddy stellt eine Eltern-Mini-App bereit unter
 `<funnel-domain>/seiten/hoerspiel/<kind_id>/eltern` (kind_id-tragend
-nach RAT-17 / URL-3a, V1: `paula` oder `neko`), **gehostet vom seiten-
+nach RAT-17 / URL-3a, V1: `mia` oder `finn`), **gehostet vom seiten-
 Service** (Pattern wie Routine-Anpassen). Eine **gemeinsame Code-
 Basis** pro Instanz — die Mini-App liest die `<kind_id>` aus
 `window.location.pathname` und reicht sie an alle API-Calls weiter
@@ -1260,8 +1260,8 @@ Toggle (siehe HSP-3a-Begründung). Wohnort der View-Assets:
 **Bot-Menü-Buttons (Telegram-WebApp).** Im Eltern-Chat-Bot trägt das
 persistente Menü pro Hörspiel-Instanz einen eigenen Web-App-Button mit
 der jeweiligen kind-spezifischen URL. V1: zwei Einträge
-(`📚 Hörspiel Paula` → `<funnel>/seiten/hoerspiel/paula/eltern`,
-`📚 Hörspiel Neko` → `<funnel>/seiten/hoerspiel/neko/eltern`).
+(`📚 Hörspiel Mia` → `<funnel>/seiten/hoerspiel/mia/eltern`,
+`📚 Hörspiel Finn` → `<funnel>/seiten/hoerspiel/finn/eltern`).
 Konfiguration in `eltern-chat/config.py` als Liste; bei einem dritten
 Kind wird ein weiterer Eintrag handverdrahtet ergänzt (Option A aus
 RAT-17, keine Registry). Bot-Setup ruft die Telegram-API
@@ -1360,7 +1360,7 @@ setzt es auf den ersten Eintrag (Provider-Default).
 
 **Audio-Ausgabe-Schalter — entfällt (Audio-Ziel-Schalter SUPERSEDED 2026-07-27).**
 Die sechste Einstellungs-Karten-Zeile („Audio-Ausgabe", 2-Kachel-Wahl
-`display`/`panel`, Feld `audio_ziel`) und ihr Paula+Neko-UI-Kollaps entfallen mit
+`display`/`panel`, Feld `audio_ziel`) und ihr Mia+Finn-UI-Kollaps entfallen mit
 dem Ein-App-Default — Audio läuft immer lokal am App-Gerät (§13 SUPERSEDED).
 Code-/UI-Rückbau über #1471.
 
@@ -1370,8 +1370,8 @@ Code-/UI-Rückbau über #1471.
 Trigger „dritte Instanz" gefeuert (#1263, RATIFIZIERT 2026-07-03) →
 Aggregation iteriert jetzt über die Instanz-Liste (HSP-43), nicht über
 eine 2-Element-Konstante (`KIND_IDS_V1`):** Der Folgen-Tab lädt parallel
-die Folgen **aller Instanzen** aus der Instanz-Liste (V1: Paula, Neko,
-Niclas — gleichrangig, kein `zielgruppe`-Filter, HSP-46), mergt sie und
+die Folgen **aller Instanzen** aus der Instanz-Liste (V1: Mia, Finn,
+Emil — gleichrangig, kein `zielgruppe`-Filter, HSP-46), mergt sie und
 sortiert nach `erstellt-am` desc (gleicher Datumswert: `nummer` desc als
 Fallback).
 Jede Folge trägt ihre `kind_id` im JS-State — Player öffnet
@@ -1473,7 +1473,7 @@ Alter — RAT-17 Entscheidung „Single Source of Truth pro Instanz" (vgl.
 E-HFE-3): Alter lebt nur in instance.json, nicht doppelt im Aufruf.
 
 ```
-200 {"kind_id": "paula", "name": "Paula", "alter": 4,
+200 {"kind_id": "mia", "name": "Mia", "alter": 4,
      "themen": ["Mut beim Probieren", "Streit vertragen", …]}
 404 wenn kind_id unbekannt (kein hoerspiel-Pfad für diesen Wert)
 422 wenn das Alter der Instanz nicht in
@@ -1482,7 +1482,7 @@ E-HFE-3): Alter lebt nur in instance.json, nicht doppelt im Aufruf.
 
 Antwort-Felder: `kind_id` und `name` stammen aus `familie.json` (FK
 über `instance.json.kind_id`), `alter` aus der instance.json-Themen-
-Map-Schlüssel-Wahl (V1 ein Schlüssel je Instanz, z. B. „4" für Paula).
+Map-Schlüssel-Wahl (V1 ein Schlüssel je Instanz, z. B. „4" für Mia).
 Die `name`-Mitlieferung erlaubt dem HFE-Skill personalisierte Tool-
 Result-Texte („Vorschläge für \<Name> …", HFE-3).
 
@@ -1589,15 +1589,15 @@ ihren Stellen als SUPERSEDED markiert. Der Code-/UI-Rückbau für `audio_ziel` u
 ## 14. Mehr-Instanz-Modell (n≥3) — #1263
 
 > RATIFIZIERT 2026-07-03 (#1263, ENTSCHEID-1263). Reaktiviert den in
-> HSP-28a gesetzten Wiederaufnahme-Trigger: die dritte Instanz (Niclas,
+> HSP-28a gesetzten Wiederaufnahme-Trigger: die dritte Instanz (Emil,
 > Erwachsener) ist da. Der Cut wird **hörspiel-lokal** aufgelöst
 > (Instanz-Liste als Runtime-Iteration), **nicht** als plattformweite
 > RAT-17-Registry.
 
 ### HSP-43 — Hörspiel-lokale Instanz-Liste (Runtime-Iteration) mit Scope-Grenze
 Der Buddy führt eine **hörspiel-lokale Instanz-Liste** der verdrahteten
-Instanzen (V1: `paula`, `neko`, `niclas`). Sie ersetzt die bisher
-binären „Paula-oder-Neko"-Annahmen durch eine **Iteration über die
+Instanzen (V1: `mia`, `finn`, `emil`). Sie ersetzt die bisher
+binären „Mia-oder-Finn"-Annahmen durch eine **Iteration über die
 Liste** — überall dort, wo Code heute genau zwei Instanzen voraussetzt:
 Partner-/„andere Instanz"-Bezug (Face-Pille HSP-3a), Folgen-Aggregation
 (HSP-35 `KIND_IDS_V1`), HFE-Klassifikator-`enum` (`kind_id`-Auswahl),
@@ -1645,23 +1645,23 @@ Definition-of-Done für „Instanz X existiert":
    aus der Instanz-Liste, HSP-43).
 6. **`hoerspiel_oeffnen`-Launcher** — Instanz ist über den Launcher-Skill
    erreichbar (`specs/platform/hoerspiel-oeffnen.md`), nicht hart auf
-   Paula.
+   Mia.
 7. **Daten-Bereich** — `xbuddy-data/hoerspiel/<kind_id>/instance.json`
    (+ bible, Shared-Assets) nach HSP-25/HSP-27.
-8. **Tests** — instanz-tragende Tests fixieren nicht `paula`/`neko`
+8. **Tests** — instanz-tragende Tests fixieren nicht `mia`/`finn`
    literal, sondern iterieren über die Instanz-Liste (HSP-43).
 
 (ENTSCHEID-1263 → F1 „der Cut ist GRÖSSER als 3 Stellen [BRICHT]" →
 Pflicht-Checkliste.)
 
 ### HSP-45 — Erwachsenen-Instanz allein über Daten (kein App-UI-Alters-Achse)
-Der Zielgruppen-Ton einer Instanz (kindlich für Paula/Neko, erwachsen
-für Niclas) lebt **ausschließlich in den Instanz-Daten**, nicht in einer
+Der Zielgruppen-Ton einer Instanz (kindlich für Mia/Finn, erwachsen
+für Emil) lebt **ausschließlich in den Instanz-Daten**, nicht in einer
 App-UI-Achse und nicht in Modul-Konstanten. Träger:
 
 - **instance.json (HSP-27)** trägt die zielgruppen-tragenden Felder
   `zielgruppe` (z. B. `"kind"` | `"erwachsen"`), `ton`/`perspektive` und
-  das instanz-eigene `alter` (bei Niclas ein Erwachsenen-Wert). Diese
+  das instanz-eigene `alter` (bei Emil ein Erwachsenen-Wert). Diese
   Felder sind Daten, je Instanz gepflegt.
 - **Story-Prompt parametrisiert (HSP-12).** Das Prompt-Template
   `prompts/geschichtenbuddy.md` enthält **keinen** hartkodierten
@@ -1671,20 +1671,20 @@ App-UI-Achse und nicht in Modul-Konstanten. Träger:
 
 **Name-Drift-Fix (Pflicht-Vorbedingung, behebt bestehenden Bug).** Heute
 erreicht der Instanz-Name den Story-Prompt nicht: `geschichtenbuddy.md`
-ist auf „Paula (4 Jahre)" hartkodiert, sodass die Neko-Instanz aktuell
-im Paula-Rahmen erzählt. **Wenn** eine Folge erzeugt wird, **dann** trägt
+ist auf „Mia (4 Jahre)" hartkodiert, sodass die Finn-Instanz aktuell
+im Mia-Rahmen erzählt. **Wenn** eine Folge erzeugt wird, **dann** trägt
 der an den LLM gereichte Prompt Name/Alter/Perspektive der **aufrufenden
-Instanz** (`kind_id`). Ohne diesen Fix erzählt auch Niclas „Paula" — der
+Instanz** (`kind_id`). Ohne diesen Fix erzählt auch Emil „Mia" — der
 Fix ist Vorbedingung der dritten Instanz.
 
 **Validierung (Zwei-Wege-Tür, das Tun ist das Experiment).** Je eine
-Paula- und eine Niclas-Folge erzeugen und lesen. **Kill-Kriterium:**
+Mia- und eine Emil-Folge erzeugen und lesen. **Kill-Kriterium:**
 passt Ton/Länge/Sicherheitsrahmen bei einer Zielgruppe mit **einer**
 gemeinsamen Prompt-Schale nicht, dann **getrennte Prompt-Vorlagen je
 Zielgruppe** (weiter Daten-getrieben, weiterhin keine App-Achse).
 
-*Test-Implikation:* eine für `kind_id=niclas` erzeugte Folge nennt an
-keiner Stelle den Namen einer anderen Instanz („Paula"/„Neko"); der
+*Test-Implikation:* eine für `kind_id=emil` erzeugte Folge nennt an
+keiner Stelle den Namen einer anderen Instanz („Mia"/„Finn"); der
 Prompt-Bau-Pfad ist ohne Netz gegen einen Mock-LLM testbar (Assertion
 auf die durchgereichten Variablen).
 
@@ -1692,21 +1692,21 @@ auf die durchgereichten Variablen).
 Prompt-Frage „zielgruppe/ton-Felder, Experiment Pflicht".)
 
 **OPEN-HSP-W (T1336, 2026-07-07) — DEFAULT_SERIEN_RAHMEN neutralisiert.**
-Der Code-Default in `hoerspiel/llm_service.py` war Paula-spezifisch
-(`"Stigi, Malini & Vögelchen …"`) — was für `neko` und jede weitere Instanz
-ohne gesetzte `instance.json` zu einem Paula-Serien-Leak führte.
+Der Code-Default in `hoerspiel/llm_service.py` war Mia-spezifisch
+(`"Stigi, Malini & Vögelchen …"`) — was für `finn` und jede weitere Instanz
+ohne gesetzte `instance.json` zu einem Mia-Serien-Leak führte.
 *Auflösung:* `DEFAULT_SERIEN_RAHMEN = ""` (leer); `_build_user_context`
 lässt die `Serie:`-Zeile bei leerem `serien_name` weg (minimal-neutral).
 Instanzen tragen ihren `serien_name` ausschließlich via `instance.json`;
 der Orchestrator-Deploy (T1336) provisioniert die Datei-Werte für
-`paula`/`neko`/`niclas`. *Restschuld:* bis die Live-`instance.json` je
+`mia`/`finn`/`emil`. *Restschuld:* bis die Live-`instance.json` je
 Instanz den `serien_name` trägt, erscheint keine `Serie:`-Zeile im Prompt
 (Folgen bleiben generisch gerahmt, nicht falsch gerahmt).
 
 **OPEN-HSP-X (T1382, 2026-07-07) — Display/`/config`-serien_name neutralisiert.**
 Parallel zum LLM-Pfad (OPEN-HSP-W) trug auch der **zweite** `serien_name`-
 Ausgabepfad — die Display-/Mini-App-Konfig-Antwort (`GET`/`PATCH /config`
-→ `_build_config_response`, `hoerspiel/main.py:627`) — einen Paula-Default
+→ `_build_config_response`, `hoerspiel/main.py:627`) — einen Mia-Default
 (`hoerspiel/config.py` `DEFAULT_SERIEN_NAME = "Stigi & Co."`), sodass eine
 Instanz ohne gesetzten `serien_name` „Stigi & Co." zurückspiegelte.
 *Auflösung:* der Code-Default ist **entfernt** (kein `DEFAULT_SERIEN_NAME`
@@ -1717,9 +1717,9 @@ LLM-Pfad. Damit tragen **beide** `serien_name`-Pfade (LLM + Display/config)
 den Namen ausschließlich aus `instance.json`; kein Modul-Default leakt mehr.
 
 ### HSP-46 — Keine Zielgruppen-Sicht-Trennung (Nic-Setzung 2026-07-03)
-Niclas erscheint als **gleichrangige** dritte Instanz in derselben
+Emil erscheint als **gleichrangige** dritte Instanz in derselben
 Face-Pille (HSP-3a), derselben Folgen-Aggregation (HSP-35) und demselben
-View-Bestand (HSP-31) wie Paula und Neko. Es gibt **keinen**
+View-Bestand (HSP-31) wie Mia und Finn. Es gibt **keinen**
 `zielgruppe`-Sichtbarkeits-Filter: das `zielgruppe`-Feld (HSP-45) ist
 **deskriptiv** (steuert Ton über Daten), **nicht** ein Achsen-Feld, das
 Instanzen aus einer Ansicht ausblendet. Kein App-UI-Element trennt
@@ -1790,8 +1790,8 @@ Oben eine **Umschalter-Pille** (Foto+Name je Instanz aus `familie.json`, FAM-8,
 Muster wie Face-Pille HSP-3a). Tap wechselt den aktiven `<kind_id>` → Regal +
 Player laden das andere Instanz-Bündel (`/api/v1/hoerspiel/<kind_id>/…`).
 Die Instanz-Auswahl **iteriert die hörspiel-lokale Instanz-Liste (HSP-43)** —
-kein 2-Element-Hardcode; sie trägt V1 `paula`, `neko`, `niclas`. `zielgruppe`
-ist deskriptiv (HSP-46) — die Erwachsenen-Instanz (Niclas, HSP-45) erscheint im
+kein 2-Element-Hardcode; sie trägt V1 `mia`, `finn`, `emil`. `zielgruppe`
+ist deskriptiv (HSP-46) — die Erwachsenen-Instanz (Emil, HSP-45) erscheint im
 Umschalter wie jede andere. Modell = **Umschalter je Kontext**, NICHT die
 aggregierte Cross-Kind-Liste des alten Folgen-Tabs (HSP-35). Resume-Namensräume
 sind `<kind_id>`-getrennt. Läuft beim Kind-Wechsel noch ein Fremd-Album weiter,
@@ -1896,9 +1896,9 @@ gelesen/geschrieben; Kapitel-Wahl + Skip (HSP-52); PWA-Manifest
 `display:standalone` + MediaSession (HSP-22); harter Folgen-Cache offline
 abspielbar (HSP-54).
 
-## 16. Recherchierte Erwachsenen-Generierung (niclas) — HSP-56..HSP-60
+## 16. Recherchierte Erwachsenen-Generierung (emil) — HSP-56..HSP-60
 
-Die Erwachsenen-Instanz (niclas, `zielgruppe:erwachsen`) generiert einen
+Die Erwachsenen-Instanz (emil, `zielgruppe:erwachsen`) generiert einen
 **recherchierten Zwei-Host-Deep-Dive** (Dialog-Skript `KIM:`/`RUBEN:`). Ratifiziert
 berater-runde 2026-07-05/06. **Recherche-Pivot (T1371, 2026-07-06):** der externe
 Such-Provider (Tavily) ist **entfernt**; die Recherche läuft über das
@@ -1910,7 +1910,7 @@ Dritt-Cloud. Single-Voice-Wiedergabe ist bewusst V0 (kein Multi-Voice-TTS).
 Zwei Prompt-Dateien `geschichtenbuddy-kind.md` / `geschichtenbuddy-erwachsen.md`;
 `_load_system_prompt(zielgruppe)` (`hoerspiel/llm_service.py`) wählt je Instanz. Die
 Kind-Datei ist die **byte-gleiche Umbenennung** der heutigen (Golden/Diff-Guard —
-paula/neko-Folgen bleiben identisch). Die Erwachsen-Datei **erlaubt düster** (niclas
+mia/finn-Folgen bleiben identisch). Die Erwachsen-Datei **erlaubt düster** (emil
 `ton`) und **erzwingt Dialog-Skript** (`KIM:`/`RUBEN:`) + META-Block statt narrativer
 Story-Absätze.
 
@@ -1941,10 +1941,10 @@ N-Suchen **hart gedeckelt** über `max_uses` am web_search-Tool (Vorschlag 3–5
 `web_search`-Capability / Quota-/Netz-Fehler / leeren Treffern: Folge **ohne**
 Recherche generieren + Log-Marker, kein harter Abbruch.
 
-**V0-Rest-Kanal-Klausel (niclas-Instanz, Nic-Setzung 2026-07-06):** Das `thema` ist
+**V0-Rest-Kanal-Klausel (emil-Instanz, Nic-Setzung 2026-07-06):** Das `thema` ist
 ein Freitext-Feld und kann PII tragen (Betreiber tippt z. B. Namen oder Ort ins Thema),
 was ohne Scrub-Schritt ungefiltert in die `web_search`-Anfrage fließt. Für die
-**niclas-Instanz (V0)** ist dieses Risiko **bewusst akzeptiert**: NUR der Betreiber
+**emil-Instanz (V0)** ist dieses Risiko **bewusst akzeptiert**: NUR der Betreiber
 (Nic) tippt Themen — kein Kind- oder Fremd-Input. Ein `thema`-Scrub/Ack-Schritt wird
 **PFLICHT**, sobald Nicht-Betreiber-Recherche-Instanzen entstehen (neuer Buddy,
 Familien-Multi-Tenancy o. ä.).
@@ -2074,12 +2074,12 @@ Geschwister-Drift produzieren). Eine plattformweite Konvention für die
 Komponente entsteht — wenn überhaupt — beim 2.–3. Vorkommen
 (Berater-Memory n=2-Regel).
 
-### E-HSP-12 — Dritte Instanz (Niclas): hörspiel-lokale Liste, Daten-Ton, keine Sicht-Trennung
+### E-HSP-12 — Dritte Instanz (Emil): hörspiel-lokale Liste, Daten-Ton, keine Sicht-Trennung
 *Datum:* 2026-07-03 (#1263, ENTSCHEID-1263) · Nic-Verdikt: Hörspiel ist
 ein Familien-Ding, die Erwachsenen-Instanz ist dauerhaft gewollt (HSP-28a
 reaktiviert). Der Mehr-Instanz-Cut wird **hörspiel-lokal** über eine
 Runtime-Iterations-Liste gelöst (HSP-43), der Erwachsenen-Ton **rein über
-Instanz-Daten** (HSP-45), und Niclas erscheint **gleichrangig ohne
+Instanz-Daten** (HSP-45), und Emil erscheint **gleichrangig ohne
 Zielgruppen-Sicht-Filter** (HSP-46). **Verworfen:** (a) generische
 RAT-17-Registry mit Ports/Origins in der Liste — bleibt vertagt bis zur
 zweiten n-Instanz-Buddy-Klasse (Premature Generalization); (b) App-UI-
@@ -2091,12 +2091,12 @@ OPEN-HSP-S bis zur Settings-App-als-Player.
 *Datum:* 2026-07-08 (fix/hoerspiel-switcher-cycle, #1406) ·
 *Supersedes ENTSCHEID-1263 F2 „Face-Pille als Reihe bei n≥3".*
 Nic-Verdikt: „zwei Knöpfe die sich widersprechen" — die additiven Pillen
-der übrigen Instanzen (Neko + Niclas) erzeugen aus Paulas View einen
+der übrigen Instanzen (Finn + Emil) erzeugen aus Mias View einen
 visuellen Widerspruch ohne klare Semantik. **Lösung: EIN Cycle-Toggle.**
 Die Pille zeigt das **aktive Kind** (Ring + Foto + Name) und einen
 „↔ wechseln"-Hinweis; Tap führt per vollständiger Navigation zur
 **nächsten Instanz im Ring** (`config.INSTANZEN`-Reihenfolge, wrap-around,
-z. B. paula→neko→niclas→paula), gefiltert auf Registry-vorhandene Personen.
+z. B. mia→finn→emil→mia), gefiltert auf Registry-vorhandene Personen.
 Muster: analog `nextKindId` in `hoerspiel/static/player.js`. Kein JS-State
 (RAT-17 Option A), localStorage-Namensräume unverändert URL-getrennt (HSP-23).
 **1-Instanz-Solo-Fall bleibt unverändert** (kein Wechsel-Link, `face-pille--solo`).
@@ -2107,7 +2107,7 @@ Muster: analog `nextKindId` in `hoerspiel/static/player.js`. Kein JS-State
 
 Diese Spec entstand am 2026-06-12 aus einem zweitägigen Brainstorm
 (2026-06-11/12) mit Nic. Werft-Input:
-`brainstorm/ideas/paula-hoerspiel-app/spec_entwurf.md` (HSP-* IDs analog
+`brainstorm/ideas/mia-hoerspiel-app/spec_entwurf.md` (HSP-* IDs analog
 übernommen), `workflow_album_modell.md` (Album-/Bündel-/Resume-Mechanik),
 Welt-Bible und Folgen-Historie aus 20 Vorgänger-Folgen. Brainstorm-Retro:
 `~/brainstorm/2026-06-12-retro.md` (TTS-Stack-Fixierungen, Anti-Pattern-

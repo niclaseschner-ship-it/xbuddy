@@ -259,7 +259,7 @@ def test_send_inline_keyboard_mit_url_button():
     opener = _CapturingOpener(_ok_response({"message_id": 2}))
     tc = _make_tc_with_opener(opener)
 
-    pwa_url = "https://buddyboard.taile235cf.ts.net/essen-einkauf/"
+    pwa_url = "https://buddyboard.<tailscale-id>.ts.net/essen-einkauf/"
     tc.send_inline_keyboard(
         chat_id=42, text="Einkaufsliste",
         buttons=[{"label": "Im Browser öffnen", "url": pwa_url}])

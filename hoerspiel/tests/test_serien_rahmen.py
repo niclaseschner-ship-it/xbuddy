@@ -29,10 +29,10 @@ def test_ac3_partial_instance_json_name_alter_themen_fallback():
     """T1336/AC3: partial instance.json (kind_id+serien_name+ton+perspektive ONLY)
     → name/alter/themen_je_alter fallen auf sichere Defaults zurück, kein Crash.
     """
-    neko_serie = "Quasiluxi, Alpaki & Haski — Die Kuscheltier-Abenteuer im Gelben Haus"
+    finn_serie = "Quasiluxi, Alpaki & Haski — Die Kuscheltier-Abenteuer im Gelben Haus"
     partial = {
-        "kind_id": "neko",
-        "serien_name": neko_serie,
+        "kind_id": "finn",
+        "serien_name": finn_serie,
         "ton": "verspielt, bunt",
         "perspektive": "Wir-Perspektive",
         # name, alter, themen_je_alter absichtlich NICHT gesetzt
@@ -40,10 +40,10 @@ def test_ac3_partial_instance_json_name_alter_themen_fallback():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         _write_instance(tmpdir, partial)
-        inst = config_mod.load_instance(tmpdir, kind_id="neko")
+        inst = config_mod.load_instance(tmpdir, kind_id="finn")
 
     # serien_name, ton, perspektive aus Datei
-    assert inst.serien_name == neko_serie, \
+    assert inst.serien_name == finn_serie, \
         "AC3: serien_name muss aus partial instance.json übernommen werden"
     assert inst.ton == "verspielt, bunt", \
         "AC3: ton muss aus partial instance.json übernommen werden"
@@ -52,8 +52,8 @@ def test_ac3_partial_instance_json_name_alter_themen_fallback():
 
     # name/alter: sichere Fallback-Werte (kein Crash, kein fremder Name)
     assert isinstance(inst.name, str), "AC3: name muss str sein"
-    assert "Paula" not in inst.name, \
-        "AC3: kein Paula-Leak im name-Fallback"
+    assert "Mia" not in inst.name, \
+        "AC3: kein Mia-Leak im name-Fallback"
     assert isinstance(inst.alter, int), "AC3: alter muss int sein"
     # alter=0 ist der designierte Leer-Wert (HSP-27: Alter 0 → 422 bei Themen-Endpoint)
 
@@ -90,17 +90,17 @@ def test_ac3_serien_name_aus_partial_instance_json_landet_im_prompt():
                 "text": "Folge 1: T.\n\nEin Absatz.",
             }
 
-    neko_serie = "Quasiluxi, Alpaki & Haski — Die Kuscheltier-Abenteuer im Gelben Haus"
+    finn_serie = "Quasiluxi, Alpaki & Haski — Die Kuscheltier-Abenteuer im Gelben Haus"
     partial = {
-        "kind_id": "neko",
-        "serien_name": neko_serie,
+        "kind_id": "finn",
+        "serien_name": finn_serie,
         "ton": "verspielt, bunt",
         "perspektive": "Wir-Perspektive",
     }
 
     with tempfile.TemporaryDirectory() as tmpdir:
         _write_instance(tmpdir, partial)
-        inst = config_mod.load_instance(tmpdir, kind_id="neko")
+        inst = config_mod.load_instance(tmpdir, kind_id="finn")
 
     llm = _RecordingLLM()
     llm_service.erzeuge_folgen_vorschlag(
@@ -115,7 +115,7 @@ def test_ac3_serien_name_aus_partial_instance_json_landet_im_prompt():
         serien_name=inst.serien_name,
     )
     user = llm.last_user
-    assert neko_serie in user, \
+    assert finn_serie in user, \
         "AC3+AC2a: serien_name aus partial instance.json muss im LLM-Prompt landen"
     assert "Stigi, Malini" not in user, \
-        "AC3+AC2a: Paulas Serie darf im neko-Prompt NICHT erscheinen"
+        "AC3+AC2a: Mias Serie darf im finn-Prompt NICHT erscheinen"

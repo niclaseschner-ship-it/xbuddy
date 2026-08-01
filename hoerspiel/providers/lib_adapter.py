@@ -70,7 +70,7 @@ class LibSingleshotAdapter(LLMProvider):
         self._model = model
         self._max_tokens = max_tokens
         # T1371: Agent-Sicht (mit opt-in web_search) wird LAZY beim ersten
-        # Recherche-Bedarf gebaut — Kind-Instanzen (paula/neko) recherchieren nie
+        # Recherche-Bedarf gebaut — Kind-Instanzen (mia/finn) recherchieren nie
         # und ziehen keine dritte Fassade beim Boot.
         self._agent = None
         # Für Diagnose/Tests sichtbar (gleiche Modell-Quelle wie die Fassade).

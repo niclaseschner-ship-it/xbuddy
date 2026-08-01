@@ -22,10 +22,10 @@ from tasks import TurnContext
 from tools.initdata import session_cookie as sc
 
 # Test-Fixwerte.
-ERWACHSENER_A = 7    # Niclas
-ERWACHSENER_B = 42   # Sophia (zweiter Erwachsener — AC1: ALLE Erwachsenen)
+ERWACHSENER_A = 7    # Emil
+ERWACHSENER_B = 42   # Lena (zweiter Erwachsener — AC1: ALLE Erwachsenen)
 KEIN_ERWACHSENER = 8  # fremde oder Kind-ID
-ORIGIN = "https://buddyboard.taile235cf.ts.net"
+ORIGIN = "https://buddyboard.<tailscale-id>.ts.net"
 BOT_TOKEN = "123456:test-bot-token"
 
 

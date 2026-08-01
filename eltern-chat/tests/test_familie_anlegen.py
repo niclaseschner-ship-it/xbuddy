@@ -185,7 +185,7 @@ def test_FAA_1_returns_list_of_ids_for_single_person():
     tg = _member_tg()
     next_msg = stream(
         "erwachsene",     # Art
-        "Niclas",         # Name
+        "Emil",         # Name
         "überspringen",   # Foto
         "ok",             # Ring (Vorschlag übernehmen)
         "überspringen",   # E-Mail
@@ -195,10 +195,10 @@ def test_FAA_1_returns_list_of_ids_for_single_person():
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
     assert res.authorized is True
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     # Genau ein Schreib-Aufruf an den FAM-12-Endpunkt.
     assert len(client.anlage_calls) == 1
-    assert client.anlage_calls[0]["name"] == "Niclas"
+    assert client.anlage_calls[0]["name"] == "Emil"
 
 
 def test_FAA_1_returns_empty_list_on_immediate_cancel():
@@ -207,7 +207,7 @@ def test_FAA_1_returns_empty_list_on_immediate_cancel():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "kind", "Paula", "überspringen", "ok", "überspringen",
+        "kind", "Mia", "überspringen", "ok", "überspringen",
         "nein, doch nicht",   # FAA-7: nicht-bestätigende Antwort
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
@@ -222,15 +222,15 @@ def test_FAA_1_multiple_persons_in_one_call():
     tg = _member_tg()
     next_msg = stream(
         # Person 1
-        "erwachsene", "Niclas", "überspringen", "ok", "überspringen",
+        "erwachsene", "Emil", "überspringen", "ok", "überspringen",
         "überspringen", "ok",
         "ja",  # noch jemand?
         # Person 2
-        "kind", "Paula", "überspringen", "ok", "überspringen", "ok",
+        "kind", "Mia", "überspringen", "ok", "überspringen", "ok",
         "nein",  # Ende
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01", "person-paula-02"]
+    assert res.vergebene_ids == ["person-emil-01", "person-mia-02"]
     assert len(client.anlage_calls) == 2
     assert [c["art"] for c in client.anlage_calls] == ["erwachsene", "kinder"]
 
@@ -264,12 +264,12 @@ def test_FAA_3_repeats_question_on_empty_name():
     next_msg = stream(
         "erwachsene",
         "",                 # leerer Name → Wiederholung
-        "Niclas",
+        "Emil",
         "überspringen", "ok", "überspringen", "überspringen",
         "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     # Reject-Nachricht ist mindestens einmal gesendet.
     assert any(REJECT_NAME in s["text"] for s in tg.sent)
 
@@ -282,11 +282,11 @@ def test_FAA_3_repeats_question_on_invalid_art():
     next_msg = stream(
         "vielleicht",       # weder erwachsene noch kind → wiederholt
         "erwachsene",
-        "Niclas", "überspringen", "ok", "überspringen", "überspringen",
+        "Emil", "überspringen", "ok", "überspringen", "überspringen",
         "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert any(REJECT_KIND in s["text"] for s in tg.sent)
 
 
@@ -300,12 +300,12 @@ def test_FAA_3_skips_email_for_kind():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "kind", "Paula", "überspringen", "ok",
+        "kind", "Mia", "überspringen", "ok",
         # Keine E-Mail-Frage! Direkt Telegram-Schritt:
         "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-paula-01"]
+    assert res.vergebene_ids == ["person-mia-01"]
 
 
 def test_FAA_3_self_id_default_in_telegram_step():
@@ -315,12 +315,12 @@ def test_FAA_3_self_id_default_in_telegram_step():
     # Der Aufrufer ist Mitglied der Familien-Gruppe (FAA-2).
     tg = FakeTelegramFA(members={user_id: {"status": "member"}})
     next_msg = stream(
-        "erwachsene", "Niclas", "überspringen", "ok", "überspringen",
+        "erwachsene", "Emil", "überspringen", "ok", "überspringen",
         "ich",     # Self-Default
         "ok", "nein",
     )
     res = familie_anlegen(tg, 42, user_id, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert client.anlage_calls[0]["telegram_id"] == user_id
 
 
@@ -334,12 +334,12 @@ def test_FAA_4_suggests_first_free_palette_color():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "erwachsene", "Niclas", "überspringen",
+        "erwachsene", "Emil", "überspringen",
         "ok",                 # Vorschlag (blue) übernehmen
         "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert client.anlage_calls[0]["ring"] == "blue"
 
 
@@ -348,12 +348,12 @@ def test_FAA_4_override_with_palette_word():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "erwachsene", "Niclas", "überspringen",
+        "erwachsene", "Emil", "überspringen",
         "red",                # explizite Wahl statt Vorschlag
         "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert client.anlage_calls[0]["ring"] == "red"
 
 
@@ -362,13 +362,13 @@ def test_FAA_4_rejects_word_outside_palette():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "erwachsene", "Niclas", "überspringen",
+        "erwachsene", "Emil", "überspringen",
         "magenta",   # nicht in der Palette → REJECT
         "ok",        # Vorschlag annehmen
         "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert any(REJECT_RING in s["text"] for s in tg.sent)
 
 
@@ -404,16 +404,16 @@ def test_FAA_6_telegram_photo_uploaded_as_jpg():
     client = FakeFamilieClient()
     tg = _member_tg(downloads={"FILE-XL": b"\xff\xd8\xff_FAKEJPEG_"})
     next_msg = stream(
-        "erwachsene", "Niclas",
+        "erwachsene", "Emil",
         FaaInput(photo_file_id="FILE-XL"),
         "ok", "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert len(client.foto_calls) == 1
     upload = client.foto_calls[0]
-    assert upload["person_id"] == "person-niclas-01"
-    assert upload["dateiname"] == "person-niclas-01.jpg"
+    assert upload["person_id"] == "person-emil-01"
+    assert upload["dateiname"] == "person-emil-01.jpg"
     assert upload["content_type"] == "image/jpeg"
     assert upload["daten"] == b"\xff\xd8\xff_FAKEJPEG_"
 
@@ -425,14 +425,14 @@ def test_FAA_6_png_document_uploaded_as_png():
     png = _png_bytes(10, 10)
     tg = _member_tg(downloads={"DOC-PNG": png})
     next_msg = stream(
-        "erwachsene", "Niclas",
+        "erwachsene", "Emil",
         FaaInput(document_file_id="DOC-PNG",
                  document_mime_type="image/png",
                  document_size_hint=(10, 10)),
         "ok", "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert len(client.foto_calls) == 1
     upload = client.foto_calls[0]
     assert upload["content_type"] == "image/png"
@@ -446,7 +446,7 @@ def test_FAA_6_document_oversized_is_rejected():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "erwachsene", "Niclas",
+        "erwachsene", "Emil",
         FaaInput(document_file_id="X",
                  document_mime_type="image/png",
                  document_size_hint=(2000, 50)),  # 2000 > 1280 (Default) → ablehnen
@@ -454,7 +454,7 @@ def test_FAA_6_document_oversized_is_rejected():
         "ok", "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert any(REJECT_FOTO_GROSS in s["text"] for s in tg.sent)
     # Kein Foto-Upload — die Skill verwirft den Anhang lokal.
     assert client.foto_calls == []
@@ -465,13 +465,13 @@ def test_FAA_6_non_image_attachment_is_rejected():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "erwachsene", "Niclas",
+        "erwachsene", "Emil",
         FaaInput(document_file_id="X",
                  document_mime_type="application/pdf"),
         "überspringen", "ok", "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert any(REJECT_FOTO_MIME in s["text"] for s in tg.sent)
     assert client.foto_calls == []
 
@@ -481,11 +481,11 @@ def test_FAA_6_skipped_photo_leaves_foto_unset():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "erwachsene", "Niclas", "überspringen",
+        "erwachsene", "Emil", "überspringen",
         "ok", "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert client.foto_calls == []
 
 
@@ -499,11 +499,11 @@ def test_FAA_7_confirmation_word_releases_write():
     tg = _member_tg()
     # "ja" ist ein E-EC-7 Bestätigungswort.
     next_msg = stream(
-        "erwachsene", "Niclas", "überspringen", "ok",
+        "erwachsene", "Emil", "überspringen", "ok",
         "überspringen", "überspringen", "ja", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01"]
+    assert res.vergebene_ids == ["person-emil-01"]
     assert len(client.anlage_calls) == 1
 
 
@@ -512,7 +512,7 @@ def test_FAA_7_non_confirming_answer_does_not_write():
     client = FakeFamilieClient()
     tg = _member_tg()
     next_msg = stream(
-        "erwachsene", "Niclas", "überspringen", "ok",
+        "erwachsene", "Emil", "überspringen", "ok",
         "überspringen", "überspringen", "lieber doch nicht",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
@@ -554,7 +554,7 @@ def test_FAA_8_write_failure_signals_misserfolg_and_skips_foto():
         anlage_error=FamilieClientError("disk voll (simuliert)"))
     tg = _member_tg(downloads={"DOC": _png_bytes(8, 8)})
     next_msg = stream(
-        "erwachsene", "Niclas",
+        "erwachsene", "Emil",
         FaaInput(document_file_id="DOC",
                  document_mime_type="image/png",
                  document_size_hint=(8, 8)),
@@ -577,17 +577,17 @@ def test_FAA_9_loop_continues_then_ends():
     tg = _member_tg()
     next_msg = stream(
         # Person 1 (Erwachsene, ring „blue" als Vorschlag)
-        "erwachsene", "Niclas", "überspringen", "ok",
+        "erwachsene", "Emil", "überspringen", "ok",
         "überspringen", "überspringen", "ok",
         "ja",  # noch jemand?
         # Person 2 (Kind, ring „orange" wird Vorschlag)
-        "kind", "Paula", "überspringen", "ok", "überspringen", "ok",
+        "kind", "Mia", "überspringen", "ok", "überspringen", "ok",
         "nein",  # Ende
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)
-    assert res.vergebene_ids == ["person-niclas-01", "person-paula-02"]
+    assert res.vergebene_ids == ["person-emil-01", "person-mia-02"]
     # Erfolg-Nachricht zeigt beide.
-    assert any((DONE_MULTI % "person-niclas-01, person-paula-02") in s["text"]
+    assert any((DONE_MULTI % "person-emil-01, person-mia-02") in s["text"]
                for s in tg.sent)
 
 
@@ -621,7 +621,7 @@ def test_FAA_10_server_unreachable_signals_misserfolg():
         alle_error=FamilieClientError("Service nicht erreichbar (simuliert)"))
     tg = _member_tg()
     next_msg = stream(
-        "erwachsene", "Niclas", "überspringen", "ok",
+        "erwachsene", "Emil", "überspringen", "ok",
         "überspringen", "überspringen", "ok", "nein",
     )
     res = familie_anlegen(tg, 42, 7, -100, client, next_msg)

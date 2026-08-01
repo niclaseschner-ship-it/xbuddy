@@ -31,10 +31,10 @@ Jeder Instanz-Eintrag hat genau diese vier Felder:
 
 | Feld | Bedeutung |
 | --- | --- |
-| `slug` | opaker technischer Bezeichner (`paula`/`neko`/`niclas`) — an nginx/systemd/URL/Cookie gekoppelt. Bleibt stabil (INST-4). |
+| `slug` | opaker technischer Bezeichner (`mia`/`finn`/`emil`) — an nginx/systemd/URL/Cookie gekoppelt. Bleibt stabil (INST-4). |
 | `port` | Loopback-Port der Instanz — **Lese-Spiegel** von `conventions/ports.md`, kein Generator-Input (INST-3). |
 | `origin` | Origin der Instanz (`127.0.0.1:<port>`) — **Lese-Spiegel** der handverdrahteten nginx-/Eltern-Chat-Realität (INST-3). |
-| `display_name` | der Klarname, den die Familie sieht (`Paula`/`Neko`/`Niclas`) — der eigentliche config-out-Wert. |
+| `display_name` | der Klarname, den die Familie sieht (`Mia`/`Finn`/`Emil`) — der eigentliche config-out-Wert. |
 
 Andere Felder gehören nicht in diese Datei. Per-Kind-Fachdaten
 (Entwicklungsstufe, Themen o. Ä.) leben in
@@ -63,7 +63,7 @@ Unit-/Origin-Name aus einem Config-Feld darf im Konsumenten-Code auftauchen.
 ### INST-4 — Slugs sind opak und werden nie live umbenannt
 `slug` ist ein technischer, opaker String. Er ist an nginx-Origin,
 systemd-Unit, URL-Segment und Cookie-Domain gekoppelt — diese Kopplung ist
-atomar (alle-oder-404). Ein Live-Rename eines Slugs (`paula` → `kind1`) ist
+atomar (alle-oder-404). Ein Live-Rename eines Slugs (`mia` → `kind1`) ist
 **verboten**: er bricht laufenden Betrieb. Klarnamen ändern sich über
 `display_name` in `instanzen.json` (INST-2), **ohne** den Slug anzufassen.
 

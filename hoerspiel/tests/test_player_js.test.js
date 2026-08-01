@@ -52,29 +52,29 @@ function makeFetch(router) {
 
 /* ══ AC-B1/B2: reine Helfer ═════════════════════════════════════ */
 
-test('initialKindId: ?kind= gewinnt, sonst 1. Eintrag, sonst paula (HSP-49)', () => {
-  const liste = [{ kind_id: 'paula' }, { kind_id: 'neko' }, { kind_id: 'mila' }];
-  assert.equal(P.initialKindId(liste, '?kind=neko'), 'neko');
-  assert.equal(P.initialKindId(liste, '?kind=unbekannt'), 'paula'); // nicht in Liste → 1.
-  assert.equal(P.initialKindId(liste, ''), 'paula');
-  assert.equal(P.initialKindId([], ''), 'paula'); // Fallback Standalone
+test('initialKindId: ?kind= gewinnt, sonst 1. Eintrag, sonst mia (HSP-49)', () => {
+  const liste = [{ kind_id: 'mia' }, { kind_id: 'finn' }, { kind_id: 'mila' }];
+  assert.equal(P.initialKindId(liste, '?kind=finn'), 'finn');
+  assert.equal(P.initialKindId(liste, '?kind=unbekannt'), 'mia'); // nicht in Liste → 1.
+  assert.equal(P.initialKindId(liste, ''), 'mia');
+  assert.equal(P.initialKindId([], ''), 'mia'); // Fallback Standalone
 });
 
 test('labelKindId: Fremd-Album → aktivKindId, eigenes Album/null → kindId (AC1, HSP-48/49)', () => {
   // kein aktivKindId → Regal-Kind bleibt
-  assert.equal(P.labelKindId('paula', null), 'paula');
+  assert.equal(P.labelKindId('mia', null), 'mia');
   // aktivKindId == kindId → kein Fremd-Album
-  assert.equal(P.labelKindId('paula', 'paula'), 'paula');
+  assert.equal(P.labelKindId('mia', 'mia'), 'mia');
   // Cross-Kind: aktivKindId != kindId → Eigentümer
-  assert.equal(P.labelKindId('paula', 'neko'), 'neko');
-  assert.equal(P.labelKindId('neko', 'paula'), 'paula');
+  assert.equal(P.labelKindId('mia', 'finn'), 'finn');
+  assert.equal(P.labelKindId('finn', 'mia'), 'mia');
 });
 
 test('nextKindId iteriert die Liste (kein 2-Hardcode, HSP-49)', () => {
-  const liste = [{ kind_id: 'paula' }, { kind_id: 'neko' }, { kind_id: 'mila' }];
-  assert.equal(P.nextKindId(liste, 'paula'), 'neko');
-  assert.equal(P.nextKindId(liste, 'neko'), 'mila');
-  assert.equal(P.nextKindId(liste, 'mila'), 'paula'); // wrap
+  const liste = [{ kind_id: 'mia' }, { kind_id: 'finn' }, { kind_id: 'mila' }];
+  assert.equal(P.nextKindId(liste, 'mia'), 'finn');
+  assert.equal(P.nextKindId(liste, 'finn'), 'mila');
+  assert.equal(P.nextKindId(liste, 'mila'), 'mia'); // wrap
 });
 
 test('trackLabel: titel > art+position (Player erfindet keine Namen, HSP-52)', () => {
@@ -98,8 +98,8 @@ test('resumeStartIdx: Resume-Position → Track-Index, kein Treffer → 0 (HSP-5
 });
 
 test('audioCacheName: kind-getrennter Namensraum (HSP-54)', () => {
-  assert.equal(P.audioCacheName('paula', '7'), 'hoerspiel-audio-paula-v7');
-  assert.notEqual(P.audioCacheName('paula', '7'), P.audioCacheName('neko', '7'));
+  assert.equal(P.audioCacheName('mia', '7'), 'hoerspiel-audio-mia-v7');
+  assert.notEqual(P.audioCacheName('mia', '7'), P.audioCacheName('finn', '7'));
 });
 
 /* ══ AC-B1: HTML-Bausteine ══════════════════════════════════════ */
@@ -195,7 +195,7 @@ function offlineFetch() {
 test('apiAlben: online schreibt Alben-Liste write-through in den Cache (GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   const online = makeFetch(() => ({ json: [{ id: 'folge-22' }, { id: 'folge-21' }] }));
-  const alben = await P.apiAlben('paula', { fetch: online, cache });
+  const alben = await P.apiAlben('mia', { fetch: online, cache });
   assert.equal(alben.length, 2, 'online-Ergebnis durchgereicht');
   // write-through: unter META_ALBEN_KEY liegt die JSON-Liste
   const gecacht = await cache.match(P.META_ALBEN_KEY);
@@ -206,44 +206,44 @@ test('apiAlben: online schreibt Alben-Liste write-through in den Cache (GAP-2, H
 test('apiAlben: offline (fetch wirft) liest die Liste aus dem Cache — Regal rendert (GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   // Vorlauf: online einmal cachen …
-  await P.apiAlben('paula', { fetch: makeFetch(() => ({ json: [{ id: 'folge-22' }] })), cache });
+  await P.apiAlben('mia', { fetch: makeFetch(() => ({ json: [{ id: 'folge-22' }] })), cache });
   // … dann offline: fetch wirft → cache-fallback greift.
-  const alben = await P.apiAlben('paula', { fetch: offlineFetch(), cache });
+  const alben = await P.apiAlben('mia', { fetch: offlineFetch(), cache });
   assert.deepEqual(alben, [{ id: 'folge-22' }], 'offline aus dem Cache statt leerem Regal');
 });
 
 test('apiAlben: offline OHNE Cache wirft weiter (Aufrufer-Vertrag ladeKind bleibt, GAP-2)', async () => {
   const cache = new FakeCache();   // leer, nie befüllt
   await assert.rejects(
-    () => P.apiAlben('paula', { fetch: offlineFetch(), cache }),
+    () => P.apiAlben('mia', { fetch: offlineFetch(), cache }),
     /Failed to fetch/, 'ohne gecachte Liste bleibt der Fehler sichtbar');
 });
 
 test('apiManifest: online write-through, offline aus Cache pro Album (GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   const manifest = { tracks: [{ position: 1, 'audio-asset': '/audio/22/t1.mp3' }] };
-  await P.apiManifest('paula', 'folge-22', { fetch: makeFetch(() => ({ json: manifest })), cache });
+  await P.apiManifest('mia', 'folge-22', { fetch: makeFetch(() => ({ json: manifest })), cache });
   // eigener Schlüssel pro Album
   assert.ok(await cache.match(P.META_MANIFEST_PREFIX + 'folge-22'), 'Manifest unter album-eigenem Key gecacht');
-  const offline = await P.apiManifest('paula', 'folge-22', { fetch: offlineFetch(), cache });
+  const offline = await P.apiManifest('mia', 'folge-22', { fetch: offlineFetch(), cache });
   assert.deepEqual(offline, manifest, 'manifest.tracks lösen offline auf');
 });
 
 test('apiConfigGet: online write-through, offline aus Cache (GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   const cfg = { playback_tempo: 1.1, voice: 'stigi' };
-  await P.apiConfigGet('paula', { fetch: makeFetch(() => ({ json: cfg })), cache });
+  await P.apiConfigGet('mia', { fetch: makeFetch(() => ({ json: cfg })), cache });
   assert.ok(await cache.match(P.META_CONFIG_KEY), 'Config unter META_CONFIG_KEY gecacht');
-  const offline = await P.apiConfigGet('paula', { fetch: offlineFetch(), cache });
+  const offline = await P.apiConfigGet('mia', { fetch: offlineFetch(), cache });
   assert.deepEqual(offline, cfg, 'Config offline aus dem Cache');
 });
 
 test('evictAlbum lässt die Metadaten-Schlüssel unangetastet (LRU trifft /__hsp_*__ nie, GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   // Metadaten-Cache füllen …
-  await P.apiAlben('paula', { fetch: makeFetch(() => ({ json: [{ id: 'folge-22' }] })), cache });
-  await P.apiConfigGet('paula', { fetch: makeFetch(() => ({ json: { playback_tempo: 1 } })), cache });
-  await P.apiManifest('paula', 'folge-22', { fetch: makeFetch(() => ({ json: { tracks: [] } })), cache });
+  await P.apiAlben('mia', { fetch: makeFetch(() => ({ json: [{ id: 'folge-22' }] })), cache });
+  await P.apiConfigGet('mia', { fetch: makeFetch(() => ({ json: { playback_tempo: 1 } })), cache });
+  await P.apiManifest('mia', 'folge-22', { fetch: makeFetch(() => ({ json: { tracks: [] } })), cache });
   // … und ein Audio-Album precachen, dann evicten.
   const a = albumMitManifest(22);
   await P.precacheAlbum(cache, a.album, a.manifest, P.CACHE_N, makeFetch(() => ({ status: 200, body: 'MP3' })));
@@ -283,8 +283,8 @@ test('apiResumeGet: status "neu" → null, sonst {album,track} (HSP-51)', async 
       url.includes('album=leer')
         ? { json: { album: 'leer', track: 0, status: 'neu' } }
         : { json: { album: 'folge-22', track: 3 } });
-    assert.equal(await P.apiResumeGet('paula', 'leer'), null);
-    const r = await P.apiResumeGet('paula', 'folge-22');
+    assert.equal(await P.apiResumeGet('mia', 'leer'), null);
+    const r = await P.apiResumeGet('mia', 'folge-22');
     assert.deepEqual(r, { album: 'folge-22', track: 3 });
   } finally { global.fetch = saved; }
 });
@@ -294,9 +294,9 @@ test('apiResumeSet: PUT mit {album,track} an kind-getrennte Route (HSP-51)', asy
   try {
     const f = makeFetch(() => ({ json: { album: 'folge-22', track: 2 } }));
     global.fetch = f;
-    await P.apiResumeSet('neko', 'folge-22', 2);
+    await P.apiResumeSet('finn', 'folge-22', 2);
     const call = f.calls[0];
-    assert.match(call.url, /\/api\/v1\/hoerspiel\/neko\/resume$/);
+    assert.match(call.url, /\/api\/v1\/hoerspiel\/finn\/resume$/);
     assert.equal(call.method, 'PUT');
     assert.deepEqual(JSON.parse(call.body), { album: 'folge-22', track: 2 });
   } finally { global.fetch = saved; }
@@ -308,7 +308,7 @@ test('apiConfigPatch: 422 liefert ok:false + Fehler-Body (Toast-Pfad, HSP-34)', 
   const saved = global.fetch;
   try {
     global.fetch = makeFetch(() => ({ status: 422, json: { fehler: 'llm_model unbekannt' } }));
-    const res = await P.apiConfigPatch('paula', { llm_model: 'x' });
+    const res = await P.apiConfigPatch('mia', { llm_model: 'x' });
     assert.equal(res.ok, false);
     assert.equal(res.status, 422);
     assert.equal(res.body.fehler, 'llm_model unbekannt');
@@ -527,7 +527,7 @@ test('ended-swap: aktives ended setzt SYNCHRON preloadedSrc am SELBEN Element + 
   P._S.preloadedIdx = 1;
   P._S.preloadedSrc = 'blob:PRE1';   // Track 1 (idx) vorab aufgelöst
   P._S.aktivAlbum = { id: 'folge-22', nummer: 22, titel: 'Der See' };
-  P._S.aktivKindId = 'paula'; P._S.kindId = 'paula';
+  P._S.aktivKindId = 'mia'; P._S.kindId = 'mia';
   P._S.cache = null; P._S.cfg = { playback_tempo: 1.0 };   // cache=null → resolveTrackSrc = Netz-URL
   const savedFetch = global.fetch;
   global.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) });

@@ -505,7 +505,7 @@ def test_plan37_get_liest_kind_feld():
 def test_ac1_neu_icon_suche_input_im_html(client):
     """AC1: HTML traegt .neu-icon-suche-Input im sheet-neu-slot (freies Suchfeld).
 
-    Benutzer muss 'kalender' suchen koennen, auch wenn Slot-Name 'Termine Niclas' ist.
+    Benutzer muss 'kalender' suchen koennen, auch wenn Slot-Name 'Termine Emil' ist.
     Das Suchfeld ist von .neu-label-input getrennt.
     """
     body = client.get(_ENTRY_PATH).get_data(as_text=True)

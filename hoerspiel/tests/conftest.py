@@ -92,16 +92,16 @@ class FakeTTSEngine:
 # Seit #1656 lesen config.instanzen() + der Cycle-Ring die Instanz-Liste aus
 # instanzen.json (tools.instanzen). Die Datei ist gitignored/live und im Test
 # nicht vorhanden — ohne Naht fiele der Loader auf den kind1/kind2-Default (INST-6),
-# und die paula→neko→niclas-Ring-Tests brächen. Diese autouse-Fixture stellt eine
-# INST-2-konforme Datei über INSTANZEN_CONFIG_FILE bereit (paula/neko/niclas, PORT-2).
+# und die mia→finn→emil-Ring-Tests brächen. Diese autouse-Fixture stellt eine
+# INST-2-konforme Datei über INSTANZEN_CONFIG_FILE bereit (mia/finn/emil, PORT-2).
 
 _TEST_INSTANZEN = {
     "hoerspiel": [
-        {"slug": "paula", "port": 5053, "origin": "127.0.0.1:5053",
+        {"slug": "mia", "port": 5053, "origin": "127.0.0.1:5053",
          "display_name": "Kind Eins"},
-        {"slug": "neko", "port": 5055, "origin": "127.0.0.1:5055",
+        {"slug": "finn", "port": 5055, "origin": "127.0.0.1:5055",
          "display_name": "Kind Zwei"},
-        {"slug": "niclas", "port": 5056, "origin": "127.0.0.1:5056",
+        {"slug": "emil", "port": 5056, "origin": "127.0.0.1:5056",
          "display_name": "Kind Drei"},
     ]
 }
@@ -139,7 +139,7 @@ def data_root(tmp_path):
     (root / "shared-assets" / "intro.txt").write_text("Es war einmal — die Folge geht los.")
     (root / "shared-assets" / "outro.txt").write_text("Bis zum nächsten Mal — Stigi winkt.")
     (root / "bible.md").write_text(
-        "# Welt-Bible Stigi & Co.\n\nStigi ist ein Stieglitz im Dreisamtal.\n")
+        "# Welt-Bible Stigi & Co.\n\nStigi ist ein Stieglitz im Beispieltal.\n")
     (root / "folgen-historie.md").write_text(
         "## Folge 22: Schmuggli erzählt vom Trübsee\n\n"
         "Schmuggli berichtet von einer Reise zum Trübsee.\n")

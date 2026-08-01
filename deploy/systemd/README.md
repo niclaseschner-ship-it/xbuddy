@@ -25,8 +25,8 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 | `xbuddy-panel.service` | `panel/panel.service` | Panel-Registry (PREG-13/PREG-14/PREG-15, `GET /api/v1/panels`) | `127.0.0.1:5041` |
 | `xbuddy-essen.service` | `essen/essen.service` | Essens-Buddy (`/display/essen/`, `/api/v1/essen/`, ESSEN-23) | `127.0.0.1:5052` |
 | `xbuddy-eltern-chat.service` | `eltern-chat/eltern-chat.service` | Eltern-Chat Telegram-Bot (kein HTTP-Port, geht raus zu Telegram) | — |
-| `xbuddy-hoerspiel.service` | `hoerspiel/hoerspiel.service` | Hörspiel-Buddy für Paula (`/display/hoerspiel/paula/`, `/api/v1/hoerspiel/paula/`) | `127.0.0.1:5053` |
-| `xbuddy-hoerspiel-neko.service` | `hoerspiel/hoerspiel-neko.service` | Hörspiel-Buddy für Neko (`/display/hoerspiel/neko/`, `/api/v1/hoerspiel/neko/`) | `127.0.0.1:5055` |
+| `xbuddy-hoerspiel.service` | `hoerspiel/hoerspiel.service` | Hörspiel-Buddy für Mia (`/display/hoerspiel/mia/`, `/api/v1/hoerspiel/mia/`) | `127.0.0.1:5053` |
+| `xbuddy-hoerspiel-finn.service` | `hoerspiel/hoerspiel-finn.service` | Hörspiel-Buddy für Finn (`/display/hoerspiel/finn/`, `/api/v1/hoerspiel/finn/`) | `127.0.0.1:5055` |
 | `xbuddy-kibuddy.service` | `kibuddy/kibuddy.service` | KI-Buddy (KIBUDDY-21, `/api/v1/kibuddy/`, OpenAI/Anthropic-LLM-Integration) | `127.0.0.1:5054` |
 
 Jeder HTTP-Service bindet ausschließlich auf `127.0.0.1` (PORT-3) — von
@@ -49,7 +49,7 @@ Die `*.service`-Dateien enthalten Per-Instanz-Werte als Platzhalter im Format
 | `__XBUDDY_DATA__` | Wurzel der Per-Instanz-Daten außerhalb des Checkouts (SVC-5). | `/home/buddy/xbuddy-data` |
 | `__XBUDDY_DISPLAY_ORIGIN_HEIM__` | Heimnetz-Origin für Display-URLs (SREG-7: eine Origin, Routing im Router). | `https://xbuddy-hub.local:8443` |
 | `__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__` | Tailscale-Origin für Display-URLs (SREG-7: 4-Segment-Form, tauscht Platzhalter in Tailnet-Slug). | `https://xbuddy-hub.tailnet-xxxx.ts.net:8443` |
-| `__XBUDDY_DISPLAY_ORIGIN_FUNNEL__` | Funnel-FQDN mit LE-Cert für Familien-User-Geräte (SREG-7, AUTH-7b). Leer = kein externer User-Geräte-Zugang (SEITEN_FUNNEL_ORIGIN). | `https://buddyboard.taile235cf.ts.net` |
+| `__XBUDDY_DISPLAY_ORIGIN_FUNNEL__` | Funnel-FQDN mit LE-Cert für Familien-User-Geräte (SREG-7, AUTH-7b). Leer = kein externer User-Geräte-Zugang (SEITEN_FUNNEL_ORIGIN). | `https://buddyboard.<tailscale-id>.ts.net` |
 
 Die `__…__`-Platzhalter erzwingen, dass nichts versehentlich vor dem `cp`
 als „passt schon" durchgeht — wer einen Service-File mit `__XBUDDY_REPO__`
@@ -158,7 +158,7 @@ bleibt klar.
        -e 's|__XBUDDY_DATA__|/home/buddy/xbuddy-data|g' \
        -e 's|__XBUDDY_DISPLAY_ORIGIN_HEIM__|https://xbuddy-hub.local:8443|g' \
        -e 's|__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__|https://xbuddy-hub.tailnet-xxxx.ts.net:8443|g' \
-       -e 's|__XBUDDY_DISPLAY_ORIGIN_FUNNEL__|https://buddyboard.taile235cf.ts.net|g' \
+       -e 's|__XBUDDY_DISPLAY_ORIGIN_FUNNEL__|https://buddyboard.<tailscale-id>.ts.net|g' \
        "${SVC_SRC[$svc]}" \
        | sudo tee "/etc/systemd/system/${svc}.service" >/dev/null
    done
@@ -209,15 +209,15 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `panel/` oder ein `panels.json`-Manifest | `sudo systemctl restart xbuddy-panel` |
 | `essen/` | `sudo systemctl restart xbuddy-essen` |
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
-| `hoerspiel/` (Repo-Code, shared zwischen Instanzen) | `sudo systemctl restart xbuddy-hoerspiel && sudo systemctl restart xbuddy-hoerspiel-neko` |
+| `hoerspiel/` (Repo-Code, shared zwischen Instanzen) | `sudo systemctl restart xbuddy-hoerspiel && sudo systemctl restart xbuddy-hoerspiel-finn` |
 | `kibuddy/` | `sudo systemctl restart xbuddy-kibuddy` |
 | `deploy/nginx/xbuddy-origin.conf` | `sudo nginx -t && sudo systemctl reload nginx` |
 
 **Hörspiel n-Instanz-Realität (RAT-17, `decisions/RAT-17-907-hoerbuchbuddy-n-instanzen.md`; PW-58 V1, ENTSCHEID-File `brainstorm/berater-runde/20260617-2330-RATIFIZIERT-pw58-pw52-disziplin-mechanik-katalog.md` Sektion „R2-Empfehlung → Fall 1 Schritt 1" mit Codex-Pass-2-Korrektur):**
 
-Paula und Neko sind getrennte Services (`conventions/ports.md:25-27`, `conventions/urls.md:207-208`). **Kind-spezifische Daten liegen NICHT im Repo**, sondern unter `xbuddy-data/hoerspiel/<kind_id>/` (`specs/buddies/hoerspiel.md:751-820`). Ein `git pull` sieht diese Daten nie — alle `hoerspiel/`-Repo-Touches sind per Definition Shared-Code und brauchen **BEIDE Services** neu gestartet.
+Mia und Finn sind getrennte Services (`conventions/ports.md:25-27`, `conventions/urls.md:207-208`). **Kind-spezifische Daten liegen NICHT im Repo**, sondern unter `xbuddy-data/hoerspiel/<kind_id>/` (`specs/buddies/hoerspiel.md:751-820`). Ein `git pull` sieht diese Daten nie — alle `hoerspiel/`-Repo-Touches sind per Definition Shared-Code und brauchen **BEIDE Services** neu gestartet.
 
-Eine frühere Idee, anhand des Pfad-Segments (`hoerspiel/config/paula.json`) zwischen Paula-only und Neko-only zu unterscheiden, wurde mit dem ratifizierten Stand verworfen: solche Pfade existieren im Repo nicht, und Datei-Namen mit „paula"/„neko" (Tests, CSS-Klassen, Mocks) sind selten kind-exklusiv. Reine Pfad-Segment-Heuristik wäre fragil — daher BEIDE bei jedem Repo-Diff unter `hoerspiel/`.
+Eine frühere Idee, anhand des Pfad-Segments (`hoerspiel/config/mia.json`) zwischen Mia-only und Finn-only zu unterscheiden, wurde mit dem ratifizierten Stand verworfen: solche Pfade existieren im Repo nicht, und Datei-Namen mit „mia"/„finn" (Tests, CSS-Klassen, Mocks) sind selten kind-exklusiv. Reine Pfad-Segment-Heuristik wäre fragil — daher BEIDE bei jedem Repo-Diff unter `hoerspiel/`.
 
 Reihenfolge bei einem Sammel-Pull, der mehrere Komponenten anfasst:
 zuerst die unabhängigen Backends (`xbuddy-familie`, `xbuddy-plan`,

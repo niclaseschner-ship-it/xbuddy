@@ -9,7 +9,7 @@
   "pause_titel_sek": 1.8,
   "_playback_tempo": "Wiedergabe-Geschwindigkeit im Mini-App-Player. Range 0.7–1.3. Default 1.0.",
   "playback_tempo": 1.0,
-  "_themen_je_alter": "Kuratierte Themen-Liste je Alter (HSP-27a). Key = Alter als String, Wert = Liste von Themen-Strings. V1 nur Alter 4 für Paula gepflegt.",
+  "_themen_je_alter": "Kuratierte Themen-Liste je Alter (HSP-27a). Key = Alter als String, Wert = Liste von Themen-Strings. V1 nur Alter 4 für Mia gepflegt.",
   "themen_je_alter": {
     "4": [
       "Mut beim Probieren",

@@ -24,7 +24,7 @@ ALL_SERVICES = {
     "xbuddy-plan", "xbuddy-wetter", "xbuddy-routine",
     "xbuddy-photo", "xbuddy-familie", "xbuddy-seiten",
     "xbuddy-panel", "xbuddy-essen", "xbuddy-eltern-chat", "xbuddy-hoerspiel",
-    "xbuddy-hoerspiel-neko", "xbuddy-kibuddy",
+    "xbuddy-hoerspiel-finn", "xbuddy-kibuddy",
 }
 
 
@@ -48,8 +48,8 @@ def _derive(*paths):
 # ── --derive: geteilter Mapper ─────────────────────────────────────────────
 
 def test_derive_hoerspiel_beide_instanzen():
-    # RAT-17: hoerspiel/-Repo-Touch trifft Paula UND Neko.
-    assert _derive("hoerspiel/main.py") == {"xbuddy-hoerspiel", "xbuddy-hoerspiel-neko"}
+    # RAT-17: hoerspiel/-Repo-Touch trifft Mia UND Finn.
+    assert _derive("hoerspiel/main.py") == {"xbuddy-hoerspiel", "xbuddy-hoerspiel-finn"}
 
 
 def test_derive_unbekannter_pfad_leer():
@@ -136,7 +136,7 @@ def test_port_class_alle_ports_stimmen_mit_ports_md():
         "xbuddy-wetter": 5030, "xbuddy-panel": 5041,
         "xbuddy-seiten": 5042, "xbuddy-routine": 5050, "xbuddy-photo": 5051,
         "xbuddy-essen": 5052, "xbuddy-hoerspiel": 5053, "xbuddy-kibuddy": 5054,
-        "xbuddy-hoerspiel-neko": 5055,
+        "xbuddy-hoerspiel-finn": 5055,
     }
     for svc, port in erwartet.items():
         res = _port_class(svc)

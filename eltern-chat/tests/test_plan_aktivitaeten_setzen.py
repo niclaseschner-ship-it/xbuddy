@@ -924,7 +924,7 @@ def _build_plan_json(path, tmp_path):
     data = {
         "slots": [
             {"schluessel": "act1", "art": "kalender-read", "icon": "star",
-             "kind": "paula"},
+             "kind": "mia"},
         ],
         "default_verantwortlichkeiten": {},
         "fenster_lesekind": 7,
@@ -989,7 +989,7 @@ def test_AC5_live_probe_pas_skill_post_plan_json_persistent(tmp_path):
     # Minimale Registry (Plan-Buddy braucht eine RegistryView).
     registry = plan_familie_mod.RegistryView([
         plan_familie_mod.Person(
-            "paula", "Paula", "purple", plan_familie_mod.KIND_KINDER)
+            "mia", "Mia", "purple", plan_familie_mod.KIND_KINDER)
     ])
     transport = _FakeKalenderTransport()
     plan_main_mod.configure(cfg, registry, transport, config_path=cfg_path)

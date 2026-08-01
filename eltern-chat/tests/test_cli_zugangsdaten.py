@@ -75,8 +75,8 @@ def _make_cfg():
     cfg.mini_app_einkauf_url = ""  # EZG-6 / #653: Mini-App-URL (leer = ENV-Fallback)
     cfg.mini_app_base_url = ""  # HOE-5 / HSP-47: Mini-App-Basis-URL (leer = RAO/HOE nicht im Katalog)
     cfg.hoerspiel_url_origin = ""  # HFE: leer = nicht im Katalog
-    cfg.hoerspiel_url_origin_neko = ""
-    cfg.hoerspiel_url_origin_niclas = ""
+    cfg.hoerspiel_url_origin_finn = ""
+    cfg.hoerspiel_url_origin_emil = ""
     cfg.kibuddy_origin_url = ""  # KAQS: leer = nicht im Katalog
     cfg.wetter_origin_url = ""  # WRO: leer = nicht im Katalog
     cfg.master_telegram_user_id = ""  # CNS-1 / #1380: leer = nicht im Katalog

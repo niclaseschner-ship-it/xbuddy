@@ -19,19 +19,19 @@
       "sichtbar": true
     },
     {
-      "_comment": "HSP-Beispiel-Kacheln. Beim Tap baut der Router /display/<app>/<view> = /display/hoerspiel/paula/alben (URL-3a, RAT-17). Audio läuft immer lokal am App-Gerät (HSP-41 aufgehoben). Eine Kachel pro Kind.",
-      "key":      "hoerspiel-paula",
+      "_comment": "HSP-Beispiel-Kacheln. Beim Tap baut der Router /display/<app>/<view> = /display/hoerspiel/mia/alben (URL-3a, RAT-17). Audio läuft immer lokal am App-Gerät (HSP-41 aufgehoben). Eine Kachel pro Kind.",
+      "key":      "hoerspiel-mia",
       "app":      "hoerspiel",
-      "view":     "paula/alben",
-      "label":    "Hörspiel Paula",
+      "view":     "mia/alben",
+      "label":    "Hörspiel Mia",
       "icons":    ["arasaac/2484.png"],
       "sichtbar": true
     },
     {
-      "key":      "hoerspiel-neko",
+      "key":      "hoerspiel-finn",
       "app":      "hoerspiel",
-      "view":     "neko/alben",
-      "label":    "Hörspiel Neko",
+      "view":     "finn/alben",
+      "label":    "Hörspiel Finn",
       "icons":    ["arasaac/2484.png"],
       "sichtbar": true
     }

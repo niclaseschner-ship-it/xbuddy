@@ -303,7 +303,7 @@ wird ein `intern`-Flag oder eine echte Rolle fällig. Bis dahin nicht auf Vorrat
 
 > **Nic-Setzung 2026-07-25 (#1458, enacted):** Self-signed-Tailnet-IP-Origins
 > werden aufgegeben. Alle Geräte erreichen die Shell über den Funnel-FQDN
-> (`buddyboard.taile235cf.ts.net`) mit LE-Zertifikat + Cookie. Die
+> (`buddyboard.<tailscale-id>.ts.net`) mit LE-Zertifikat + Cookie. Die
 > `display_url_origin_tailscale`-Slot wurde entfernt.
 
 | Config-Schlüssel | Bedeutung | Default |
@@ -326,7 +326,7 @@ SREG-5-Skill keinen tippbaren Link liefern und die SREG-12-Seite hat keine
 User-Geräte-Zugang nicht angeboten (kein Auto-Fallback — falsche Origin =
 Cookie im falschen Jar + nicht-erreichbarer Link).
 
-**Funnel-FQDN mit LE-Zertifikat** (`buddyboard.taile235cf.ts.net`-Muster,
+**Funnel-FQDN mit LE-Zertifikat** (`buddyboard.<tailscale-id>.ts.net`-Muster,
 `reference_tailscale_buddyboard`), über die **Familien-User-Geräte** die
 Shell/Views erreichen (AUTH-7b). Der **Pairing-Redirect** (`/auth/pair`,
 AUTH-2.a) muss **same-origin/relativ** bleiben — landet der
@@ -767,10 +767,10 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
 
   ```json
   {
-    "slug": "eltern-paula",
+    "slug": "eltern-mia",
     "typ": "mini-app",
-    "pfad": "/seiten/hoerspiel/paula/eltern",
-    "label": "Hörspiel pflegen (Paula)",
+    "pfad": "/seiten/hoerspiel/mia/eltern",
+    "label": "Hörspiel pflegen (Mia)",
     "synonyme": [
       "hoerspiel-einstellungen",
       "voice ändern",
@@ -779,7 +779,7 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
       "mistral",
       "claude"
     ],
-    "zeigt": "Hörspiel-Tuning (Voice, LLM-Anbieter/Modell, Tempo, Pausen) und Album-Galerie mit Multi-Track-Player für Paulas Instanz.",
+    "zeigt": "Hörspiel-Tuning (Voice, LLM-Anbieter/Modell, Tempo, Pausen) und Album-Galerie mit Multi-Track-Player für Mias Instanz.",
     "zielgruppe": "eltern",
     "web_app": {
       "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
@@ -789,8 +789,8 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
   }
   ```
 
-  (analog für Neko: `slug: "eltern-neko"`, `pfad: "/seiten/hoerspiel/neko/eltern"`,
-  `label: "Hörspiel pflegen (Neko)"`).
+  (analog für Finn: `slug: "eltern-finn"`, `pfad: "/seiten/hoerspiel/finn/eltern"`,
+  `label: "Hörspiel pflegen (Finn)"`).
 
   Begründung der Feld-Wahlen: Werft #848 ratifiziert die Eltern-Mini-App
   als HSP-33-Wohnort; #911 (2026-06-16) setzt Variante C — URL-parametrisch
@@ -802,8 +802,8 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
   Die ursprüngliche Absprache (`slug: "alben"`, `pfad: "/display/hoerspiel/alben"`,
   „bleibt unverändert") ist durch RAT-17 und den Mehr-Instanz-Cut obsolet.
   Die reale `hoerspiel/views.json` trägt seit #907/#908 zwei per-kind_id-Einträge:
-  `slug: "alben-paula"` (pfad `/display/hoerspiel/paula/alben`) und
-  `slug: "alben-neko"` (pfad `/display/hoerspiel/neko/alben`).
+  `slug: "alben-mia"` (pfad `/display/hoerspiel/mia/alben`) und
+  `slug: "alben-finn"` (pfad `/display/hoerspiel/finn/alben`).
   Der Singular-Eintrag `slug: "alben"` mit Pfad `/display/hoerspiel/alben`
   **existiert nicht mehr** — er wurde durch die zwei kind_id-Einträge ersetzt.
   Diese Spec-Änderung ratifiziert den tatsächlichen Stand (#965).
@@ -811,7 +811,7 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
 Bestehende Einträge (essen `wunsch`, routine `morgen`, seiten
 `uebersicht`) bleiben unverändert — Mini-App-Einträge kommen **neben** sie.
 Hoerspiel-Einträge sind seit RAT-17 / #965 kind_id-getrennt
-(`alben-paula`, `alben-neko`, `eltern-paula`, `eltern-neko`).
+(`alben-mia`, `alben-finn`, `eltern-mia`, `eltern-finn`).
 
 *Test (Aggregator):* `views.json` mit `typ: mini-app` → Eintrag im
 Inventar mit `typ: "mini-app"`, `web_app_url` und `funnel_url` korrekt

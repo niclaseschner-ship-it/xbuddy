@@ -68,8 +68,8 @@ mapping = load_mapping()
 
 
 def svc_names(cmd):
-    # Ein Mapping-Kommando kann mehrere Restarts enthalten (hoerspiel: Paula
-    # UND Neko in einem `&&`-Kommando) — alle einsammeln.
+    # Ein Mapping-Kommando kann mehrere Restarts enthalten (hoerspiel: Mia
+    # UND Finn in einem `&&`-Kommando) — alle einsammeln.
     return re.findall(r"systemctl\s+restart\s+(xbuddy-\S+)", cmd)
 
 

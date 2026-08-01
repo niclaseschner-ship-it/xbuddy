@@ -35,7 +35,7 @@ tools/ca/make-ca.sh
 
 # Pi mit fester LAN-IP — die SAN-Liste muss alle Adressen tragen, unter
 # denen die Origin erreichbar ist:
-tools/ca/make-ca.sh --san "DNS:xbuddy-hub.local,IP:192.168.178.78"
+tools/ca/make-ca.sh --san "DNS:xbuddy-hub.local,IP:192.168.0.78"
 ```
 
 Alle Optionen: `tools/ca/make-ca.sh --help`.
@@ -50,7 +50,7 @@ indem man `rootCA*.pem` löscht oder einen leeren `--out`-Ordner nutzt.
 Browser prüfen den Host gegen die SAN-Liste, nicht gegen den CN. Die Liste
 muss **jede** Adresse enthalten, unter der die Origin erreichbar ist —
 DNS-Name(n) und/oder IP. Format: komma-getrennt aus `DNS:<name>` und
-`IP:<addr>`, z. B. `--san "DNS:xbuddy-hub.local,IP:192.168.178.78"`.
+`IP:<addr>`, z. B. `--san "DNS:xbuddy-hub.local,IP:192.168.0.78"`.
 
 ## Auf den Geräten vertrauen
 

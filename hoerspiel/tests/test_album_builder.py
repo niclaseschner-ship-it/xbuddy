@@ -20,7 +20,7 @@ def test_album_bau_atomar_und_manifest_geschrieben(data_root, fake_llm, fake_tts
     text = _text(absatz_count=3, woerter=100)
     ergebnis = album_builder.baue_album(
         titel="Stigi und der See", text=text, voice="shimmer", idee="see",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     assert ergebnis.album_id == "folge-23"
     assert ergebnis.cached is False
@@ -45,7 +45,7 @@ def test_album_bau_historie_atomar_fortgeschrieben(data_root, fake_llm, fake_tts
     text = _text(absatz_count=2, woerter=80)
     album_builder.baue_album(
         titel="Neue Folge", text=text, voice="onyx", idee="x",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     nach = data_io.read_text_or_empty(historie_pfad)
     assert nach.startswith(vor)
@@ -59,7 +59,7 @@ def test_album_bau_idempotent_ueber_hash(data_root, fake_llm, fake_tts, fixed_no
     text = _text(absatz_count=2, woerter=80)
     ergebnis1 = album_builder.baue_album(
         titel="Selbe Folge", text=text, voice="shimmer", idee="x",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     tts_calls_nach_erst = len(fake_tts.calls)
     historie_nach_erst = data_io.read_text_or_empty(
@@ -67,7 +67,7 @@ def test_album_bau_idempotent_ueber_hash(data_root, fake_llm, fake_tts, fixed_no
 
     ergebnis2 = album_builder.baue_album(
         titel="Selbe Folge", text=text, voice="shimmer", idee="x",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     assert ergebnis2.album_id == ergebnis1.album_id
     assert ergebnis2.cached is True
@@ -84,7 +84,7 @@ def test_album_bau_fehlende_shared_assets_wirft(data_root, fake_llm, fake_tts, f
     with pytest.raises(tts_service.SharedAssetsMissing):
         album_builder.baue_album(
             titel="T", text=text, voice="shimmer", idee="x",
-            data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+            data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
         )
 
 
@@ -99,7 +99,7 @@ def test_album_bau_tts_fehler_laesst_historie_unveraendert(data_root, fake_llm, 
     with pytest.raises(TTSError):
         album_builder.baue_album(
             titel="T", text=text, voice="shimmer", idee="x",
-            data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fail_tts, now=fixed_now,
+            data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fail_tts, now=fixed_now,
         )
     nach = data_io.read_text_or_empty(historie_pfad)
     assert nach == vor
@@ -112,7 +112,7 @@ def test_album_bau_now_injektion_setzt_erstellt_am(data_root, fake_llm, fake_tts
     fixed = datetime(2027, 1, 5, 8, 0, tzinfo=ZoneInfo("Europe/Berlin"))
     ergebnis = album_builder.baue_album(
         titel="X", text=_text(), voice="onyx", idee="x",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=lambda: fixed,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=lambda: fixed,
     )
     with open(ergebnis.manifest_pfad) as f:
         manifest = json.load(f)
@@ -127,7 +127,7 @@ def test_liste_alben_sortiert_nach_nummer(data_root, fake_llm, fake_tts, fixed_n
         # Anstelle dessen reicht: Historie-Append + zweite Folge bekommt Nr=24, dritte Nr=25.
         album_builder.baue_album(
             titel="Titel-%s" % marker, text=text, voice="shimmer", idee="x",
-            data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+            data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
         )
     liste = album_builder.liste_alben(data_root)
     assert [a["nummer"] for a in liste] == sorted(a["nummer"] for a in liste)
@@ -138,7 +138,7 @@ def test_lade_manifest_returnt_sortierte_tracks(data_root, fake_llm, fake_tts, f
     text = _text(absatz_count=3, woerter=200)  # mehrere Inhalts-Tracks
     ergebnis = album_builder.baue_album(
         titel="T", text=text, voice="shimmer", idee="x",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     manifest = album_builder.lade_manifest(data_root, ergebnis.album_id)
     positions = [t.get("position") for t in manifest["tracks"]]
@@ -149,13 +149,13 @@ def test_album_manifest_cover_jpg_pfad(data_root, fake_llm, fake_tts, fixed_now)
     """HSP-26 (Q5 vom Orchestrator): cover-asset endet auf .jpg."""
     ergebnis = album_builder.baue_album(
         titel="T", text=_text(), voice="shimmer", idee="x",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     with open(ergebnis.manifest_pfad) as f:
         manifest = json.load(f)
     assert manifest["cover-asset"].endswith("cover-default.jpg")
-    assert manifest["cover-asset"] == album_manifest.cover_default_asset("paula")
-    assert "/display/hoerspiel/paula/data/" in manifest["cover-asset"]
+    assert manifest["cover-asset"] == album_manifest.cover_default_asset("mia")
+    assert "/display/hoerspiel/mia/data/" in manifest["cover-asset"]
 
 
 def test_album_bau_synopse_fehler_laesst_album_unsichtbar(
@@ -190,7 +190,7 @@ def test_album_bau_synopse_fehler_laesst_album_unsichtbar(
     with pytest.raises(ProviderError):
         album_builder.baue_album(
             titel="Synopse-Fail-Test", text=text, voice="shimmer", idee="x",
-            data_root=data_root, kind_id="paula", llm=fail_llm, tts_engine=fake_tts, now=fixed_now,
+            data_root=data_root, kind_id="mia", llm=fail_llm, tts_engine=fake_tts, now=fixed_now,
         )
 
     # Album-Verzeichnis darf NICHT angelegt worden sein
@@ -213,42 +213,42 @@ def test_album_bau_synopse_fehler_laesst_album_unsichtbar(
         "Index darf nach Synopse-Fehler nicht verändert sein")
 
 
-def test_lade_manifest_returnt_sortierte_tracks_neko(data_root, fake_llm, fake_tts, fixed_now):
-    """AC2 / T1027: lade_manifest() sortiert Tracks auch für kind_id='neko' korrekt.
+def test_lade_manifest_returnt_sortierte_tracks_finn(data_root, fake_llm, fake_tts, fixed_now):
+    """AC2 / T1027: lade_manifest() sortiert Tracks auch für kind_id='finn' korrekt.
 
-    Spiegelt test_lade_manifest_returnt_sortierte_tracks für die neko-Variante —
+    Spiegelt test_lade_manifest_returnt_sortierte_tracks für die finn-Variante —
     Lego-Konsistenz: kind_id darf keinen Einfluss auf Track-Sortierung haben.
     """
     text = _text(absatz_count=3, woerter=200)  # mehrere Inhalts-Tracks
     ergebnis = album_builder.baue_album(
-        titel="Neko Tracks Sortiert", text=text, voice="shimmer", idee="sort-test",
-        data_root=data_root, kind_id="neko", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        titel="Finn Tracks Sortiert", text=text, voice="shimmer", idee="sort-test",
+        data_root=data_root, kind_id="finn", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     manifest = album_builder.lade_manifest(data_root, ergebnis.album_id)
     assert manifest is not None, "Manifest muss nach dem Bau ladbar sein"
     positions = [t.get("position") for t in manifest["tracks"]]
     assert positions == sorted(positions, key=lambda p: int(p) if isinstance(p, int) else 99), (
-        "Tracks müssen aufsteigend nach position sortiert sein (neko-Variante, T1027/AC2)"
+        "Tracks müssen aufsteigend nach position sortiert sein (finn-Variante, T1027/AC2)"
     )
 
 
-def test_baue_album_neko_pfade_kein_paula(data_root, fake_llm, fake_tts, fixed_now):
-    """HSP-26 (#968): baue_album(kind_id='neko') schreibt Manifest-Pfade auf
-    neko/data/, nicht paula/data/. Acceptance-Criterion aus #968.
+def test_baue_album_finn_pfade_kein_mia(data_root, fake_llm, fake_tts, fixed_now):
+    """HSP-26 (#968): baue_album(kind_id='finn') schreibt Manifest-Pfade auf
+    finn/data/, nicht mia/data/. Acceptance-Criterion aus #968.
     """
     text = _text(absatz_count=2, woerter=80)
     ergebnis = album_builder.baue_album(
-        titel="Neko und der Mond", text=text, voice="shimmer", idee="mond",
-        data_root=data_root, kind_id="neko", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        titel="Finn und der Mond", text=text, voice="shimmer", idee="mond",
+        data_root=data_root, kind_id="finn", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     with open(ergebnis.manifest_pfad) as f:
         manifest = json.load(f)
 
     cover = manifest["cover-asset"]
-    assert "/display/hoerspiel/neko/data/" in cover, (
-        "cover-asset muss neko/data/ enthalten, nicht paula/data/ (#968, HSP-26)")
-    assert "/display/hoerspiel/paula/data/" not in cover, (
-        "cover-asset darf kein paula/data/ enthalten (#968)")
+    assert "/display/hoerspiel/finn/data/" in cover, (
+        "cover-asset muss finn/data/ enthalten, nicht mia/data/ (#968, HSP-26)")
+    assert "/display/hoerspiel/mia/data/" not in cover, (
+        "cover-asset darf kein mia/data/ enthalten (#968)")
 
     tracks = manifest["tracks"]
     intro_tracks = [t for t in tracks if t["art"] == "intro"]
@@ -257,11 +257,11 @@ def test_baue_album_neko_pfade_kein_paula(data_root, fake_llm, fake_tts, fixed_n
     assert inhalt_tracks, "mindestens ein inhalt-Track erwartet"
 
     intro_asset = intro_tracks[0]["audio-asset"]
-    assert "/display/hoerspiel/neko/data/" in intro_asset, (
-        "intro-asset muss neko/data/ enthalten (#968, HSP-26)")
-    assert "/display/hoerspiel/paula/data/" not in intro_asset
+    assert "/display/hoerspiel/finn/data/" in intro_asset, (
+        "intro-asset muss finn/data/ enthalten (#968, HSP-26)")
+    assert "/display/hoerspiel/mia/data/" not in intro_asset
 
     track_asset = inhalt_tracks[0]["audio-asset"]
-    assert "/display/hoerspiel/neko/data/" in track_asset, (
-        "track-asset muss neko/data/ enthalten (#968, HSP-26)")
-    assert "/display/hoerspiel/paula/data/" not in track_asset
+    assert "/display/hoerspiel/finn/data/" in track_asset, (
+        "track-asset muss finn/data/ enthalten (#968, HSP-26)")
+    assert "/display/hoerspiel/mia/data/" not in track_asset

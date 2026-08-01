@@ -4,7 +4,7 @@
 
 ## Kontext — warum der Pilot nicht mehr Pilot bleibt
 
-RAT-25 (2026-06-30) ratifizierte die Heim-Shell bewusst als **LAN-only-Pilot** (n=1, Paula-Tablet) — eingehegt, reversibel, keine Konvention. Leitbild damals: Pilot zuerst, strategischer Rollout erst nach Auth-Härtung.
+RAT-25 (2026-06-30) ratifizierte die Heim-Shell bewusst als **LAN-only-Pilot** (n=1, Mia-Tablet) — eingehegt, reversibel, keine Konvention. Leitbild damals: Pilot zuerst, strategischer Rollout erst nach Auth-Härtung.
 
 RAT-27 (2026-07-07) hob den LAN-only-Riegel via Auth-Funnel (AUTH-7b) auf: die Shell ist jetzt extern erreichbar für Geräte mit `xbuddy_session`-Cookie.
 

@@ -291,9 +291,9 @@ def strip_person_name(titel, personen):
     Trägt der Titel **genau einen** Personen-Namen aus der Familien-Registry
     (`personen` = `registry.alle()`), wird dieser Name aus dem Label entfernt —
     die Foto-Resolution (Foto-im-Ring) trägt dann die Identität, das Label den
-    verbleibenden Termin-Inhalt (z. B. „Niclas Zahnarzt" → „Zahnarzt").
+    verbleibenden Termin-Inhalt (z. B. „Emil Zahnarzt" → „Zahnarzt").
 
-    Bei **≥2** Namens-Treffern (z. B. „Sport mit Vera und Niclas") oder **0**
+    Bei **≥2** Namens-Treffern (z. B. „Sport mit Petra und Emil") oder **0**
     Treffern bleibt das Label **verbatim** — bei Mehrdeutigkeit trägt der
     Namens-Bezug semantisch, bei keinem Treffer gibt es nichts zu strippen.
 
@@ -414,7 +414,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     aktivitaets_slots = cfg.aktivitaets_slots()
     # person_id -> [schluessel, …] — alle kalender-read-Slots dieser Person.
     # Kann Kinder UND Erwachsene enthalten (T1178). Eine Person kann mehrere
-    # Slots haben (z.B. zwei Neko-Zeilen); alle müssen befüllt werden (#1145).
+    # Slots haben (z.B. zwei Finn-Zeilen); alle müssen befüllt werden (#1145).
     kind_zu_slot: dict = {}
     for _s in aktivitaets_slots:
         kind_zu_slot.setdefault(_s.kind, []).append(_s.schluessel)

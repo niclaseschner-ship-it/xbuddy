@@ -1,7 +1,7 @@
 {
   "name": "Hörspiel",
   "short_name": "Hörspiel",
-  "description": "Stigi & Co. — Hörspiele für Paula",
+  "description": "Stigi & Co. — Hörspiele für Mia",
   "start_url": "/display/hoerspiel/alben",
   "display": "standalone",
   "background_color": "#FBF2D4",

@@ -9,7 +9,7 @@ aus (POST /api/v1/hoerspiel/<kind_id>/alben). Der LLM-Aufruf lebt im
 Hörspiel-Buddy — dieser Skill ist ein dünner Konsument (E-HFE-2).
 
 `kind_id` ist Pflicht-Argument seit RAT-17 / E-HFE-6 (#910). Die
-Modul-Konstante PAULA_ALTER wurde damit ersetzt: Alter lebt in der
+Modul-Konstante MIA_ALTER wurde damit ersetzt: Alter lebt in der
 instance.json des Buddys, nicht im Skill (E-HFE-6, HSP-27).
 
 Pattern (E-HFE-5 / E-HFE-3): **propose → confirm**, NICHT Sofort-Wirkung.
@@ -56,7 +56,7 @@ VOICE_SHIMMER = "shimmer"
 VOICE_ONYX    = "onyx"
 VOICE_DEFAULT = VOICE_ONYX   # HSP-26-Default, Fallback wenn config nicht erreichbar (#995)
 
-# E-HFE-6 / RAT-17: PAULA_ALTER wurde entfernt. kind_id ist Pflicht-Argument
+# E-HFE-6 / RAT-17: MIA_ALTER wurde entfernt. kind_id ist Pflicht-Argument
 # von propose(); Alter zieht der Buddy aus seiner instance.json (HSP-27).
 
 # HFE-3 Sub-Case 2: JSON-Marker-Präfix für den Diskussions-Pattern.

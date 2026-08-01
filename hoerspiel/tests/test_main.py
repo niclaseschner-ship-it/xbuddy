@@ -101,7 +101,7 @@ def client_mini_no_auth(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini)
 @pytest.mark.skip(reason="V3 #898: Soft-Auth — Header optional, kein 401 mehr bei fehlendem Header")
 def test_config_ohne_auth_header_401(client_mini_no_auth):
     """HSP-39: GET /config ohne Authorization-Header → 401 oder 500."""
-    resp = client_mini_no_auth.get("/api/v1/hoerspiel/paula/config")
+    resp = client_mini_no_auth.get("/api/v1/hoerspiel/mia/config")
     # 500 wenn Token fehlt, 401 wenn Token da aber initData fehlt.
     assert resp.status_code in (401, 500)
 
@@ -109,7 +109,7 @@ def test_config_ohne_auth_header_401(client_mini_no_auth):
 @pytest.mark.skip(reason="V3 #898: Soft-Auth — Header optional, kein 401 mehr bei fehlendem Header")
 def test_themen_ohne_auth_header_401(client_mini_no_auth):
     # RAT-17 / #910: neue URL-Form mit kind_id
-    resp = client_mini_no_auth.get("/api/v1/hoerspiel/paula/themen")
+    resp = client_mini_no_auth.get("/api/v1/hoerspiel/mia/themen")
     assert resp.status_code in (401, 500)
 
 
@@ -119,7 +119,7 @@ def test_themen_ohne_auth_header_401(client_mini_no_auth):
 
 def test_get_config_pflichtfelder(client_mini):
     """HSP-34: GET /config muss alle Pflicht-Felder enthalten."""
-    resp = client_mini.get("/api/v1/hoerspiel/paula/config")
+    resp = client_mini.get("/api/v1/hoerspiel/mia/config")
     assert resp.status_code == 200
     body = resp.get_json()
 
@@ -155,7 +155,7 @@ def test_get_config_pflichtfelder(client_mini):
 
 def test_get_config_werte_entsprechen_data_config(client_mini):
     """HSP-34: GET /config-Werte kommen aus DataConfig."""
-    resp = client_mini.get("/api/v1/hoerspiel/paula/config")
+    resp = client_mini.get("/api/v1/hoerspiel/mia/config")
     body = resp.get_json()
     assert abs(body["pause_absatz_sek"] - 0.55) < 0.01
     assert abs(body["pause_titel_sek"] - 1.8) < 0.01
@@ -169,7 +169,7 @@ def test_get_config_werte_entsprechen_data_config(client_mini):
 
 def test_patch_config_playback_tempo_range_verletzung(client_mini):
     """HSP-40: playback_tempo=2.0 → 422."""
-    resp = client_mini.patch("/api/v1/hoerspiel/paula/config",
+    resp = client_mini.patch("/api/v1/hoerspiel/mia/config",
                              json={"playback_tempo": 2.0})
     assert resp.status_code == 422
     assert "fehler" in resp.get_json()
@@ -177,7 +177,7 @@ def test_patch_config_playback_tempo_range_verletzung(client_mini):
 
 def test_patch_config_unbekanntes_modell_422(client_mini):
     """HSP-40: unbekanntes llm_model → 422."""
-    resp = client_mini.patch("/api/v1/hoerspiel/paula/config",
+    resp = client_mini.patch("/api/v1/hoerspiel/mia/config",
                              json={"llm_model": "claude-ultra-9999"})
     assert resp.status_code == 422
 
@@ -197,7 +197,7 @@ def test_patch_config_mistral_ohne_key_422():
         bot_token="TEST",
     )
     client = main_mod.app.test_client()
-    resp = client.patch("/api/v1/hoerspiel/paula/config",
+    resp = client.patch("/api/v1/hoerspiel/mia/config",
                         json={"llm_provider": "mistral"})
     assert resp.status_code == 422
     assert "mistral" in resp.get_json().get("fehler", "").lower()
@@ -206,10 +206,10 @@ def test_patch_config_mistral_ohne_key_422():
 def test_patch_config_teilmenge_aendert_genau_diese(client_mini):
     """HSP-40: PATCH mit Teilmenge ändert nur die genannten Felder."""
     # Zuerst aktuellen Stand lesen
-    before = client_mini.get("/api/v1/hoerspiel/paula/config").get_json()
+    before = client_mini.get("/api/v1/hoerspiel/mia/config").get_json()
 
     # Nur playback_tempo ändern
-    resp = client_mini.patch("/api/v1/hoerspiel/paula/config", json={"playback_tempo": 1.1})
+    resp = client_mini.patch("/api/v1/hoerspiel/mia/config", json={"playback_tempo": 1.1})
     assert resp.status_code == 200
     body = resp.get_json()
     assert abs(body["playback_tempo"] - 1.1) < 0.01
@@ -225,7 +225,7 @@ def test_audio_endpoint_ohne_range_200(client_mini, data_root_mini):
     """HSP-37: Vollständiger Track ohne Range → 200."""
     # Track anlegen
     resp = client_mini.get(
-        "/api/v1/hoerspiel/paula/alben/folge-1/audio/track-02.mp3")
+        "/api/v1/hoerspiel/mia/alben/folge-1/audio/track-02.mp3")
     assert resp.status_code == 200
     assert resp.content_type == "audio/mpeg"
     # Cache-Header
@@ -235,7 +235,7 @@ def test_audio_endpoint_ohne_range_200(client_mini, data_root_mini):
 def test_audio_endpoint_mit_range_206(client_mini):
     """HSP-37: Range-Request → 206 Partial Content."""
     resp = client_mini.get(
-        "/api/v1/hoerspiel/paula/alben/folge-1/audio/track-02.mp3",
+        "/api/v1/hoerspiel/mia/alben/folge-1/audio/track-02.mp3",
         headers={"Range": "bytes=0-9"})
     # Flask/Werkzeug unterstützt Range → 206 oder 200 je nach Konditionierung
     assert resp.status_code in (200, 206)
@@ -245,7 +245,7 @@ def test_audio_endpoint_mit_range_206(client_mini):
 def test_audio_endpoint_album_nicht_gefunden_404(client_mini):
     """HSP-37: Album nicht vorhanden → 404."""
     resp = client_mini.get(
-        "/api/v1/hoerspiel/paula/alben/folge-999/audio/track-02.mp3")
+        "/api/v1/hoerspiel/mia/alben/folge-999/audio/track-02.mp3")
     assert resp.status_code == 404
 
 
@@ -255,7 +255,7 @@ def test_audio_endpoint_album_nicht_gefunden_404(client_mini):
 
 def test_resume_get_kein_stand_200_default(client_mini):
     """HSP-36 (geändert): kein Resume-Stand → 200 mit Default-Body, kein 404."""
-    resp = client_mini.get("/api/v1/hoerspiel/paula/resume?album=folge-unbekannt")
+    resp = client_mini.get("/api/v1/hoerspiel/mia/resume?album=folge-unbekannt")
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["album"] == "folge-unbekannt"
@@ -265,23 +265,23 @@ def test_resume_get_kein_stand_200_default(client_mini):
 
 def test_resume_put_und_get(client_mini):
     """HSP-36: PUT setzt Stand; GET liest ihn zurück."""
-    put_resp = client_mini.put("/api/v1/hoerspiel/paula/resume",
+    put_resp = client_mini.put("/api/v1/hoerspiel/mia/resume",
                                json={"album": "folge-1", "track": 3})
     assert put_resp.status_code == 200
     body = put_resp.get_json()
     assert body["album"] == "folge-1"
     assert body["track"] == 3
 
-    get_resp = client_mini.get("/api/v1/hoerspiel/paula/resume?album=folge-1")
+    get_resp = client_mini.get("/api/v1/hoerspiel/mia/resume?album=folge-1")
     assert get_resp.status_code == 200
     assert get_resp.get_json()["track"] == 3
 
 
 def test_resume_put_idempotent(client_mini):
     """HSP-36: Zweites PUT mit gleicher Position ist no-op (kein Fehler)."""
-    client_mini.put("/api/v1/hoerspiel/paula/resume",
+    client_mini.put("/api/v1/hoerspiel/mia/resume",
                     json={"album": "folge-1", "track": 2})
-    resp2 = client_mini.put("/api/v1/hoerspiel/paula/resume",
+    resp2 = client_mini.put("/api/v1/hoerspiel/mia/resume",
                              json={"album": "folge-1", "track": 2})
     assert resp2.status_code == 200
     assert resp2.get_json()["track"] == 2
@@ -289,13 +289,13 @@ def test_resume_put_idempotent(client_mini):
 
 def test_resume_put_und_get_verschiedene_alben(client_mini):
     """HSP-36: Resume-Stände verschiedener Alben leben separat."""
-    client_mini.put("/api/v1/hoerspiel/paula/resume",
+    client_mini.put("/api/v1/hoerspiel/mia/resume",
                     json={"album": "folge-1", "track": 2})
-    client_mini.put("/api/v1/hoerspiel/paula/resume",
+    client_mini.put("/api/v1/hoerspiel/mia/resume",
                     json={"album": "folge-2", "track": 5})
 
-    r1 = client_mini.get("/api/v1/hoerspiel/paula/resume?album=folge-1").get_json()
-    r2 = client_mini.get("/api/v1/hoerspiel/paula/resume?album=folge-2").get_json()
+    r1 = client_mini.get("/api/v1/hoerspiel/mia/resume?album=folge-1").get_json()
+    r2 = client_mini.get("/api/v1/hoerspiel/mia/resume?album=folge-2").get_json()
     assert r1["track"] == 2
     assert r2["track"] == 5
 
@@ -306,14 +306,14 @@ def test_resume_put_und_get_verschiedene_alben(client_mini):
 
 def test_themen_kind_id_liefert_themen_aus_datacfg(client_mini, data_root_mini):
     """HSP-38 / RAT-17 / #910 / ENTRY-PATH-PROBE:
-    GET /api/v1/hoerspiel/paula/themen → 200 mit {kind_id, name, alter, themen}.
+    GET /api/v1/hoerspiel/mia/themen → 200 mit {kind_id, name, alter, themen}.
 
     Kein ?alter=-Query. Kein instance.json vorhanden → ENV-Fallback greift
     (HOERSPIEL_KIND_ALTER + HOERSPIEL_KIND_NAME). Alter fehlt → 422.
 
     Da die Fixture kein instance.json legt, testet dieser Test den ENV-Fallback-
     Pfad. Bei Alter=0 (kein ENV): 422 (Alter nicht in themen_je_alter)."""
-    resp = client_mini.get("/api/v1/hoerspiel/paula/themen")
+    resp = client_mini.get("/api/v1/hoerspiel/mia/themen")
     # Ohne instance.json und ohne ENV: alter=0 → nicht in themen_je_alter → 422
     assert resp.status_code == 422
     body = resp.get_json()
@@ -322,15 +322,15 @@ def test_themen_kind_id_liefert_themen_aus_datacfg(client_mini, data_root_mini):
 
 def test_themen_mit_instance_json(runtime_cfg_with_mistral, data_root_mini):
     """HSP-38 / HSP-27 / RAT-17 / ENTRY-PATH-PROBE:
-    GET /api/v1/hoerspiel/paula/themen mit instance.json → 200 mit
-    {kind_id: "paula", name: "Paula", alter: 4, themen: [...]}.
+    GET /api/v1/hoerspiel/mia/themen mit instance.json → 200 mit
+    {kind_id: "mia", name: "Mia", alter: 4, themen: [...]}.
 
-    instance.json liegt in data_root_mini/instance.json mit kind_id="paula"."""
+    instance.json liegt in data_root_mini/instance.json mit kind_id="mia"."""
     import json
     # instance.json mit Themen anlegen
     instance = {
-        "kind_id": "paula",
-        "name": "Paula",
+        "kind_id": "mia",
+        "name": "Mia",
         "alter": 4,
         "themen_je_alter": {
             "4": ["Mut beim Probieren", "Streit vertragen", "Freundschaft"],
@@ -353,11 +353,11 @@ def test_themen_mit_instance_json(runtime_cfg_with_mistral, data_root_mini):
         bot_token="TEST",
     )
     client = main_mod.app.test_client()
-    resp = client.get("/api/v1/hoerspiel/paula/themen")
+    resp = client.get("/api/v1/hoerspiel/mia/themen")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["kind_id"] == "paula"
-    assert body["name"] == "Paula"
+    assert body["kind_id"] == "mia"
+    assert body["name"] == "Mia"
     assert body["alter"] == 4
     assert "Mut beim Probieren" in body["themen"]
     assert "Streit vertragen" in body["themen"]
@@ -365,9 +365,9 @@ def test_themen_mit_instance_json(runtime_cfg_with_mistral, data_root_mini):
 
 
 def test_themen_falsche_kind_id_404(client_mini):
-    """HSP-38 / RAT-17 / #910: GET /api/v1/hoerspiel/neko/themen → 404
+    """HSP-38 / RAT-17 / #910: GET /api/v1/hoerspiel/finn/themen → 404
     (kind_id nicht diese Instanz, _assert_self_kind)."""
-    resp = client_mini.get("/api/v1/hoerspiel/neko/themen")
+    resp = client_mini.get("/api/v1/hoerspiel/finn/themen")
     assert resp.status_code == 404
     assert "fehler" in resp.get_json()
 
@@ -378,8 +378,8 @@ def test_themen_alter_nicht_gepflegt_422(runtime_cfg_with_mistral, data_root_min
     import json
     import os
     instance = {
-        "kind_id": "paula",
-        "name": "Paula",
+        "kind_id": "mia",
+        "name": "Mia",
         "alter": 7,  # Alter 7 nicht in themen_je_alter
         "themen_je_alter": {
             "4": ["Mut beim Probieren"],
@@ -399,7 +399,7 @@ def test_themen_alter_nicht_gepflegt_422(runtime_cfg_with_mistral, data_root_min
         bot_token="TEST",
     )
     client = main_mod.app.test_client()
-    resp = client.get("/api/v1/hoerspiel/paula/themen")
+    resp = client.get("/api/v1/hoerspiel/mia/themen")
     assert resp.status_code == 422
     body = resp.get_json()
     assert "fehler" in body
@@ -493,8 +493,8 @@ def test_build_llm_mistral_slot_purpose_has_no_vendor_slug():
 # ============================================================
 #
 # ENTRY-PATH-PROBE:
-#   GET /display/hoerspiel/paula/alben → HTML enthält Face-Pille mit „Paula"
-#   und href="/display/hoerspiel/neko/alben" für den Switch-Link.
+#   GET /display/hoerspiel/mia/alben → HTML enthält Face-Pille mit „Mia"
+#   und href="/display/hoerspiel/finn/alben" für den Switch-Link.
 #   Plus Test mit Fehler-FamilieClient: HTML enthält keine Pille.
 #
 # Alle Tests: KEIN echter HTTP-Call — FamilieClient via transport-Naht gemockt.
@@ -522,14 +522,14 @@ def _make_error_transport():
 
 @pytest.fixture
 def client_mit_familie(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini):
-    """Test-Client mit Mock-FamilieClient, der Paula + Neko kennt."""
+    """Test-Client mit Mock-FamilieClient, der Mia + Finn kennt."""
     from hoerspiel import familie_client as fc_mod
 
     transport = _make_familie_transport([
-        {"id": "paula", "name": "Paula", "ring": "orange", "art": "kinder",
-         "foto": "/display/_shared/fotos/paula.jpg"},
-        {"id": "neko", "name": "Neko", "ring": "blue", "art": "kinder",
-         "foto": "/display/_shared/fotos/neko.jpg"},
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/mia.jpg"},
+        {"id": "finn", "name": "Finn", "ring": "blue", "art": "kinder",
+         "foto": "/display/_shared/fotos/finn.jpg"},
     ])
     mock_client = fc_mod.FamilieClient(
         origin_url="http://127.0.0.1:5010",
@@ -568,38 +568,38 @@ def client_ohne_familie(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini)
 
 def test_face_pille_rendert_mit_aktivem_kind(client_mit_familie):
     """HSP-3a / E-HSP-13 / ENTRY-PATH-PROBE:
-    GET /display/hoerspiel/paula/alben → 200 HTML enthält Cycle-Pille mit:
-    - Aktives Kind (Paula): Ring-Orange + Foto + Name in der Pille.
-    - href zum naechsten Kind im Ring (Neko) — vollständige Navigation (RAT-17 Option A).
-    - aria-label zeigt Ziel-Kind (Neko) an.
+    GET /display/hoerspiel/mia/alben → 200 HTML enthält Cycle-Pille mit:
+    - Aktives Kind (Mia): Ring-Orange + Foto + Name in der Pille.
+    - href zum naechsten Kind im Ring (Finn) — vollständige Navigation (RAT-17 Option A).
+    - aria-label zeigt Ziel-Kind (Finn) an.
     KEINE Reihe von Pillen der übrigen Kinder (AC1, Nic-Setzung 2026-07-08).
     """
-    resp = client_mit_familie.get("/display/hoerspiel/paula/alben")
+    resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    # Cycle-Pille: Link auf nächstes Kind im Ring (Neko).
-    assert 'href="/display/hoerspiel/neko/alben"' in html
-    # Aktives Kind (Paula) in der Pille sichtbar — NICHT das Ziel-Kind.
-    assert "Paula" in html
+    # Cycle-Pille: Link auf nächstes Kind im Ring (Finn).
+    assert 'href="/display/hoerspiel/finn/alben"' in html
+    # Aktives Kind (Mia) in der Pille sichtbar — NICHT das Ziel-Kind.
+    assert "Mia" in html
     # face-pille CSS-Klasse vorhanden.
     assert "face-pille" in html
-    # Ring des AKTIVEN Kinds (Paula = orange) — NICHT Nekos ring-blue.
+    # Ring des AKTIVEN Kinds (Mia = orange) — NICHT Finns ring-blue.
     assert "ring-orange" in html
-    # Foto des aktiven Kinds (Paula).
-    assert '/api/v1/familie/foto/paula' in html
-    # aria-label nennt das Ziel-Kind (Neko).
-    assert 'aria-label="Zu Neko wechseln"' in html
+    # Foto des aktiven Kinds (Mia).
+    assert '/api/v1/familie/foto/mia' in html
+    # aria-label nennt das Ziel-Kind (Finn).
+    assert 'aria-label="Zu Finn wechseln"' in html
 
 
 def test_face_pille_andere_kind_url_korrekt(client_mit_familie):
     """HSP-3a Variante C / RAT-17 Option A:
-    Link zeigt auf /display/hoerspiel/neko/alben — handverdrahtete Map paula→neko.
+    Link zeigt auf /display/hoerspiel/finn/alben — handverdrahtete Map mia→finn.
     Kein JS-State, kein Redirect-Schritt, direkter href.
     """
-    resp = client_mit_familie.get("/display/hoerspiel/paula/alben")
+    resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
     html = resp.data.decode("utf-8")
     # Exaktes href — RAT-17 handverdrahtet, KEINE Registry.
-    assert 'href="/display/hoerspiel/neko/alben"' in html
+    assert 'href="/display/hoerspiel/finn/alben"' in html
     # Kein JS-State-Wechsel — kein onclick-Handler nötig (plain <a>).
     assert 'data-switch' not in html
 
@@ -611,11 +611,11 @@ def test_face_pille_familie_fehler_rendert_ohne_pille(client_ohne_familie):
 
     Stop-Rule: Familie-Service unerreichbar im Test → Mock, kein echter HTTP-Call.
     """
-    resp = client_ohne_familie.get("/display/hoerspiel/paula/alben")
+    resp = client_ohne_familie.get("/display/hoerspiel/mia/alben")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     # Kein face-pille-Wechsel-Link bei Familie-Fehler.
-    assert 'href="/display/hoerspiel/neko/alben"' not in html
+    assert 'href="/display/hoerspiel/finn/alben"' not in html
     # Kein face-pille-Element sichtbar (weder Link noch solo).
     assert "face-pille" not in html
 
@@ -637,7 +637,7 @@ def test_familie_client_leerer_snapshot_bei_http_fehler():
     )
     registry = client.snapshot()
     assert registry.alle() == []
-    assert registry.get("paula") is None
+    assert registry.get("mia") is None
 
 
 def test_familie_client_person_felder_korrekt():
@@ -647,21 +647,21 @@ def test_familie_client_person_felder_korrekt():
     from hoerspiel import familie_client as fc_mod
 
     transport = _make_familie_transport([
-        {"id": "paula", "name": "Paula", "ring": "orange", "art": "kinder",
-         "foto": "/fotos/paula.jpg"},
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/fotos/mia.jpg"},
     ])
     client = fc_mod.FamilieClient(
         origin_url="http://127.0.0.1:5010",
         transport=transport,
     )
     registry = client.snapshot()
-    paula = registry.get("paula")
-    assert paula is not None
-    assert paula.id == "paula"
-    assert paula.name == "Paula"
-    assert paula.ring == "orange"
-    assert paula.foto == "/fotos/paula.jpg"
-    assert paula.is_kind() is True
+    mia = registry.get("mia")
+    assert mia is not None
+    assert mia.id == "mia"
+    assert mia.name == "Mia"
+    assert mia.ring == "orange"
+    assert mia.foto == "/fotos/mia.jpg"
+    assert mia.is_kind() is True
 
 
 # ============================================================
@@ -670,7 +670,7 @@ def test_familie_client_person_felder_korrekt():
 #
 # ENTRY-PATH-PROBE:
 #   1. alben.js enthält kind_id-tragende fetch-URLs (HSP-26).
-#   2. /display/hoerspiel/paula/alben HTML: Face-Pille <img> nutzt
+#   2. /display/hoerspiel/mia/alben HTML: Face-Pille <img> nutzt
 #      /api/v1/familie/foto/<id> (FAM-8), nicht relativen Pfad.
 
 
@@ -700,18 +700,18 @@ def test_alben_js_uses_kind_id_in_fetch(client_mit_familie):
 
 def test_face_pille_foto_url_absolute(client_mit_familie):
     """FAM-8 / ENTRY-PATH-PROBE / T950 / E-HSP-13:
-    GET /display/hoerspiel/paula/alben → <img src="/api/v1/familie/foto/paula">
-    in der Cycle-Pille (aktives_kind=paula; Pille zeigt AKIVES Kind, nicht Ziel).
+    GET /display/hoerspiel/mia/alben → <img src="/api/v1/familie/foto/mia">
+    in der Cycle-Pille (aktives_kind=mia; Pille zeigt AKIVES Kind, nicht Ziel).
 
-    Relativer Pfad wäre Bug — Browser resolved zu /display/hoerspiel/paula/paula.jpg
+    Relativer Pfad wäre Bug — Browser resolved zu /display/hoerspiel/mia/mia.jpg
     → 404 → Broken-Img (Vorbefund T950). Foto-URL muss absolut sein (FAM-8).
     """
-    resp = client_mit_familie.get("/display/hoerspiel/paula/alben")
+    resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
 
-    # FAM-8 absolute Foto-URL — Cycle-Pille zeigt aktives_kind=paula.
-    assert '/api/v1/familie/foto/paula' in html
+    # FAM-8 absolute Foto-URL — Cycle-Pille zeigt aktives_kind=mia.
+    assert '/api/v1/familie/foto/mia' in html
 
     # Kein relativer Pfad (relativer Pfad wäre Bug, HSP-3a FAM-8).
     import re
@@ -728,7 +728,7 @@ def test_audio_stream_endpoint_existiert(client_mini):
     """HSP-42: GET /audio-stream antwortet mit text/event-stream Content-Type."""
     # SSE-Stream darf nicht abgeschlossen werden — wir testen nur den Start
     # über die Response-Header. Werkzeug ruft den Generator lazy auf.
-    resp = client_mini.get("/api/v1/hoerspiel/paula/audio-stream",
+    resp = client_mini.get("/api/v1/hoerspiel/mia/audio-stream",
                            headers={"Accept": "text/event-stream"},
                            buffered=False)
     # Wir lesen nur die ersten Bytes, dann schließen wir.
@@ -763,7 +763,7 @@ def test_patch_config_persistiert_in_datei(tmp_path, runtime_cfg_with_mistral, d
             data_root=data_root_mini, bot_token="TEST",
         )
         client = main_mod.app.test_client()
-        resp = client.patch("/api/v1/hoerspiel/paula/config",
+        resp = client.patch("/api/v1/hoerspiel/mia/config",
                             json={"playback_tempo": 1.2})
         assert resp.status_code == 200
 
@@ -775,16 +775,16 @@ def test_patch_config_persistiert_in_datei(tmp_path, runtime_cfg_with_mistral, d
 
 
 # ============================================================
-#  HSP-43 / #1263 — Instanz-Liste treibt die Face-Pillen-Reihe (n≥3, niclas)
+#  HSP-43 / #1263 — Instanz-Liste treibt die Face-Pillen-Reihe (n≥3, emil)
 # ============================================================
 
 
-def test_config_instanzen_traegt_niclas():
+def test_config_instanzen_traegt_emil():
     """INST-1 (#1656): config.instanzen() liest die Liste aus instanzen.json und
-    trägt paula, neko UND niclas (kind_id/name; NIE port/origin im Ergebnis-Blob)."""
+    trägt mia, finn UND emil (kind_id/name; NIE port/origin im Ergebnis-Blob)."""
     liste = config_mod.instanzen()
     kind_ids = {i["kind_id"] for i in liste}
-    assert {"paula", "neko", "niclas"} <= kind_ids
+    assert {"mia", "finn", "emil"} <= kind_ids
     for i in liste:
         assert i["kind_id"]
         assert i["name"]
@@ -794,16 +794,16 @@ def test_config_instanzen_traegt_niclas():
 
 @pytest.fixture
 def client_familie_drei(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini):
-    """Test-Client, dessen Familie-Snapshot paula + neko + niclas kennt."""
+    """Test-Client, dessen Familie-Snapshot mia + finn + emil kennt."""
     from hoerspiel import familie_client as fc_mod
 
     transport = _make_familie_transport([
-        {"id": "paula", "name": "Paula", "ring": "orange", "art": "kinder",
-         "foto": "/display/_shared/fotos/paula.jpg"},
-        {"id": "neko", "name": "Neko", "ring": "blue", "art": "kinder",
-         "foto": "/display/_shared/fotos/neko.jpg"},
-        {"id": "niclas", "name": "Niclas", "ring": "green", "art": "erwachsene",
-         "foto": "/display/_shared/fotos/niclas.jpg"},
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/mia.jpg"},
+        {"id": "finn", "name": "Finn", "ring": "blue", "art": "kinder",
+         "foto": "/display/_shared/fotos/finn.jpg"},
+        {"id": "emil", "name": "Emil", "ring": "green", "art": "erwachsene",
+         "foto": "/display/_shared/fotos/emil.jpg"},
     ])
     mock_client = fc_mod.FamilieClient(
         origin_url="http://127.0.0.1:5010", transport=transport)
@@ -820,43 +820,43 @@ def client_familie_drei(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini)
 
 def test_cycle_toggle_n3_zeigt_aktives_kind_href_naechstes(client_familie_drei):
     """HSP-43 / E-HSP-13 / AC1+AC2: n≥3 — EIN Cycle-Toggle.
-    Aus Paulas View: Pille zeigt Paula (aktiv), href=neko (nächster im Ring).
-    KEIN zweiter href auf niclas — Pillen-Reihe ist abgelöst (Nic-Setzung 2026-07-08).
-    Ring-Reihenfolge aus config.INSTANZEN: paula→neko→niclas→paula (AC2).
+    Aus Mias View: Pille zeigt Mia (aktiv), href=finn (nächster im Ring).
+    KEIN zweiter href auf emil — Pillen-Reihe ist abgelöst (Nic-Setzung 2026-07-08).
+    Ring-Reihenfolge aus config.INSTANZEN: mia→finn→emil→mia (AC2).
     """
-    resp = client_familie_drei.get("/display/hoerspiel/paula/alben")
+    resp = client_familie_drei.get("/display/hoerspiel/mia/alben")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    # EINE Cycle-Pille — href zeigt auf nächsten im Ring (neko).
-    assert 'href="/display/hoerspiel/neko/alben"' in html
-    # Niclas-href darf NICHT erscheinen (KEINE Reihe mehr, AC1).
-    assert 'href="/display/hoerspiel/niclas/alben"' not in html
-    # Aktives Kind (Paula) in der Pille sichtbar.
-    assert "Paula" in html
-    # ring-orange (Paulas Ring) vorhanden.
+    # EINE Cycle-Pille — href zeigt auf nächsten im Ring (finn).
+    assert 'href="/display/hoerspiel/finn/alben"' in html
+    # Emil-href darf NICHT erscheinen (KEINE Reihe mehr, AC1).
+    assert 'href="/display/hoerspiel/emil/alben"' not in html
+    # Aktives Kind (Mia) in der Pille sichtbar.
+    assert "Mia" in html
+    # ring-orange (Mias Ring) vorhanden.
     assert "ring-orange" in html
-    # Eigene kind_id (paula) taucht nicht als Wechsel-Href auf.
-    assert 'href="/display/hoerspiel/paula/alben"' not in html
+    # Eigene kind_id (mia) taucht nicht als Wechsel-Href auf.
+    assert 'href="/display/hoerspiel/mia/alben"' not in html
     # Genau eine face-pille (AC1: EINE Pille, nicht mehrere).
     assert html.count('class="face-pille"') == 1
 
 
 def test_cycle_toggle_ring_wrap_around():
-    """AC2: Ring-Wrap-around — niclas (letzter in INSTANZEN) → naechstes = paula.
+    """AC2: Ring-Wrap-around — emil (letzter in INSTANZEN) → naechstes = mia.
     Verifiziert die vollständige Ring-Kette via _pille_vars direkt (URL-3a: jede
     Instanz dient nur ihrer eigenen kind_id — HTTP-Test wäre 404 bei Fremd-kind_id).
-    Ring: paula→neko→niclas→paula (config.INSTANZEN-Reihenfolge, wrap-around).
+    Ring: mia→finn→emil→mia (config.INSTANZEN-Reihenfolge, wrap-around).
     """
     from hoerspiel import familie_client as fc_mod
     from hoerspiel import main as main_mod
 
     transport = _make_familie_transport([
-        {"id": "paula", "name": "Paula", "ring": "orange", "art": "kinder",
-         "foto": "/display/_shared/fotos/paula.jpg"},
-        {"id": "neko", "name": "Neko", "ring": "blue", "art": "kinder",
-         "foto": "/display/_shared/fotos/neko.jpg"},
-        {"id": "niclas", "name": "Niclas", "ring": "green", "art": "erwachsene",
-         "foto": "/display/_shared/fotos/niclas.jpg"},
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/mia.jpg"},
+        {"id": "finn", "name": "Finn", "ring": "blue", "art": "kinder",
+         "foto": "/display/_shared/fotos/finn.jpg"},
+        {"id": "emil", "name": "Emil", "ring": "green", "art": "erwachsene",
+         "foto": "/display/_shared/fotos/emil.jpg"},
     ])
     mock_client = fc_mod.FamilieClient(
         origin_url="http://127.0.0.1:5010", transport=transport)
@@ -865,38 +865,38 @@ def test_cycle_toggle_ring_wrap_around():
     main_mod.runtime["familie_client"] = mock_client
 
     try:
-        # paula → neko
-        pille_paula = main_mod._pille_vars("paula")
-        assert pille_paula["naechstes_kind"] is not None
-        assert pille_paula["naechstes_kind"]["url"] == "/display/hoerspiel/neko/alben"
-        assert pille_paula["naechstes_kind"]["person"].id == "neko"
+        # mia → finn
+        pille_mia = main_mod._pille_vars("mia")
+        assert pille_mia["naechstes_kind"] is not None
+        assert pille_mia["naechstes_kind"]["url"] == "/display/hoerspiel/finn/alben"
+        assert pille_mia["naechstes_kind"]["person"].id == "finn"
 
-        # neko → niclas
-        pille_neko = main_mod._pille_vars("neko")
-        assert pille_neko["naechstes_kind"] is not None
-        assert pille_neko["naechstes_kind"]["url"] == "/display/hoerspiel/niclas/alben"
-        assert pille_neko["naechstes_kind"]["person"].id == "niclas"
+        # finn → emil
+        pille_finn = main_mod._pille_vars("finn")
+        assert pille_finn["naechstes_kind"] is not None
+        assert pille_finn["naechstes_kind"]["url"] == "/display/hoerspiel/emil/alben"
+        assert pille_finn["naechstes_kind"]["person"].id == "emil"
 
-        # niclas → paula (wrap-around, AC2)
-        pille_niclas = main_mod._pille_vars("niclas")
-        assert pille_niclas["naechstes_kind"] is not None
-        assert pille_niclas["naechstes_kind"]["url"] == "/display/hoerspiel/paula/alben"
-        assert pille_niclas["naechstes_kind"]["person"].id == "paula"
+        # emil → mia (wrap-around, AC2)
+        pille_emil = main_mod._pille_vars("emil")
+        assert pille_emil["naechstes_kind"] is not None
+        assert pille_emil["naechstes_kind"]["url"] == "/display/hoerspiel/mia/alben"
+        assert pille_emil["naechstes_kind"]["person"].id == "mia"
     finally:
         main_mod.runtime.pop("familie_client", None)
 
 
 def test_cycle_toggle_solo_bleibt_unveraendert(client_mit_familie):
-    """AC3: 1-Instanz-Fall (nur paula im Snapshot ohne Neko) → Solo-Anzeige.
+    """AC3: 1-Instanz-Fall (nur mia im Snapshot ohne Finn) → Solo-Anzeige.
     Kein Wechsel-Link, face-pille--solo bleibt.
-    Verwende client ohne neko im Snapshot (nur paula).
+    Verwende client ohne finn im Snapshot (nur mia).
     """
     from hoerspiel import familie_client as fc_mod
 
     transport = _make_familie_transport([
-        {"id": "paula", "name": "Paula", "ring": "orange", "art": "kinder",
-         "foto": "/display/_shared/fotos/paula.jpg"},
-        # neko FEHLT im Snapshot — Niclas auch.
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/mia.jpg"},
+        # finn FEHLT im Snapshot — Emil auch.
     ])
     mock_client = fc_mod.FamilieClient(
         origin_url="http://127.0.0.1:5010", transport=transport)
@@ -916,22 +916,22 @@ def test_cycle_toggle_solo_bleibt_unveraendert(client_mit_familie):
         familie_client=mock_client,
     )
     client = main_mod.app.test_client()
-    resp = client.get("/display/hoerspiel/paula/alben")
+    resp = client.get("/display/hoerspiel/mia/alben")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     # Solo: face-pille--solo vorhanden, kein Wechsel-Link.
     assert "face-pille--solo" in html
-    assert 'href="/display/hoerspiel/neko/alben"' not in html
-    assert 'href="/display/hoerspiel/niclas/alben"' not in html
+    assert 'href="/display/hoerspiel/finn/alben"' not in html
+    assert 'href="/display/hoerspiel/emil/alben"' not in html
 
 
 def test_face_pille_identisch_zwei_instanzen(client_mit_familie):
     """Regression (ex test_face_pillen_reihe_identisch_zu_zwei_hardcode):
-    Mit paula+neko im Snapshot: EINE Cycle-Pille, href=neko (nächster nach paula).
-    niclas fehlt im Snapshot → kein niclas-Href (PLAN-20-Geist)."""
-    resp = client_mit_familie.get("/display/hoerspiel/paula/alben")
+    Mit mia+finn im Snapshot: EINE Cycle-Pille, href=finn (nächster nach mia).
+    emil fehlt im Snapshot → kein emil-Href (PLAN-20-Geist)."""
+    resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
     html = resp.data.decode("utf-8")
-    assert 'href="/display/hoerspiel/neko/alben"' in html
-    # niclas ist NICHT im Familie-Snapshot → kein niclas-Href (PLAN-20-Geist).
-    assert 'href="/display/hoerspiel/niclas/alben"' not in html
+    assert 'href="/display/hoerspiel/finn/alben"' in html
+    # emil ist NICHT im Familie-Snapshot → kein emil-Href (PLAN-20-Geist).
+    assert 'href="/display/hoerspiel/emil/alben"' not in html
     assert html.count('class="face-pille"') == 1

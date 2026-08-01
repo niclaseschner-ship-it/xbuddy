@@ -1,6 +1,6 @@
 {
   "_doc": "Pilot-Registry des Render-Gates (RAT-24, #1160). origin = nginx-Live-Origin auf dem Pi (self-signed, :8443) — die Pi-IP steht genau hier, nirgendwo sonst. Jeder View-Eintrag traegt nur einen relativen path (/display/...); check.js setzt die voll-qualifizierte Ziel-URL einmalig aus origin + path zusammen. Optionaler Tier-B-Kollisionsvertrag (contract, relativ zu diesem Verzeichnis). viewport ist der Pi-Display-Default 1920x1080; pro View ueberschreibbar.",
-  "origin": "https://192.168.178.78:8443",
+  "origin": "https://192.168.0.78:8443",
   "viewport": { "width": 1920, "height": 1080 },
   "views": {
     "plan/woche": {
@@ -14,7 +14,7 @@
       "path": "/display/essen/wunsch",
       "viewport": { "width": 1920, "height": 1200 },
       "responsive": true,
-      "_doc": "DC-18 fluid pilot (Paula-Tablet 1920x1200). responsive:true aktiviert underfill-Pruefung (DC-18, #1322 AC2). viewport 1920x1200 wird per-View-Viewport in check.js konsumiert (#1322). Tier-A prueft Overflow UND Underfill (Fuellinvariante): Content-Bounding-Box < Viewport → Befund underfill."
+      "_doc": "DC-18 fluid pilot (Mia-Tablet 1920x1200). responsive:true aktiviert underfill-Pruefung (DC-18, #1322 AC2). viewport 1920x1200 wird per-View-Viewport in check.js konsumiert (#1322). Tier-A prueft Overflow UND Underfill (Fuellinvariante): Content-Bounding-Box < Viewport → Befund underfill."
     }
   }
 }
