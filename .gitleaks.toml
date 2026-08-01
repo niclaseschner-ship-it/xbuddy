@@ -1,0 +1,100 @@
+# Leak-Guard — Custom-PII-Ruleset für xbuddy (#1724, Part of #1309 public).
+#
+# Zweck: verhindert, dass versehentlich Privates (Klarnamen, Familien-Mail,
+# Heim-IPs, Tailnet-Identifier, Telegram-Chat-ID) ins Repo — und damit später
+# public — gerät. Recycelt das ratifizierte Gate-1-Pattern-Set aus
+# tools/mirror/build_public_mirror.sh (KEINE neuen Muster erfunden).
+#
+# Drei Einsatzpunkte, EIN Ruleset (#1724):
+#   1. .pre-commit-config.yaml  → blockt Commit lokal auf dem Pi
+#   2. .github/workflows/leak-guard.yml → blockt PR (required erst NACH #1719-Scrub)
+#   3. gitleaks detect --no-git  → HEAD-Scan, Leak-Liste für den Clean (#1719)
+#
+# `useDefault = true`: gitleaks-Standard-Secret-Regeln (AWS/GitHub/…) sind zusätzlich
+# aktiv (zweite Schicht neben der Custom-PII-Schicht).
+
+title = "xbuddy Leak-Guard (Custom-PII aus Gate-1, #1724)"
+
+[extend]
+useDefault = true
+
+# ── Klarnamen (Familie) ──────────────────────────────────────────────────────
+# Wortgrenzen (\b) wie im Gate-1-Set — sonst träfe 'vera' in 'Verantwortung'.
+[[rules]]
+id = "xbuddy-familienname-eschner"
+description = "Familienname Eschner (Klarname)"
+regex = '''(?i)\beschner\b'''
+# LICENSE ratifiziert ausgenommen — der Copyright-Name bleibt (2026-07-30).
+[[rules.allowlists]]
+paths = ['''(^|/)LICENSE$''']
+
+[[rules]]
+id = "xbuddy-vornamen-erwachsene"
+description = "Vornamen der Erwachsenen (Klarnamen)"
+regex = '''(?i)\b(sophia|julian|vera|taro)\b'''
+
+[[rules]]
+id = "xbuddy-kind-slugs"
+description = "Kind-Slugs paula/neko (Klarnamen-Slugs)"
+regex = '''(?i)\b(paula|neko)\b'''
+
+[[rules]]
+id = "xbuddy-niclas-slug"
+description = "Slug niclas (Klarname)"
+regex = '''(?i)\bniclas\b'''
+# LICENSE ausgenommen wie eschner (Copyright-Name ratifiziert behalten).
+[[rules.allowlists]]
+paths = ['''(^|/)LICENSE$''']
+
+# ── Private Kontaktdaten ─────────────────────────────────────────────────────
+[[rules]]
+id = "xbuddy-private-mail"
+description = "Private Mail-Adresse (niclas.eschner@…)"
+regex = '''niclas[._]eschner@(gmail|gmx)'''
+
+[[rules]]
+id = "xbuddy-familien-mail-domain"
+description = "Familien-E-Mail-Domain @gmx.de (→ @example.de scrubben)"
+regex = '''@gmx\.de'''
+
+# ── Netz-/Instanz-Identifier ─────────────────────────────────────────────────
+[[rules]]
+id = "xbuddy-github-org"
+description = "GitHub-Org (enthält echten Benutzernamen)"
+regex = '''niclaseschner-ship-it'''
+
+[[rules]]
+id = "xbuddy-tailscale-fqdn"
+description = "Tailscale-FQDN-Identifier (instanz-spezifisch)"
+regex = '''taile235cf'''
+
+[[rules]]
+id = "xbuddy-lan-ip"
+description = "Spezifische Heim-LAN-IP (nicht generische RFC-1918-CIDR)"
+regex = '''192\.168\.178\.'''
+
+[[rules]]
+id = "xbuddy-tailnet-ip"
+description = "Spezifische Tailnet-IP (nicht 100.64.0.0/10 CIDR)"
+regex = '''100\.108\.61\.'''
+
+[[rules]]
+id = "xbuddy-telegram-chat-id"
+description = "Bekannte Telegram-Chat-ID"
+regex = '''\b464143432\b'''
+
+[[rules]]
+id = "xbuddy-ortsname"
+description = "Wohnort-Name (Dreisamtal)"
+regex = '''(?i)\bDreisamtal\b'''
+
+# ── Globale Allowlist ────────────────────────────────────────────────────────
+# Das Ruleset selbst trägt die Muster (naturgemäß) — es darf sich nicht selbst
+# als Leak melden. Ebenso der Mirror-/Scrub-Bau, der die Muster ratifiziert führt.
+[[allowlists]]
+description = "Ruleset + Scrub-/Mirror-Werkzeug führen die Muster ratifiziert"
+paths = [
+    '''(^|/)\.gitleaks\.toml$''',
+    '''(^|/)tools/mirror/build_public_mirror\.sh$''',
+    '''(^|/)tools/mirror/generate_name_map\.py$''',
+]
