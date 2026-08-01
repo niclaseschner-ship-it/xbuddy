@@ -706,49 +706,91 @@ def _current_build_id():
     return pwa_mantel.build_id_for("einkauf", static_dir)
 
 
-@app.route("/seiten/essen/einkauf/<path:asset>", methods=["GET"])
-def einkauf_asset_view(asset):
-    """ESSEN-34: PWA-Mantel-Asset-Auslieferung (analog ROU-23).
-
-    Antwortet auf /seiten/essen/einkauf/manifest.json, /sw.js, /icon-*.png.
-    Path-Traversal-Schutz via realpath-Check. Andere Pfade → 404.
-
-    Sonderfall sw.js: BUILD_ID-Platzhalter wird beim Ausliefern durch den
-    aktuellen build_id-Wert ersetzt (ESSEN-35-Cache-Versionierung).
-    """
+# ============================================================
+#  #1740 (PWML-4) — Uniformer PWA-Mantel-Asset-Dispatcher
+# ============================================================
+# Die uniformen public-HTML-Eltern-Mäntel (einkauf / plan-einstellungen /
+# routine-anpassen / hoerspiel-eltern / wetter-regeln) trugen die Auslieferungs-
+# Schicht als copy-paste pro Konsument: manifest/sw-Sonderfall + statischer
+# realpath-Traversal-Guard. serve_mantel_asset() vereint den statischen Teil;
+# die divergenten manifest/sw-Quellen (generiert via Lib vs. disk-committed)
+# kommen als special-Handler-Dict rein. AUSGENOMMEN bleiben die divergenten
+# Auth-Regime (hoerspiel-player cookie-only auf alle Assets, shell AUTH-4-Split,
+# connector eigener /api/v1/seiten/-URL) — ein uniformer sw.js-Zweig darüber
+# verletzte die AST-Membran test_auth_decorator_copetrage.py.
+def serve_mantel_asset(asset, *, asset_root, mime_map, special=None):
+    """Generischer Mantel-Asset-Dispatch (#1740). ``special`` ist ein Dict
+    asset-Name→Callable(→Response) für die divergenten manifest/sw-Quellen; alles
+    andere wird statisch aus ``asset_root`` mit realpath-Traversal-Guard
+    ausgeliefert (private ``_*``-Dateien → 404)."""
     from flask import abort, send_from_directory
 
-    root = os.path.realpath(_einkauf_asset_root())
-    # werkzeug safe_join (via send_from_directory) wuerde bei .. selbst
-    # ablehnen; zusaetzlich realpath-Check, damit Symlinks nicht
-    # ausbrechen koennen.
+    if special and asset in special:
+        return special[asset]()
+    root = os.path.realpath(asset_root)
+    # werkzeug safe_join (via send_from_directory) lehnt .. selbst ab;
+    # zusätzlicher realpath-Check, damit Symlinks nicht ausbrechen können.
     target = os.path.realpath(os.path.join(root, asset))
     if target != root and not target.startswith(root + os.sep):
         abort(404)
-    if not os.path.isfile(target):
+    if not os.path.isfile(target) or os.path.basename(target).startswith("_"):
         abort(404)
-    # Privat-Datei (_make_icons.py) nicht ausliefern.
-    if os.path.basename(target).startswith("_"):
-        abort(404)
-
     ext = os.path.splitext(target)[1].lower()
-    mimetype = _EINKAUF_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(
+        root, asset, mimetype=mime_map.get(ext, "application/octet-stream"))
 
-    # Sonderfall sw.js: build_id-Platzhalter ersetzen + Cache-Control-Header
-    # damit der Browser den Worker bei jedem Update neu holt.
-    if os.path.basename(target) == "sw.js":
-        build_id = _current_build_id()
-        body = pwa_mantel.read_sw_with_build_id(target, build_id)
-        resp = make_response(body, 200)
-        resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
-        # Browser muss sw.js fresh holen, sonst kein Update-Trigger.
-        # https://web.dev/articles/service-worker-lifecycle#updates
+
+def _mantel_special_generated(cfg, component, build_id):
+    """special-Handler für generierte Mäntel (routine/wetter/hoerspiel-eltern):
+    manifest.json→build_manifest, sw.js→render_sw (+ Service-Worker-Allowed aus
+    cfg.sw_scope). PWML-1/2."""
+    def _manifest():
+        resp = make_response(json.dumps(pwa_mantel.build_manifest(cfg)), 200)
+        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        # Service-Worker-Allowed nicht noetig — Scope passt zur Default-Wurzel.
         return resp
 
-    # Andere Assets: send_from_directory mit explizitem Content-Type.
-    return send_from_directory(root, asset, mimetype=mimetype)
+    def _sw():
+        resp = make_response(pwa_mantel.render_sw(component, build_id=build_id), 200)
+        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        # Service-Worker-Allowed: sw_scope aus REGISTRY überdeckt die start_url.
+        resp.headers["Service-Worker-Allowed"] = cfg.sw_scope
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    return {"manifest.json": _manifest, "sw.js": _sw}
+
+
+def _mantel_special_disk_sw(asset_root, build_id, mime_map):
+    """special-Handler für disk-basierte Mäntel (einkauf/plan): sw.js aus der
+    committed Datei mit build_id-Substitution; manifest.json/icons bleiben
+    statisch (auf Platte). Kein Service-Worker-Allowed — Scope = Default-Wurzel."""
+    def _sw():
+        target = os.path.join(os.path.realpath(asset_root), "sw.js")
+        resp = make_response(pwa_mantel.read_sw_with_build_id(target, build_id), 200)
+        mimetype = mime_map.get(".js", "application/javascript")
+        resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
+        # Browser muss sw.js fresh holen, sonst kein Update-Trigger.
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    return {"sw.js": _sw}
+
+
+@app.route("/seiten/essen/einkauf/<path:asset>", methods=["GET"])
+def einkauf_asset_view(asset):
+    """ESSEN-34: PWA-Mantel-Asset-Auslieferung (#1740-Dispatcher, disk-sw).
+
+    manifest.json/icons statisch aus seiten/static/einkauf/, sw.js aus der
+    committed Datei mit build_id-Substitution (ESSEN-35-Cache-Versionierung).
+    """
+    return serve_mantel_asset(
+        asset,
+        asset_root=_einkauf_asset_root(),
+        mime_map=_EINKAUF_MIME,
+        special=_mantel_special_disk_sw(
+            _einkauf_asset_root(), _current_build_id(), _EINKAUF_MIME),
+    )
 
 
 # ============================================================
@@ -821,38 +863,18 @@ def plan_einstellungen_view():
 
 @app.route("/seiten/plan/einstellungen/<path:asset>", methods=["GET"])
 def plan_einstellungen_asset_view(asset):
-    """PLAN-35: PWA-Mantel-Asset-Auslieferung (analog ESSEN-34 / ROU-23).
+    """PLAN-35: PWA-Mantel-Asset-Auslieferung (#1740-Dispatcher, disk-sw).
 
-    Antwortet auf /seiten/plan/einstellungen/manifest.json, /sw.js, /icon-*.png.
-    Path-Traversal-Schutz via realpath-Check. Private Dateien (_*) → 404.
-
-    Sonderfall sw.js: __BUILD_ID__-Platzhalter wird beim Ausliefern ersetzt
-    (PLAN-35 Cache-Versionierung, analog ESSEN-35).
+    manifest.json/icons statisch, sw.js aus der committed Datei mit
+    build_id-Substitution (PLAN-35 Cache-Versionierung).
     """
-    from flask import abort, send_from_directory
-
-    root = os.path.realpath(_plan_einst_asset_root())
-    target = os.path.realpath(os.path.join(root, asset))
-    if target != root and not target.startswith(root + os.sep):
-        abort(404)
-    if not os.path.isfile(target):
-        abort(404)
-    if os.path.basename(target).startswith("_"):
-        abort(404)
-
-    ext = os.path.splitext(target)[1].lower()
-    mimetype = _PLAN_EINST_MIME.get(ext, "application/octet-stream")
-
-    # Sonderfall sw.js: build_id-Platzhalter ersetzen.
-    if os.path.basename(target) == "sw.js":
-        build_id = _plan_einst_build_id()
-        body = pwa_mantel.read_sw_with_build_id(target, build_id)
-        resp = make_response(body, 200)
-        resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
-
-    return send_from_directory(root, asset, mimetype=mimetype)
+    return serve_mantel_asset(
+        asset,
+        asset_root=_plan_einst_asset_root(),
+        mime_map=_PLAN_EINST_MIME,
+        special=_mantel_special_disk_sw(
+            _plan_einst_asset_root(), _plan_einst_build_id(), _PLAN_EINST_MIME),
+    )
 
 
 # ============================================================
@@ -1101,39 +1123,14 @@ def routine_anpassen_asset_view(asset):
     - sw.js         → pwa_mantel.render_sw('routine', build_id) (PWML-2), no-store.
     - icon-*.png    → statisch aus seiten/static/routine/ mit realpath-Traversal-Guard.
     """
-    from flask import abort, send_from_directory
-
     cfg = pwa_mantel.REGISTRY["routine"]
-
-    if asset == "manifest.json":
-        resp = make_response(json.dumps(pwa_mantel.build_manifest(cfg)), 200)
-        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
-
-    if asset == "sw.js":
-        build_id = _routine_anpassen_build_id()
-        body = pwa_mantel.render_sw("routine", build_id=build_id)
-        resp = make_response(body, 200)
-        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
-        # Service-Worker-Allowed: sw_scope aus REGISTRY ueberdeckt die start_url.
-        resp.headers["Service-Worker-Allowed"] = cfg.sw_scope
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
-
-    # Statische Icons aus seiten/static/routine/ mit Traversal-Guard.
-    root = os.path.realpath(_routine_anpassen_asset_root())
-    target = os.path.realpath(os.path.join(root, asset))
-    if target != root and not target.startswith(root + os.sep):
-        abort(404)
-    if not os.path.isfile(target):
-        abort(404)
-    if os.path.basename(target).startswith("_"):
-        abort(404)
-
-    ext = os.path.splitext(target)[1].lower()
-    mimetype = _ROUTINE_ANPASSEN_MIME.get(ext, "application/octet-stream")
-    return send_from_directory(root, asset, mimetype=mimetype)
+    return serve_mantel_asset(
+        asset,
+        asset_root=_routine_anpassen_asset_root(),
+        mime_map=_ROUTINE_ANPASSEN_MIME,
+        special=_mantel_special_generated(
+            cfg, "routine", _routine_anpassen_build_id()),
+    )
 
 
 # ============================================================
@@ -1175,30 +1172,14 @@ def wetter_regeln_view():
 @app.route("/seiten/wetter/regeln/<path:asset>", methods=["GET"])
 def wetter_regeln_asset_view(asset):
     """PWA-Mantel-Assets: manifest.json/sw.js aus der Lib, css/icons statisch."""
-    from flask import abort, send_from_directory
-
     cfg = pwa_mantel.REGISTRY["wetter-regeln"]
-    if asset == "manifest.json":
-        resp = make_response(json.dumps(pwa_mantel.build_manifest(cfg)), 200)
-        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
-    if asset == "sw.js":
-        body = pwa_mantel.render_sw("wetter-regeln", build_id=_wetter_regeln_build_id())
-        resp = make_response(body, 200)
-        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
-        resp.headers["Service-Worker-Allowed"] = cfg.sw_scope
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
-    root = os.path.realpath(_wetter_regeln_asset_root())
-    target = os.path.realpath(os.path.join(root, asset))
-    if target != root and not target.startswith(root + os.sep):
-        abort(404)
-    if not os.path.isfile(target) or os.path.basename(target).startswith("_"):
-        abort(404)
-    ext = os.path.splitext(target)[1].lower()
-    mimetype = _WETTER_REGELN_MIME.get(ext, "application/octet-stream")
-    return send_from_directory(root, asset, mimetype=mimetype)
+    return serve_mantel_asset(
+        asset,
+        asset_root=_wetter_regeln_asset_root(),
+        mime_map=_WETTER_REGELN_MIME,
+        special=_mantel_special_generated(
+            cfg, "wetter-regeln", _wetter_regeln_build_id()),
+    )
 
 
 # ============================================================
@@ -1310,40 +1291,16 @@ def hoerspiel_eltern_asset_view(kind_id: str, asset: str):
     - icon-*.png    → statisch aus hoerspiel/static/ mit realpath-Traversal-Guard.
 
     Auth: public (HTML-Shell public, MAD-7). SW/manifest: credential-los (Browser-Fetch).
+    kind_id ist scope-irrelevant (sw_scope /seiten/hoerspiel/ deckt alle Instanzen).
     """
-    from flask import abort, send_from_directory
-
     cfg = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT]
-
-    if asset == "manifest.json":
-        resp = make_response(json.dumps(pwa_mantel.build_manifest(cfg)), 200)
-        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
-
-    if asset == "sw.js":
-        build_id = _hoerspiel_eltern_build_id()
-        body = pwa_mantel.render_sw(_HOERSPIEL_ELTERN_COMPONENT, build_id=build_id)
-        resp = make_response(body, 200)
-        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
-        # Service-Worker-Allowed: sw_scope (/seiten/hoerspiel/) deckt alle kind_id-Pfade.
-        resp.headers["Service-Worker-Allowed"] = cfg.sw_scope
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
-
-    # Statische Icons aus hoerspiel/static/ mit Traversal-Guard.
-    root = os.path.realpath(_hoerspiel_eltern_asset_root())
-    target = os.path.realpath(os.path.join(root, asset))
-    if target != root and not target.startswith(root + os.sep):
-        abort(404)
-    if not os.path.isfile(target):
-        abort(404)
-    if os.path.basename(target).startswith("_"):
-        abort(404)
-
-    ext = os.path.splitext(target)[1].lower()
-    mimetype = _HOERSPIEL_ELTERN_MIME.get(ext, "application/octet-stream")
-    return send_from_directory(root, asset, mimetype=mimetype)
+    return serve_mantel_asset(
+        asset,
+        asset_root=_hoerspiel_eltern_asset_root(),
+        mime_map=_HOERSPIEL_ELTERN_MIME,
+        special=_mantel_special_generated(
+            cfg, _HOERSPIEL_ELTERN_COMPONENT, _hoerspiel_eltern_build_id()),
+    )
 
 
 # ============================================================
