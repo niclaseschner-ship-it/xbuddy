@@ -23,7 +23,7 @@ import sys
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, make_response, render_template, request
 
 # Repo-Wurzel auf den Importpfad — die App konsumiert die Library
 # `tools.configloader`/`tools.logsetup` (DCOMP-1-Ausnahme: `tools/` ist
@@ -34,6 +34,9 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tools import configloader, logsetup  # noqa: E402
+from tools import familie_client as _familie_client_mod  # noqa: E402
+from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # Das wetter-Paket wird als Paket importiert, damit die relativen Imports in
@@ -68,10 +71,77 @@ runtime = {
     "anbindung": None,          # wetter.meteo.WetterAnbindung (oder Fake in Tests)
     "config_path": None,        # Pfad zur wetter.json — Naht für DCOMP-2
     "anbindung_factory": None,  # cfg -> WetterAnbindung — neu binden, wenn Ort/Stunden wechseln
+    "bot_token": None,          # AUTH-3 (#1715): Cookie/tma-Signatur-Key, ENV-Fallback
+    "auth_familie_client": None,  # AUTH-3 Test-Naht (get_telegram_ids-Stub)
+    "init_data_config": None,   # AUTH-3 tma-Config-Cache
 }
 
 
-def configure(cfg, anbindung, config_path=None, anbindung_factory=None):
+# ============================================================
+#  AUTH-3 (ESB-1.a/ESB-2, #1715): Datenrouten /api/v1/wetter/regeln hart
+# ============================================================
+# Die Regeln-Mini-App (seiten-gehostet, ESB-1.a) liest/schreibt über die
+# Buddy-Datenrouten — die tragen den HART-Decorator (Cookie ODER tma, 401 ohne;
+# AUTH-5-Loopback pass-through). Faithful zum plan/essen/photo-Zwilling über die
+# #1625-Factory (make_require_init_data).
+_ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
+_ENV_FAMILIE_ORIGIN = "WETTER_FAMILIE_ORIGIN"
+_FAMILIE_DEFAULT_ORIGIN = "http://127.0.0.1:5010"
+
+
+def _get_bot_token():
+    """Bot-Token aus runtime-Dict (Test-Naht) oder ENV (APP-7)."""
+    return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+
+
+def _get_familie_client():
+    """AUTH-3-FAM-Client — Test-Naht `configure(auth_familie_client=...)` oder
+    produktiv `FamilieClient` aus ENV `WETTER_FAMILIE_ORIGIN` (Personen/Telegram-IDs)."""
+    cached = runtime.get("auth_familie_client")
+    if cached is not None:
+        return cached
+    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _FAMILIE_DEFAULT_ORIGIN)
+    return _familie_client_mod.FamilieClient(origin_url=origin)
+
+
+def _get_init_data_config():
+    """Tma-Config (`max_age_seconds`) — gecacht im runtime-Dict oder frisch."""
+    cfg = runtime.get("init_data_config")
+    if cfg is None:
+        cfg = _init_data_mod.load_config()
+        runtime["init_data_config"] = cfg
+    return cfg
+
+
+_AUTH_401_HTML = (
+    "<!doctype html>\n<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Pairing-Befehl und folge dem Link auf diesem "
+    "Gerät.</p></body></html>"
+)
+
+
+def _auth_401():
+    """AUTH-8: 401 mit HTML-Anweisungsseite (nicht roher Status-Code)."""
+    resp = make_response(_AUTH_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+require_init_data = make_require_init_data(
+    get_bot_token=_get_bot_token,
+    get_familie_client=_get_familie_client,
+    get_init_data_config=_get_init_data_config,
+    auth_401=_auth_401,
+)
+
+
+def configure(cfg, anbindung, config_path=None, anbindung_factory=None,
+              bot_token=None, auth_familie_client=None):
     """Setzt Konfiguration und Wetter-Anbindung (Test-Naht, WETTER-24).
 
     `anbindung` ist die Test-Naht: in Produktion eine WetterAnbindung mit
@@ -92,6 +162,10 @@ def configure(cfg, anbindung, config_path=None, anbindung_factory=None):
     runtime["anbindung"] = anbindung
     runtime["config_path"] = config_path
     runtime["anbindung_factory"] = anbindung_factory
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+    if auth_familie_client is not None:
+        runtime["auth_familie_client"] = auth_familie_client
 
 
 def _current_config():
@@ -269,6 +343,42 @@ def regeln():
         return jsonify({"ok": True})
     view = editor_mod.baue_view(_lade_rohstand(), palette_mod)
     return render_template("wetter_regeln.html", view=view)
+
+
+# ============================================================
+#  AUTH-3-Datenrouten (#1715, ESB-1.a/ESB-2): die seiten-gehostete Regeln-
+#  Mini-App liest/schreibt hier. Hart (Cookie ODER tma, 401 ohne; Loopback pass).
+# ============================================================
+@app.route("/api/v1/wetter/regeln", methods=["GET"])
+@require_init_data
+def api_regeln_get():
+    """GET: die Garderoben-View als JSON (Palette + read-only Bedingungen +
+    editierbare Sets, WETTER-28/29) — dieselbe `baue_view`-Quelle wie das
+    (abzulösende) Server-Template, nur als Daten für die JS-Shell."""
+    return jsonify(editor_mod.baue_view(_lade_rohstand(), palette_mod))
+
+
+@app.route("/api/v1/wetter/regeln", methods=["POST"])
+@require_init_data
+def api_regeln_post():
+    """POST: editierte Matrix validieren + `wetter.json` atomar schreiben
+    (WETTER-30); Kiosk übernimmt per DCOMP-2 ohne Restart. Ungültig → 422,
+    Datei unverändert; kein Ziel → 409 (identisch zum bisherigen POST)."""
+    path = runtime.get("config_path")
+    if not path:
+        return jsonify({"ok": False, "fehler": "Kein wetter.json-Pfad konfiguriert"}), 409
+    matrix = request.get_json(silent=True)
+    if matrix is None:
+        return jsonify({"ok": False, "fehler": "Kein JSON-Body"}), 400
+    try:
+        store_mod.speichere_garderobe(
+            path, matrix, palette_mod, geladener_stand=_lade_rohstand())
+    except store_mod.ValidierungsFehler as e:
+        return jsonify({"ok": False, "fehler": str(e)}), 422
+    except store_mod.StoreError as e:
+        logger.error("Garderobe-Save (api) fehlgeschlagen: %s", e)
+        return jsonify({"ok": False, "fehler": str(e)}), 500
+    return jsonify({"ok": True})
 
 
 # ============================================================
