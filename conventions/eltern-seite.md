@@ -23,6 +23,29 @@ Eine Eltern-Seite ist ein installierbarer PWAM-Mantel: Registry-Eintrag in
 Referenz: `conventions/pwa-mantel.md` PWAM-1..6. „Nur `build_id_source_set`
 ohne manifest/sw" ist **kein** Mantel und verletzt ESB-1.
 
+### ESB-1.a — Einheitlicher Ausliefer-Ort: seiten unter `/seiten/<buddy>/…`
+
+Jede Eltern-Seite wird **von `seiten` ausgeliefert**, unter dem Slug-Pfad
+`/seiten/<buddy>/<view>` — HTML-Shell, Manifest, `sw.js` und Icons kommen aus
+`seiten` (über die pwa_mantel-Lib + REGISTRY), die **Datenrouten** bleiben im
+Buddy-Service (`/api/v1/<buddy>/*`, AUTH-3, cross-service via nginx). Ein Buddy
+serviert seinen Eltern-Mantel **nicht** selbst — das hält alle Eltern-Apps
+symmetrisch (gleicher Pfad-Namespace, ein Mantel-Ort, ein Auslieferungs-Muster).
+Präzedenz (gebaut): `einkauf` (`/seiten/essen/einkauf`), `hoerspiel-eltern`
+(`/seiten/hoerspiel/<kind>/eltern`), `plan-einstellungen`
+(`/seiten/plan/einstellungen`), `routine-anpassen` (`/seiten/routine/anpassen`).
+
+Nic-Setzung 2026-08-01 (#1715, berater-runde): **Einheitlichkeit vor
+Service-Kohäsion** — als sich am Nachzügler `wetter/regeln` die Wahl stellte
+„seiten-gehostet wie die anderen vier (A) vs. Buddy-self-hosted (B)", wählte Nic A
+(volle Symmetrie), obwohl B den Schreib-Pfad service-lokal gehalten hätte. Der
+Berater/Antiberater-Lean war B (Zuverlässigkeit, OPEN-WETTER-I); Nics
+Einheitlichkeits-Wert bricht den Gleichstand. Konsequenz: **OPEN-WETTER-I ist
+amendiert** (`specs/buddies/wetter.md`) — der Editor zieht von
+`/display/wetter/regeln` nach `/seiten/wetter/regeln` und wird eine
+seiten-gehostete Mini-App wie die anderen vier (Server-Template → JS-Shell +
+`/api/v1/wetter/regeln`-Datenrouten in AUTH-3).
+
 ## ESB-2 — Die Datenrouten einer Eltern-Seite sind Cookie-hart (AUTH-3)
 
 Die `/api/v1/<buddy>/*`-Datenrouten, die eine Eltern-Seite liest/schreibt, stehen
