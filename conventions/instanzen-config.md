@@ -67,10 +67,20 @@ atomar (alle-oder-404). Ein Live-Rename eines Slugs (`mia` → `kind1`) ist
 **verboten**: er bricht laufenden Betrieb. Klarnamen ändern sich über
 `display_name` in `instanzen.json` (INST-2), **ohne** den Slug anzufassen.
 
-Für das öffentliche Repo neutralisiert der Mirror-Bau (#1170, Baustein 2)
-den Slug **nur in der Snapshot-Kopie** (`git archive`), nicht im Live-Code.
-Der einzige Leak ist die Klarnamen-Zuordnung — und die ist per INST-1
-gitignored.
+**Public = in-place, kein Mirror (Nic-Setzung 2026-08-01, Weg A — #1719).**
+Das aktuelle Repo wird selbst öffentlich (develop-in-the-open), NICHT als
+Mirror-Snapshot. Der Slug bleibt opak und wird **nicht live umbenannt** — der
+laufende Betrieb behält seine echten Slugs, sie stehen nur nicht mehr im
+**getrackten** Code. Neutralisierung für public:
+- Der getrackte Code trägt die generische **Demo-/Template-Familie**
+  („Familie Sonntag": Slugs `mia`/`ben`, #1725) als kanonische Beispiel-Werte
+  in `*.example.json` und getrackten Template-Deploy-Configs.
+- Die **echte** Familie (Slugs/Klarnamen, Chat-ID, Mail) lebt ausschließlich in
+  **gitignored** Live-Config (`instanzen.json`/`familie.json`, INST-1) und
+  gitignored Deploy-Overrides; der Bootstrap (BOOT-1) erzeugt die realen
+  Deploy-Dateien aus der Live-Config, sie sind nie getrackt.
+- Der **Leak-Guard** (#1724, gitleaks) verhindert mechanisch, dass echte
+  Slugs/PII je in getrackte Dateien geraten (pre-commit + CI).
 
 ### INST-5 — Onboarding-Pfad: über den Eltern-Chat, nie hand-scp
 Wie CONFIG-2: Klarnamen und die Instanz-Liste kommen über den Eltern-Chat
