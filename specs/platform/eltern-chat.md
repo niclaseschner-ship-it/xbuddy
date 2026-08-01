@@ -1679,6 +1679,48 @@ Test-Anker: eltern-chat/tests/skills/test_faehigkeiten_zeigen.py::test_ec43_list
 
 ---
 
+### EC-44 — Proaktives Pairing-Angebot bei App-Einrichtung / Zugriffs-Problem
+
+Der Eltern-Chat-Agent erkennt **sprach-getriggert** einen *möglichen* Auth-/
+Pairing-Bedarf und bietet proaktiv den bestehenden Pairing-Link an — statt dass
+ein ausgeloggter Elternteil die exakte Phrase (»schick nochmal cookies«) kennen
+muss. Zwei Signal-Klassen im SYSTEM_PROMPT (im Stil der HFE-/TAB-Absätze):
+
+- **Einrichtungs-Wunsch** — »App auf mein Handy/Tablet«, »wie installiere ich«,
+  »neues Gerät einrichten«.
+- **Zugriffs-Problem** — »geht nicht«, »lädt nicht«, »bin ausgeloggt«, »weiße
+  Seite«, »komme nicht rein« (**konservativ nachgelagert**, s. u.).
+
+Regeln (bindend):
+
+1. **Angebot, nie Behauptung.** Der Agent kennt den Pairing-Status **nicht** (kein
+   `paired_at` — RAT-31 E6c). Er behauptet daher **nie** »du bist nicht gekoppelt«,
+   sondern formuliert als Angebot: »Das kann am Zugang liegen — soll ich dir einen
+   frischen Einrichtungs-Link schicken?«.
+2. **Genau EINE Rückfrage.** Verneint der Nutzer oder war es ein anderes Problem,
+   lässt der Agent es fallen und hilft normal weiter. Kein Banner, kein
+   wiederkehrendes Element.
+3. **Kein neuer Mechanismus.** Der Nudge ruft die bestehenden Skills
+   `geraet_anlegen` / `cookie_nachschicken` (EC-10) — keine neue Auth-Mechanik,
+   kein 401→Chat-Rückkanal (AUTH-8 V2 bleibt vertagt). Anti-Redundanz (EC-29):
+   die Rolle-Wahl macht die Familie beim Installieren, nicht der Chat.
+4. **Konservativer Start.** V1 nur die **Einrichtungs-Wunsch**-Klasse. Die
+   **Zugriffs-Problem**-Klasse erst dazuschalten, wenn V1 sauber läuft — ihre
+   Signalwörter überlappen mit Nicht-Auth-Bugs (SSE-Freeze, 500er) und dürfen die
+   echte Diagnose nicht als Auth überdecken. **Kill:** feuert der Nudge in ≥2
+   Live-Turns, wo Auth nicht die Ursache war, fällt die Zugriffs-Problem-Klasse
+   wieder raus.
+
+Der Eltern-Chat ist reine Eltern-Fläche (EC-Reichweite) — Kinder lösen den Nudge
+nicht aus; der CNS-2-Erwachsenen-Gate in `cookie_nachschicken` bleibt unberührt.
+
+Umsetzung: SYSTEM_PROMPT-Absatz in `eltern-chat/agent.py` + je ein Halbsatz in den
+Skill-Descriptions `cookie_nachschicken_task.py` / `geraet_anlegen_task.py`.
+
+*Tickets:* #1718 (Refs #1338; ratifiziert Berater-Runde 2026-07-31, Weiche A)
+
+---
+
 ## Offene Punkte
 
 - **OPEN-EC-A — Anonymisierung.** V1 übermittelt Anfrage-Daten ohne
