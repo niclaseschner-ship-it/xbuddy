@@ -167,6 +167,6 @@ def test_estimate_cost_zero_tokens_is_zero():
 
 def test_compute_eur_is_estimate_cost_eur_component():
     """compute_eur ist die dünne €-Fassade über estimate_cost (EINE Berechnung)."""
-    usd, eur = estimate_cost("claude-haiku-4-5", 10_000, 2_000, 5_000, 1_000)
+    _usd, eur = estimate_cost("claude-haiku-4-5", 10_000, 2_000, 5_000, 1_000)
     # compute_eur nimmt (model, input, output, cache_read, cache_creation).
     assert pricing.compute_eur("claude-haiku-4-5", 10_000, 5_000, 2_000, 1_000) == pytest.approx(eur)
