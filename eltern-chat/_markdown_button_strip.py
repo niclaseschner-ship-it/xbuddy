@@ -4,7 +4,7 @@ specs/platform/eltern-chat.md EC-41 verbietet dem LLM, Mini-App-Knöpfe als
 Markdown-Text zu formulieren — Telegram rendert das nicht als Knopf, die Familie
 sieht literalen Text.
 
-Live-Befund 2026-06-22 (chat 0000000000, Refs #1075): `mistral-medium-2508`
+Live-Befund 2026-06-22 (chat <chat-id>, Refs #1075): `mistral-medium-2508`
 ignoriert die EC-41-Regel trotz dreier Härtungsstufen im SYSTEM_PROMPT
 (Mittelfeld → Position 1 → ⚠️-Prominenz mit konkreten Negativ-Beispielen).
 Community-Konsens (mistral docs, github-issues): mistral-medium hat dokumentierte
@@ -15,7 +15,7 @@ Knopf-Patterns aus dem LLM-Antwort-Text NACH Generation, VOR Telegram-Send.
 Die LLM-„Stimme" (EC-29) bleibt erhalten; nur die EC-41-Verletzungen werden
 stillschweigend entfernt.
 
-Pattern-Quelle: reale Halluzinationen aus conversations.db chat 0000000000
+Pattern-Quelle: reale Halluzinationen aus conversations.db chat <chat-id>
 seq 601/603/605 sowie der Live-Test-Reihe nach den drei Härtungs-Versuchen.
 """
 

@@ -112,10 +112,10 @@ class FakeStore:
 
 
 # Bible/Historie mit Familien-Daten — dürfen NIE in die web_search-Anfrage geraten.
-_BIBLE_MIT_FAMILIE = ("Mia (4 Jahre) wohnt im Mustertal. Geheimwort: "
-                      "Vögelchen. Finn ist die Katze der Familie Eschner.")
+_BIBLE_MIT_FAMILIE = ("Mia (4 Jahre) wohnt im Beispieltal. Geheimwort: "
+                      "Vögelchen. Finn ist die Katze der Familie Sonntag.")
 _HISTORIE_MIT_FAMILIE = "## Folge 1: Mia und Finn im Garten"
-_FAMILIEN_TOKEN = ["Mia", "Finn", "Eschner", "Mustertal", "Vögelchen",
+_FAMILIEN_TOKEN = ["Mia", "Finn", "Sonntag", "Beispieltal", "Vögelchen",
                    "Geheimwort", "familie"]
 
 
@@ -229,7 +229,7 @@ def test_websearch_payload_enthaelt_KEINE_familiendaten():
     llm_service.erzeuge_folgen_vorschlag(
         idee="Quantencomputing und seine gesellschaftlichen Risiken",
         bible=_BIBLE_MIT_FAMILIE, historie=_HISTORIE_MIT_FAMILIE,
-        naechste_nummer=1, llm=llm, name="Niclas", alter=39,
+        naechste_nummer=1, llm=llm, name="Emil", alter=39,
         zielgruppe="erwachsen", agent=agent)
 
     assert agent.step_calls, "Recherche muss gelaufen sein"

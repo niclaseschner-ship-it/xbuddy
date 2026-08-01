@@ -139,7 +139,7 @@ def data_root(tmp_path):
     (root / "shared-assets" / "intro.txt").write_text("Es war einmal — die Folge geht los.")
     (root / "shared-assets" / "outro.txt").write_text("Bis zum nächsten Mal — Stigi winkt.")
     (root / "bible.md").write_text(
-        "# Welt-Bible Stigi & Co.\n\nStigi ist ein Stieglitz im Mustertal.\n")
+        "# Welt-Bible Stigi & Co.\n\nStigi ist ein Stieglitz im Beispieltal.\n")
     (root / "folgen-historie.md").write_text(
         "## Folge 22: Schmuggli erzählt vom Trübsee\n\n"
         "Schmuggli berichtet von einer Reise zum Trübsee.\n")

@@ -47,7 +47,7 @@ PANEL_ID = "kueche"
 # der Test nicht versehentlich über den Operator-IP-Pfad grün wird. X-Real-IP
 # ist die Trust-Quelle (ESC-2); wir setzen sie gezielt pro Test.
 _EXTERN = {"X-Real-IP": "203.0.113.7"}
-_OPERATOR = {"X-Real-IP": "192.0.2.10"}  # auth.md AUTH-7:461 192.168.0.0/16
+_OPERATOR = {"X-Real-IP": "192.168.0.42"}  # auth.md AUTH-7:461 192.168.0.0/16
 
 
 # ---------------------------------------------------------------------------
@@ -56,9 +56,9 @@ _OPERATOR = {"X-Real-IP": "192.0.2.10"}  # auth.md AUTH-7:461 192.168.0.0/16
 
 
 def test_ist_operator_ip_deckt_die_drei_cidrs():
-    assert auth_gate.ist_operator_ip("192.0.2.10")   # 192.168.0.0/16
+    assert auth_gate.ist_operator_ip("192.168.0.42")   # 192.168.0.0/16
     assert auth_gate.ist_operator_ip("10.9.8.7")         # 10.0.0.0/8
-    assert auth_gate.ist_operator_ip("100.64.0.10")    # 100.64.0.0/10 (Tailnet)
+    assert auth_gate.ist_operator_ip("100.64.0.31")    # 100.64.0.0/10 (Tailnet)
     assert not auth_gate.ist_operator_ip("203.0.113.7")  # öffentlich
     assert not auth_gate.ist_operator_ip("")             # leer
     assert not auth_gate.ist_operator_ip(None)           # fehlt

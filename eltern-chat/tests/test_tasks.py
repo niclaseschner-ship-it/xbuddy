@@ -615,7 +615,7 @@ def test_render_form_b_inline_buttons_plural_beide_urls_durchgereicht():
     - Quittungs-String nennt die Anzahl der Buttons.
     """
     tg = _FakeTgForRender()
-    app_url = "https://buddyboard.demo-tailnet.ts.net/essen-einkauf/"
+    app_url = "https://buddyboard.<tailscale-id>.ts.net/essen-einkauf/"
     result = render_form_b(
         {
             "text": "Einkaufsliste",

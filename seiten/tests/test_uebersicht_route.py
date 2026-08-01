@@ -209,7 +209,7 @@ def test_tailscale_banner_auch_bei_gesetztem_tailscale_origin(client):
 #  SREG-7 dritte Origin: funnel_origin (ENV + CLI + Default)
 # ============================================================
 
-FUNNEL = "https://buddyboard.demo-tailnet.ts.net"
+FUNNEL = "https://buddyboard.<tailscale-id>.ts.net"
 
 
 def test_funnel_origin_config_aus_env(monkeypatch):

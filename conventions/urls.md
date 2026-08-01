@@ -206,7 +206,7 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 5 | `/display/essen/`               | Essens-Buddy        | Display-View des Essens-Buddys (ESSEN-2): `/display/essen/wunsch`. Upstream: xbuddy-essen (:5052, PORT-2). |
 | 6 | `/display/hoerspiel/mia/`     | Hörspiel-Buddy (Mia) | Display-View Mia-Instanz (HSP-3a, HSP-26, RAT-17, URL-3a). Schließt `/display/hoerspiel/mia/static/` (URL-13) und `/display/hoerspiel/mia/data/<sub>` (Per-Instanz-Audio/Cover) ein. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
 | 7 | `/display/hoerspiel/finn/`      | Hörspiel-Buddy (Finn)  | Display-View Finn-Instanz (HSP-28a, RAT-17, URL-3a). Schließt `/display/hoerspiel/finn/static/` (URL-13) und `/display/hoerspiel/finn/data/<sub>` (Per-Instanz-Audio/Cover) ein. Upstream: xbuddy-hoerspiel-finn (:5055, PORT-2). |
-| 8 | `/display/hoerspiel/emil/`    | Hörspiel-Buddy (Niclas)  | Display-View Niclas-Instanz (HSP-28a, RAT-17, URL-3a, T1347). Schließt `/display/hoerspiel/emil/static/` (URL-13) und `/display/hoerspiel/emil/data/<sub>` (Per-Instanz-Audio/Cover) ein. Upstream: xbuddy-hoerspiel-emil (:5056, PORT-2). |
+| 8 | `/display/hoerspiel/emil/`    | Hörspiel-Buddy (Emil)  | Display-View Emil-Instanz (HSP-28a, RAT-17, URL-3a, T1347). Schließt `/display/hoerspiel/emil/static/` (URL-13) und `/display/hoerspiel/emil/data/<sub>` (Per-Instanz-Audio/Cover) ein. Upstream: xbuddy-hoerspiel-emil (:5056, PORT-2). |
 | 9 | `/display/hoerspiel/`           | Hörspiel-Buddy (Mia, Fallback) | Fallback ohne `<kind_id>`-Segment (z.B. `/display/hoerspiel/alben` und `/display/hoerspiel/themen` vor T4 #910). Übergangs-Provisorium — T4 #910 hebt diese Route auf kind_id-tragende Form. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
 | 10 | `/display/kibuddy/`             | KI-Buddy            | Display-View des KI-Buddys (KIBUDDY-2): `/display/kibuddy/frage`. Schließt `/display/kibuddy/static/` (URL-13) ein. Upstream: xbuddy-kibuddy (:5054, PORT-2). |
 | 11 | `/api/v1/plan/`                | Plan-Buddy          | Plan-Buddy-Backend: `GET\|PUT /api/v1/plan/termine` (PLAN-22), `GET /api/v1/plan/zuteilung` (PLAN-30), `PUT /api/v1/plan/zuteilung` (PLAN-31), `PUT\|DELETE /api/v1/plan/aktivitaet` (PLAN-11). |
@@ -217,7 +217,7 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 16 | `/api/v1/routine/`             | Routine-Buddy       | Routine-Buddy-Backend: Schreib-API für Zeiten/Items (ROUTINE-14). Upstream: xbuddy-routine (:5050, PORT-2). |
 | 17 | `/api/v1/hoerspiel/mia/`     | Hörspiel-Buddy (Mia) | Hörspiel-Backend Mia-Instanz (HSP-17, HSP-26, RAT-17, URL-3a): Bible/Historie-Read, Alben-Liste + Manifest, Folgen-Vorschlag, Album-Bau, Config (PATCH), Shared-Assets-Status/Rebuild. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
 | 18 | `/api/v1/hoerspiel/finn/`      | Hörspiel-Buddy (Finn)  | Hörspiel-Backend Finn-Instanz (HSP-28a, RAT-17, URL-3a): gleiche API-Surface wie Mia. Upstream: xbuddy-hoerspiel-finn (:5055, PORT-2). |
-| 19 | `/api/v1/hoerspiel/emil/`    | Hörspiel-Buddy (Niclas)  | Hörspiel-Backend Niclas-Instanz (HSP-28a, RAT-17, URL-3a, T1347): gleiche API-Surface wie Mia und Finn. Upstream: xbuddy-hoerspiel-emil (:5056, PORT-2). |
+| 19 | `/api/v1/hoerspiel/emil/`    | Hörspiel-Buddy (Emil)  | Hörspiel-Backend Emil-Instanz (HSP-28a, RAT-17, URL-3a, T1347): gleiche API-Surface wie Mia und Finn. Upstream: xbuddy-hoerspiel-emil (:5056, PORT-2). |
 | 20 | `/api/v1/hoerspiel/`           | Hörspiel-Buddy (Mia, Fallback) | Fallback ohne `<kind_id>`-Segment (z.B. `/api/v1/hoerspiel/themen` vor T4 #910). Übergangs-Provisorium — T4 #910 hebt diese Route auf kind_id-tragende Form. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
 | 21 | `/api/v1/kibuddy/`             | KI-Buddy            | KI-Buddy-Backend (KIBUDDY-24): Frage-Petrarbeitung (`POST /api/v1/kibuddy/frage`), Audio-Cache-Replay (`GET /api/v1/kibuddy/audio/<id>.mp3`), TTS-Replay (`POST /api/v1/kibuddy/vorlesen`), Session-Reset (`POST /api/v1/kibuddy/reset`), Prompt (`GET\|PUT /api/v1/kibuddy/prompt`, KIBUDDY-15), Config (`GET\|PUT /api/v1/kibuddy/config`). Upstream: xbuddy-kibuddy (:5054, PORT-2). |
 | 22 | `/display/_shared/icons/`      | Seiten-Registry     | ARASAAC-Piktogramme (ROU-26, RAT-31 E6f-B, #1586). Upstream: xbuddy-seiten (:5042, PORT-2). |
@@ -236,7 +236,7 @@ laufen). Konsumenten dieser Tabelle: #85 (nginx-Origin-Conf: Familie-Upstream
 ergänzen), #60 (Familie anlegen agentisch — schreibt Familie in den Routing-Plan
 einer Instanz), #82 (Geräte-Profil im Onboarding — wählt aus dieser Tabelle die
 Prefixe, die auf der Instanz aktiv sind), #135 (Icon-Bibliothek: geteilte
-Display-Assets von der Seiten-Registry serviert seit RAT-31 E6f-B/#1586, URL-16, ROU-26), #909 (zweite Hörspiel-Instanz Mia+Finn), #1347 (dritte Hörspiel-Instanz Niclas).
+Display-Assets von der Seiten-Registry serviert seit RAT-31 E6f-B/#1586, URL-16, ROU-26), #909 (zweite Hörspiel-Instanz Mia+Finn), #1347 (dritte Hörspiel-Instanz Emil).
 
 Eine neue Komponente, die einen eigenen Prozess hinter der Origin betreibt,
 muss zuerst hier eine Zeile bekommen — dann nginx, dann Code. Reihenfolge

@@ -33,7 +33,7 @@ def ca(tmp_path_factory):
     out = tmp_path_factory.mktemp("ca-out")
     res = subprocess.run(
         ["bash", SCRIPT, "--out", str(out),
-         "--san", "DNS:xbuddy-hub.local,IP:192.0.2.10"],
+         "--san", "DNS:xbuddy-hub.local,IP:192.168.0.78"],
         capture_output=True, text=True,
     )
     assert res.returncode == 0, f"make-ca.sh fehlgeschlagen:\n{res.stderr}"
@@ -77,7 +77,7 @@ def test_server_cert_traegt_san_eintraege(ca):
     )
     assert res.returncode == 0
     assert "xbuddy-hub.local" in res.stdout
-    assert "192.0.2.10" in res.stdout
+    assert "192.168.0.78" in res.stdout
 
 
 def test_root_ca_ist_eine_ca(ca):
@@ -120,7 +120,7 @@ def test_ca_lauf_ist_idempotent(ca):
         ca_vorher = f.read()
     res = subprocess.run(
         ["bash", SCRIPT, "--out", ca["out"],
-         "--san", "DNS:xbuddy-hub.local,IP:192.0.2.10"],
+         "--san", "DNS:xbuddy-hub.local,IP:192.168.0.78"],
         capture_output=True, text=True,
     )
     assert res.returncode == 0, res.stderr

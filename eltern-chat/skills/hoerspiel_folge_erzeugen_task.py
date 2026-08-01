@@ -46,7 +46,7 @@ def _oder_liste(items) -> str:
     return "%s oder %s" % (", ".join(items[:-1]), items[-1])
 
 
-_HFE_NAMEN_ODER = _oder_liste(_HFE_NAMEN)       # z. B. "Mia, Finn oder Niclas"
+_HFE_NAMEN_ODER = _oder_liste(_HFE_NAMEN)       # z. B. "Mia, Finn oder Emil"
 _HFE_IDS_ODER = _oder_liste(_HFE_KIND_IDS)      # z. B. "mia, finn oder emil"
 
 

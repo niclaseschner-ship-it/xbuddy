@@ -6,7 +6,7 @@ name: leak-guard
 #
 # ⚠️ NOCH NICHT REQUIRED. Bis #1719 den Baum auf generische Werte scrubbt, trägt
 # HEAD ~2143 Treffer (überwiegend die funktionalen Slugs mia/finn/emil, plus
-# die echten Secrets demo-tailnet/IP/chat-id) — der Job ist bis dahin bewusst ROT
+# die echten Secrets <tailscale-id>/IP/chat-id) — der Job ist bis dahin bewusst ROT
 # als Fortschritts-Anzeige des Clean. ERST NACH #1719 (grün auf HEAD) in die
 # required-checks aufnehmen (Branch-Protection, analog RAT-30). Vorher würde er
 # alle Merges blockieren.

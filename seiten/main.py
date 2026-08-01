@@ -2553,7 +2553,7 @@ def parse_args(argv):
                    help="DEPRECATED/IGNORIERT seit #1458 (Funnel-only, SREG-7)")
     p.add_argument("--seiten-funnel-origin", dest="seiten_funnel_origin",
                    help="Funnel-FQDN-Origin für Familien-User-Geräte (SREG-7 dritte Origin,"
-                        " AUTH-7b, RAT-27; z.B. https://buddyboard.demo-tailnet.ts.net)")
+                        " AUTH-7b, RAT-27; z.B. https://buddyboard.<tailscale-id>.ts.net)")
     # SREG-17 / RAT-31 E6b (#1564): Origin des panel-Service, an den seiten
     # config.json/tiles.json/bearbeiten* der App-Panel-Instanzen proxyt (DCOMP-1).
     # ENV PANEL_SERVICE_URL ueberschreibt Default; CLI-Flag schlaegt ENV.

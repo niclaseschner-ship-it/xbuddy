@@ -1486,7 +1486,7 @@ mir die <X> einstellungen«, »<X> app öffnen«, »<X>-Optionen«."
 explizite Achsen-Kreuzungs-Phrase robust geroutet (Claude robuster
 gegenüber generischen Settings-Triggern). Nach Mistral-Switch
 (`mistral-medium-2508`) zeigten Familien-Live-Repros (Refs #1075,
-conversations.db chat 0000000000, seq 600/602/604 am 2026-06-22):
+conversations.db chat <chat-id>, seq 600/602/604 am 2026-06-22):
 „Schick mir die Hörbuch settings", „Schick mir die settings", „Gib
 mir die Routine settings" wurden **nicht** zu Tool-Calls, sondern
 halluzinierten Markdown-Knöpfen im Antwort-Text (siehe EC-41). EC-40
@@ -1567,7 +1567,7 @@ App-spezifischer Reflex bestehen, ist aber redundant zu EC-41 und
 gilt mechanisch über EC-41 auch für EZG / RAO / MAU.
 
 **Begründung.** Live-Repro 2026-06-22 (Refs #1075,
-conversations.db chat 0000000000, seq 601/603/605): unter
+conversations.db chat <chat-id>, seq 601/603/605): unter
 `mistral-medium-2508` halluzinierte der Agent statt eines Tool-Calls
 literale Markdown-Knöpfe in den Antwort-Text — z. B. *„👉 **Öffne
 die App mit diesem Knopf:** [**Routine-Anpassen-Mini-App öffnen**]"*.

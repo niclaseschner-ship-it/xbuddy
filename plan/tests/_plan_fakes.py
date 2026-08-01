@@ -122,7 +122,7 @@ class FakeTransport:
 # Familien-Registry: zwei Erwachsene, zwei Kinder — wie der Wireframe-Handoff.
 DEMO_REGISTRY = {
     "erwachsene": [
-        {"id": "emil", "name": "Niclas", "ring": "blue",
+        {"id": "emil", "name": "Emil", "ring": "blue",
          "email": "emil@example.org"},
         {"id": "petra", "name": "Petra", "ring": "orange",
          "email": "petra@example.org"},

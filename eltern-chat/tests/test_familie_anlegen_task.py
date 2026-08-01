@@ -188,12 +188,12 @@ def test_EC10_278_one_step_confirmation_summary_includes_confirmation_question()
     ausdrücklicher Bestätigung, FAA-7 / EC-10).
     """
     from skills.familie_anlegen import KIND_ERWACHSENE, _zusammenfassung
-    summary = _zusammenfassung("Niclas", KIND_ERWACHSENE, "blue", None, None, None)
+    summary = _zusammenfassung("Emil", KIND_ERWACHSENE, "blue", None, None, None)
     # Die Zusammenfassung enthält Bestätigungsfrage als erstes Element.
     assert "ok" in summary.lower() or "ja" in summary.lower()
     assert "bestätigen" in summary.lower() or "bestätig" in summary.lower()
     # Und enthält die Daten-Übersicht.
-    assert "Niclas" in summary
+    assert "Emil" in summary
     assert "blue" in summary
 
 
@@ -346,7 +346,7 @@ def test_FAA_12_session_routes_private_chat_messages_to_faa(tmp_path):
         faa_sessions=sessions)
 
     # Vollständiger Anlage-Dialog für eine einzelne Person.
-    for answer in ("erwachsene", "Niclas", "überspringen", "ok",
+    for answer in ("erwachsene", "Emil", "überspringen", "ok",
                    "überspringen", "überspringen", "ok", "nein"):
         handle_update(
             make_message(answer, chat_id=user_id, from_user_id=user_id,
@@ -355,7 +355,7 @@ def test_FAA_12_session_routes_private_chat_messages_to_faa(tmp_path):
 
     _wait_until_session_done(sessions, user_id, timeout=2.0)
     assert len(client.anlage_calls) == 1
-    assert client.anlage_calls[0]["name"] == "Niclas"
+    assert client.anlage_calls[0]["name"] == "Emil"
 
 
 def test_FAA_12_non_member_caller_is_rejected_by_faa():
@@ -511,7 +511,7 @@ def test_T285_S1_faa_typing_fn_fires_per_session_step():
 
     # Vollständiger Dialog: Art, Name, Foto-Skip, Ring-ok, Email-Skip,
     # Telegram-ich, Bestätigung, Noch-jemand-Nein.
-    for answer in ("erwachsene", "Niclas", "überspringen",
+    for answer in ("erwachsene", "Emil", "überspringen",
                    "ok", "überspringen", "ich", "ok", "nein"):
         session.deliver(FaaInput(text=answer))
         time.sleep(0.02)

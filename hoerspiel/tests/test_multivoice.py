@@ -148,7 +148,7 @@ def test_load_instance_laedt_voices(tmp_path):
     instance_path = tmp_path / "instance.json"
     instance_path.write_text(json.dumps({
         "kind_id": "emil",
-        "name": "Niclas",
+        "name": "Emil",
         "alter": 35,
         "voices": {"KIM": "shimmer", "RUBEN": "onyx"},
     }))
@@ -173,7 +173,7 @@ def test_load_instance_ungueltige_voice_wirft(tmp_path):
     instance_path = tmp_path / "instance.json"
     instance_path.write_text(json.dumps({
         "kind_id": "emil",
-        "name": "Niclas",
+        "name": "Emil",
         "alter": 35,
         "voices": {"KIM": "alloy"},  # 'alloy' ist nicht in VALID_VOICES
     }))

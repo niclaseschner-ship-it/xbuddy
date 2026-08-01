@@ -303,7 +303,7 @@ wird ein `intern`-Flag oder eine echte Rolle fällig. Bis dahin nicht auf Vorrat
 
 > **Nic-Setzung 2026-07-25 (#1458, enacted):** Self-signed-Tailnet-IP-Origins
 > werden aufgegeben. Alle Geräte erreichen die Shell über den Funnel-FQDN
-> (`buddyboard.demo-tailnet.ts.net`) mit LE-Zertifikat + Cookie. Die
+> (`buddyboard.<tailscale-id>.ts.net`) mit LE-Zertifikat + Cookie. Die
 > `display_url_origin_tailscale`-Slot wurde entfernt.
 
 | Config-Schlüssel | Bedeutung | Default |
@@ -326,7 +326,7 @@ SREG-5-Skill keinen tippbaren Link liefern und die SREG-12-Seite hat keine
 User-Geräte-Zugang nicht angeboten (kein Auto-Fallback — falsche Origin =
 Cookie im falschen Jar + nicht-erreichbarer Link).
 
-**Funnel-FQDN mit LE-Zertifikat** (`buddyboard.demo-tailnet.ts.net`-Muster,
+**Funnel-FQDN mit LE-Zertifikat** (`buddyboard.<tailscale-id>.ts.net`-Muster,
 `reference_tailscale_buddyboard`), über die **Familien-User-Geräte** die
 Shell/Views erreichen (AUTH-7b). Der **Pairing-Redirect** (`/auth/pair`,
 AUTH-2.a) muss **same-origin/relativ** bleiben — landet der
