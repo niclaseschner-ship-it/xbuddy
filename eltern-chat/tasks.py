@@ -454,8 +454,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   mini_app_einkauf_url=None,
                   mini_app_base_url=None,
                   hoerspiel_url_origin=None,
-                  hoerspiel_url_origin_finn: str = "",
-                  hoerspiel_url_origin_emil: str = "",
                   kibuddy_origin_url=None,
                   a2_receipt_store=None,
                   wetter_origin_url=None):
@@ -929,6 +927,10 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.hoerspiel_folge_erzeugen_task import HoerspielFolgeErzeugenTask
         _hfe_client = HoerspielClient(origin_url=hoerspiel_url_origin)
         _hfe_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        # Option C (#1732): die per-kind_id-Origins kommen jetzt aus der zentralen
+        # instanzen.json-Registry (HOERSPIEL_INSTANZEN.origin), nicht mehr als
+        # hoerspiel_url_origin_finn/_emil durchgereicht. hoerspiel_url_origin bleibt
+        # der Katalog-Gate + Default-Client (_hfe_client oben).
         catalog.register(HoerspielFolgeErzeugenTask(
             tg=tg,
             hoerspiel_client=_hfe_client,
@@ -938,14 +940,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             # HFE-10 (#937-Folge 2026-06-16): mini_app_base_url an HFE-Task
             # durchschleifen, sonst sendet _sende_beifang_button früh-Return
             # (URL leer) und der Settings-Beifang-Button erscheint NIE.
-            mini_app_base_url=mini_app_base_url or "",
-            # RAT-17 / #910 / T954: Finn-Origin durchreichen, damit Mini-Map
-            # _client_by_kind_id["finn"] einen echten HoerspielClient mit
-            # Finn-Origin bekommt (statt stillschweigende Mia-Fallback, AC-1).
-            hoerspiel_url_origin=hoerspiel_url_origin or "",
-            hoerspiel_url_origin_finn=hoerspiel_url_origin_finn or "",
-            # HSP-43 / #1263: Emil-Origin durchreichen (handverdrahtet wie finn).
-            hoerspiel_url_origin_emil=hoerspiel_url_origin_emil or ""))
+            mini_app_base_url=mini_app_base_url or ""))
 
     # HOE-8 / #876: »Hörspiel öffnen« als lesende Aufgabe (EC-9, Cluster B / Capability-Karte).
     # Dreifacher AND-Guard: hoerspiel_url_origin UND mini_app_base_url UND
