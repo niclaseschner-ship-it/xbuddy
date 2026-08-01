@@ -48,3 +48,6 @@ __pycache__/
 **/server-cert.pem
 **/server.csr
 uv.lock
+
+# Demo-Modus (#1725): Wegwerf-Dir mit den generischen Demo-Seeds — nie committen.
+xbuddy-data-demo/
