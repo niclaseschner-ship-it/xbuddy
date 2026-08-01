@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WetterBuddy · Garderoben-Regeln</title>
+<link rel="manifest" href="/seiten/wetter/regeln/manifest.json">
+<meta name="theme-color" content="#47503C">
+<link rel="stylesheet" href="/display/_shared/design/tokens.css">
+<link rel="stylesheet" href="/display/_shared/design/mini-app-base.css">
+<link rel="stylesheet" href="/seiten/wetter/regeln/wetter-regeln.css?v={{ build_id }}">
+</head>
+<body class="xb editor">
+
+<main class="wrap">
+  <header class="kopf">
+    <h1>Garderoben-Regeln</h1>
+    <p class="hint">Wähle für jede Wetter-Lage die Kleidung. Die Wetter-Schwellen
+      sind fest — du änderst nur die Kleidung.</p>
+  </header>
+
+  <section class="uebersicht" aria-label="Regel-Übersicht"></section>
+  <div id="fokus-container"></div>
+
+  <footer class="leiste">
+    <button type="button" id="speichern" class="speichern">Speichern</button>
+    <span id="status" class="status" role="status" aria-live="polite"></span>
+  </footer>
+</main>
+
+<div id="palette-modal" class="palette-modal" hidden aria-modal="true" role="dialog" aria-label="Kleidung wählen">
+  <div class="palette-overlay"></div>
+  <div class="palette-inhalt">
+    <div class="palette-kopf">
+      <h3>Kleidung hinzufügen</h3>
+      <button type="button" class="palette-schliessen" aria-label="Schließen">×</button>
+    </div>
+    <div class="palette-stuecke"></div>
+  </div>
+</div>
+
+<script>
+// wetter/regeln Mini-App (#1715, Zweig A / ESB-1.a): seiten-gehostete JS-Shell.
+// Rendert den Garderoben-Editor client-side aus GET /api/v1/wetter/regeln und
+// schreibt über POST /api/v1/wetter/regeln (AUTH-3: same-origin-Cookie ODER tma).
+(function () {
+  "use strict";
+  var API = "/api/v1/wetter/regeln";
+  var statusEl = document.getElementById("status");
+  var modal = document.getElementById("palette-modal");
+  var zielZelle = null;
+
+  // MAD-7: Telegram-Mini-App reicht initData als tma-Header; im Browser trägt der
+  // same-origin-Cookie (credentials) die Identität. Beides wird versucht.
+  function authHeaders() {
+    var h = {};
+    try {
+      var wa = window.Telegram && window.Telegram.WebApp;
+      if (wa && wa.initData) { h["Authorization"] = "tma " + wa.initData; }
+    } catch (e) { /* kein Telegram-Kontext */ }
+    return h;
+  }
+
+  function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
+
+  function stueckHTML(k) {
+    return '<span class="stueck" data-pikto="' + esc(k.pikto) + '" data-name="' + esc(k.name) + '">' +
+      '<img src="' + esc(k.icon_url) + '" alt="' + esc(k.name) + '">' +
+      '<span class="label">' + esc(k.name) + '</span>' +
+      '<button type="button" class="entfernen" aria-label="Entfernen">×</button></span>';
+  }
+
+  function setHTML(rolle, titel, stuecke) {
+    var inner = (stuecke || []).map(stueckHTML).join("") +
+      '<button type="button" class="stueck-plus" aria-label="Kleidung hinzufügen"><span class="plus-symbol">+</span></button>';
+    return '<div class="set" data-set="' + rolle + '"><h3>' + esc(titel) + '</h3>' +
+      '<div class="stuecke" data-rolle="' + rolle + '">' + inner + '</div></div>';
+  }
+
+  function bedingungHTML(bedingung_text) {
+    if (bedingung_text && bedingung_text.length) {
+      return bedingung_text.map(function (t) { return '<span class="schwelle">' + esc(t) + '</span>'; }).join("");
+    }
+    return '<span class="schwelle">immer</span>';
+  }
+
+  function fokusHTML(id, bedingung_text, hinweis, pflicht, optional, istFallback) {
+    var kopf = istFallback ? '<h2>Sonst (Fallback)</h2>'
+      : '<h2>Wenn: ' + bedingungHTML(bedingung_text) + ' <span class="lock">🔒</span></h2>';
+    var h = hinweis ? '<p class="hinweis ro">' + esc(hinweis) + '</p>' : '';
+    return '<section class="fokus" id="' + id + '" data-fokus="' + id + '" hidden>' +
+      '<div class="fokus-kopf">' + kopf + '</div>' + h +
+      setHTML("pflicht", "Muss an (Pflicht)", pflicht) +
+      setHTML("optional", "Wenn du magst (Optional)", optional) + '</section>';
+  }
+
+  function render(view) {
+    // Übersicht + Fokus-Blöcke.
+    var uebersicht = document.querySelector(".uebersicht");
+    var fokus = document.getElementById("fokus-container");
+    var zeilen = "", bloecke = "";
+    (view.regeln || []).forEach(function (r) {
+      var id = "regel-" + r.index;
+      var mini = (r.pflicht || []).map(function (k) {
+        return '<img src="' + esc(k.icon_url) + '" alt="' + esc(k.name) + '" class="mini">';
+      }).join("");
+      zeilen += '<button type="button" class="regel-zeile" data-ziel="' + id + '">' +
+        '<span class="bedingung">' + bedingungHTML(r.bedingung_text) + '</span>' +
+        '<span class="vorschau">' + mini + '</span></button>';
+      bloecke += fokusHTML(id, r.bedingung_text, r.hinweis, r.pflicht, r.optional, false);
+    });
+    var fbMini = ((view.fallback && view.fallback.pflicht) || []).map(function (k) {
+      return '<img src="' + esc(k.icon_url) + '" alt="' + esc(k.name) + '" class="mini">';
+    }).join("");
+    zeilen += '<button type="button" class="regel-zeile fallback-zeile" data-ziel="fallback">' +
+      '<span class="bedingung"><span class="schwelle">sonst (Fallback)</span></span>' +
+      '<span class="vorschau">' + fbMini + '</span></button>';
+    bloecke += fokusHTML("fallback", [], (view.fallback || {}).hinweis,
+      (view.fallback || {}).pflicht, (view.fallback || {}).optional, true);
+    uebersicht.innerHTML = zeilen;
+    fokus.innerHTML = bloecke;
+
+    // Palette-Modal füllen.
+    var pal = (view.palette || []).map(function (p) {
+      return '<button type="button" class="palette-stueck" data-pikto="' + esc(p.pikto) + '" data-name="' + esc(p.name) + '">' +
+        '<img src="' + esc(p.icon_url) + '" alt="' + esc(p.name) + '"><span class="label">' + esc(p.name) + '</span></button>';
+    }).join("");
+    modal.querySelector(".palette-stuecke").innerHTML = pal;
+    verdrahte();
+  }
+
+  function zeige(id) {
+    document.querySelectorAll(".fokus").forEach(function (f) { f.hidden = f.id !== id; });
+    var ziel = document.getElementById(id);
+    if (ziel) { ziel.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  }
+  function oeffneModal(box) { zielZelle = box; modal.hidden = false; var e = modal.querySelector(".palette-stueck"); if (e) { e.focus(); } }
+  function schliesseModal() { modal.hidden = true; zielZelle = null; }
+
+  function verdrahte() {
+    document.querySelectorAll(".regel-zeile").forEach(function (z) {
+      z.addEventListener("click", function () { zeige(z.dataset.ziel); });
+    });
+    modal.querySelectorAll(".palette-stueck").forEach(function (p) {
+      p.addEventListener("click", function () {
+        if (!zielZelle) { return; }
+        var span = document.createElement("span");
+        span.className = "stueck"; span.dataset.pikto = p.dataset.pikto; span.dataset.name = p.dataset.name;
+        span.innerHTML = '<img src="' + p.querySelector("img").src + '" alt="' + esc(p.dataset.name) + '">' +
+          '<span class="label">' + esc(p.dataset.name) + '</span>' +
+          '<button type="button" class="entfernen" aria-label="Entfernen">×</button>';
+        var plus = zielZelle.querySelector(".stueck-plus");
+        if (plus) { zielZelle.insertBefore(span, plus); } else { zielZelle.appendChild(span); }
+        schliesseModal();
+      });
+    });
+  }
+
+  // Delegierte Klicks: +Kachel öffnet Modal, ×-Knopf entfernt Stück.
+  document.addEventListener("click", function (ev) {
+    var plus = ev.target.closest(".stueck-plus");
+    if (plus) { var box = plus.closest(".stuecke"); if (box) { oeffneModal(box); } return; }
+    var ent = ev.target.closest(".entfernen");
+    if (ent) { var s = ent.closest(".stueck"); if (s) { s.remove(); } }
+  });
+  document.querySelector(".palette-schliessen").addEventListener("click", schliesseModal);
+  document.querySelector(".palette-overlay").addEventListener("click", schliesseModal);
+  document.addEventListener("keydown", function (ev) { if (!modal.hidden && ev.key === "Escape") { schliesseModal(); } });
+
+  function leseSet(fokus, rolle) {
+    var out = [];
+    fokus.querySelectorAll(".stuecke[data-rolle='" + rolle + "'] .stueck").forEach(function (s) {
+      out.push({ name: s.dataset.name, pikto: s.dataset.pikto });
+    });
+    return out;
+  }
+  function sammleMatrix() {
+    var regeln = [];
+    document.querySelectorAll(".fokus[data-fokus^='regel-']").forEach(function (f) {
+      regeln.push({ pflicht: leseSet(f, "pflicht"), optional: leseSet(f, "optional") });
+    });
+    var fb = document.querySelector(".fokus[data-fokus='fallback']");
+    return { regeln: regeln, fallback: { pflicht: leseSet(fb, "pflicht"), optional: leseSet(fb, "optional") } };
+  }
+
+  document.getElementById("speichern").addEventListener("click", function () {
+    statusEl.textContent = "Speichere …"; statusEl.className = "status";
+    var headers = authHeaders(); headers["Content-Type"] = "application/json";
+    fetch(API, { method: "POST", credentials: "same-origin", headers: headers, body: JSON.stringify(sammleMatrix()) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (res.ok && res.d.ok) { statusEl.textContent = "Gespeichert."; statusEl.className = "status ok"; }
+        else { statusEl.textContent = "Nicht gespeichert: " + (res.d.fehler || "Fehler"); statusEl.className = "status fehler"; }
+      })
+      .catch(function () { statusEl.textContent = "Nicht gespeichert: Verbindungsfehler"; statusEl.className = "status fehler"; });
+  });
+
+  // Boot: Daten laden (same-origin-Cookie ODER tma). 401 → Re-Pair-Hinweis.
+  fetch(API, { credentials: "same-origin", headers: authHeaders() })
+    .then(function (r) {
+      if (r.status === 401) { throw new Error("auth"); }
+      return r.json();
+    })
+    .then(render)
+    .catch(function (e) {
+      statusEl.textContent = e && e.message === "auth"
+        ? "Dieses Gerät muss neu gekoppelt werden — öffne den Pairing-Link aus dem Eltern-Chat."
+        : "Konnte die Regeln nicht laden.";
+      statusEl.className = "status fehler";
+    });
+})();
+</script>
+</body>
+</html>

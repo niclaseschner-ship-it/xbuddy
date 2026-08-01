@@ -48,7 +48,7 @@ def test_wetter_views_json_laedt_sauber():
 
     assert "regeln" in nach_slug
     regeln = nach_slug["regeln"]
-    assert regeln["pfad"] == "/display/wetter/regeln"
+    assert regeln["pfad"] == "/seiten/wetter/regeln"
     assert regeln["zielgruppe"] == "eltern"
     # BUD-4: Sorte b (eltern) trägt kein icons-Feld — kein Vorrat (CLAUDE.md §6).
     assert "icons" not in regeln
