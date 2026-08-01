@@ -70,6 +70,41 @@ def as_of_for(model_id: str) -> str | None:
     return _PRICES_AS_OF.get(model_id)
 
 
+def estimate_cost(
+    model_id: str,
+    input_tokens: int,
+    cache_read_tokens: int,
+    output_tokens: int,
+    cache_creation_tokens: int = 0,
+) -> tuple[float | None, float | None]:
+    """Liefert `(est_cost_usd, est_cost_eur)` für einen Provider-Call oder
+    `(None, None)` bei unbekanntem Modell (LLMP-S4).
+
+    Die EINE Kosten-Quelle (OPEN-LLMP-A / #1636): eltern-chat konsumiert diese
+    Funktion, statt eine Zweit-Tabelle (`eltern-chat/providers/pricing.py`) zu
+    führen. `_PRICES_USD_PER_MILLION` ist der einzige Preis-Strang.
+
+    `cache_read_tokens` werden mit dem (deutlich niedrigeren) Cached-Input-Preis
+    abgerechnet, der Rest mit dem normalen Input-Preis; `cache_creation_tokens`
+    kostet in V1 den regulären Input-Preis (Anthropic-Cache-Semantik). Die
+    Positionsreihenfolge (model, input, cached, output) folgt dem eltern-chat-
+    Vorbild, damit der Konsument-Call unverändert übernimmt.
+    """
+    prices = _PRICES_USD_PER_MILLION.get(model_id)
+    if prices is None:
+        return (None, None)
+    input_price, cached_price, output_price = prices
+    # Reguläre Input-Tokens = Gesamt-Input minus die per Cache gelesenen Tokens.
+    regular_input = max(0, (input_tokens or 0) - (cache_read_tokens or 0))
+    cost_usd = (
+        regular_input * input_price / 1_000_000.0
+        + (cache_read_tokens or 0) * cached_price / 1_000_000.0
+        + (cache_creation_tokens or 0) * input_price / 1_000_000.0
+        + (output_tokens or 0) * output_price / 1_000_000.0
+    )
+    return (cost_usd, cost_usd * EUR_PER_USD)
+
+
 def compute_eur(
     model_id: str,
     input_tokens: int,
@@ -78,25 +113,13 @@ def compute_eur(
     cache_creation_tokens: int = 0,
 ) -> float | None:
     """Liefert `est_cost_eur` für einen Provider-Call oder `None` bei
-    unbekanntem Modell (LLMP-S4, analog `eltern-chat/providers/pricing.estimate_cost`).
+    unbekanntem Modell (LLMP-S4).
 
-    `cache_creation_tokens` wird in V1 dem regulären Input-Preis zugeschlagen
-    (Anthropic-Cache-Semantik: Creation-Tokens kosten Input-Preis, Read-Tokens
-    den niedrigeren Cached-Input-Preis).
+    Dünne Fassade über `estimate_cost` (EINE Berechnung, #1636) — behält die
+    bestehende Signatur (model, input, output, cache_read, cache_creation) für
+    die #1635-Telemetrie-Nähte bei und liefert nur den €-Teil.
     """
-    prices = _PRICES_USD_PER_MILLION.get(model_id)
-    if prices is None:
-        return None
-    input_price, cached_price, output_price = prices
-    # Reguläre Input-Tokens = Gesamt-Input minus die per Cache gelesenen Tokens.
-    # `input_tokens` aus dem Anthropic-SDK enthält bereits **nicht** die
-    # cache-read-Tokens (separates Feld `cache_read_input_tokens`), aber das
-    # eltern-chat-Vorbild zieht sicherheitshalber ab — wir folgen exakt.
-    regular_input = max(0, (input_tokens or 0) - (cache_read_tokens or 0))
-    cost_usd = (
-        regular_input * input_price / 1_000_000.0
-        + (cache_read_tokens or 0) * cached_price / 1_000_000.0
-        + (cache_creation_tokens or 0) * input_price / 1_000_000.0
-        + (output_tokens or 0) * output_price / 1_000_000.0
-    )
-    return cost_usd * EUR_PER_USD
+    return estimate_cost(
+        model_id, input_tokens, cache_read_tokens, output_tokens,
+        cache_creation_tokens,
+    )[1]

@@ -1,6 +1,8 @@
 """Tests für `tools.llm.pricing` — Preis-Tabelle (LLMP-S4, OPEN-LLMP-A)."""
 
-from tools.llm import pricing
+import pytest
+
+from tools.llm import estimate_cost, pricing
 
 
 def test_known_model_returns_eur():
@@ -115,3 +117,56 @@ def test_compute_eur_still_works_after_as_of_substrat():
     eur = pricing.compute_eur("claude-haiku-4-5", input_tokens=1000, output_tokens=500)
     assert eur is not None
     assert eur > 0
+
+
+# ── estimate_cost — die EINE Kosten-Quelle (OPEN-LLMP-A / #1636) ──────────────
+# Portiert aus eltern-chat/tests/test_pricing.py (Zweit-Tabelle aufgelöst): die
+# Parität-Fälle wandern zur unified-Quelle. estimate_cost liefert (usd, eur).
+EUR_PER_USD = pricing.EUR_PER_USD
+
+
+def test_estimate_cost_public_export():
+    """estimate_cost ist über `from tools.llm import estimate_cost` erreichbar."""
+    assert estimate_cost is pricing.estimate_cost
+
+
+def test_estimate_cost_opus_4_7_matches_table():
+    """claude-opus-4-7: 5/0.5/25 USD per 1M — liefert usd UND eur."""
+    cost_usd, cost_eur = estimate_cost("claude-opus-4-7", 1_000_000, 0, 1_000_000)
+    assert cost_usd == pytest.approx(5.00 + 25.00)
+    assert cost_eur == pytest.approx((5.00 + 25.00) * EUR_PER_USD)
+
+
+def test_estimate_cost_sonnet_and_haiku_match_table():
+    assert estimate_cost("claude-sonnet-4-6", 1_000_000, 0, 1_000_000)[0] == pytest.approx(3.00 + 15.00)
+    assert estimate_cost("claude-haiku-4-5", 1_000_000, 0, 1_000_000)[0] == pytest.approx(1.00 + 5.00)
+
+
+def test_estimate_cost_mistral_matches_table():
+    """mistral-medium-2508/-3504: 0.40/0.40/2.00 USD per 1M (T1366)."""
+    for model in ("mistral-medium-2508", "mistral-medium-3504"):
+        usd, eur = estimate_cost(model, 1_000_000, 0, 1_000_000)
+        assert usd == pytest.approx(0.40 + 2.00)
+        assert eur == pytest.approx((0.40 + 2.00) * EUR_PER_USD)
+
+
+def test_estimate_cost_unknown_model_returns_none_tuple():
+    """Unbekanntes Modell → (None, None) — Telemetrie zeigt keinen €-Wert (AC5)."""
+    assert estimate_cost("gpt-4o-2099", 100, 0, 100) == (None, None)
+
+
+def test_estimate_cost_cache_read_billed_at_cached_price():
+    """opus: 1M Tokens, 800k davon cache-read → 800k*0.5 + 200k*5 = 1.4 USD."""
+    usd, _ = estimate_cost("claude-opus-4-7", 1_000_000, 800_000, 0)
+    assert usd == pytest.approx(1.4)
+
+
+def test_estimate_cost_zero_tokens_is_zero():
+    assert estimate_cost("claude-opus-4-7", 0, 0, 0) == (0.0, 0.0)
+
+
+def test_compute_eur_is_estimate_cost_eur_component():
+    """compute_eur ist die dünne €-Fassade über estimate_cost (EINE Berechnung)."""
+    usd, eur = estimate_cost("claude-haiku-4-5", 10_000, 2_000, 5_000, 1_000)
+    # compute_eur nimmt (model, input, output, cache_read, cache_creation).
+    assert pricing.compute_eur("claude-haiku-4-5", 10_000, 5_000, 2_000, 1_000) == pytest.approx(eur)
