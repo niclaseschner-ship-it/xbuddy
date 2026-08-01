@@ -407,7 +407,7 @@ atomarer Schreibpfad.
   für alle Buddys. `plan/static/design/tokens.css` (v1.0) ist abgelöst (#323).
   Konvention: [`conventions/design-tokens.md`](../../conventions/design-tokens.md).
   Andockpunkt via `/display/_shared/` (DTOK-2) ist Schritt-2-Arbeit (#323).
-- **OPEN-WETTER-I — ENTSCHIEDEN** (#328, arbeitstag 2026-06-06, URL-2-Drift geheilt #594): Die Editor-Seite lebt im **eigenen wetter-Display-Namespace** — `GET und POST auf /display/wetter/regeln` — auf derselben Origin. Schutz = Netz-Grenze (WETTER-31; Topologie LAN/Tailscale, kein Port-Forwarding); **kein separater Bind**.
+- **OPEN-WETTER-I — AMENDIERT 2026-08-01** (#1715, Nic „Einheitlichkeit ist mir wichtiger", berater-runde): Die Editor-Seite zieht in den **einheitlichen Eltern-Seiten-Namespace** `/seiten/wetter/regeln` (seiten-gehostete Mini-App wie einkauf/hörspiel/plan/routine, ESB-1.a) — Server-Template → JS-Shell, Datenrouten `GET/POST /api/v1/wetter/regeln` in **AUTH-3** (Cookie-hart), REGISTRY-Eintrag + Mantel aus seiten. Der bisherige `/display/wetter/regeln`-Namespace **entfällt**. Trade bewusst akzeptiert: Symmetrie vor Service-Kohäsion; der Schreib-Pfad wird cross-service (Kill-Kriterium: Pi-Spike Install+POST-Save+Kiosk grün). *(Ursprung #328/2026-06-06, URL-2-Drift #594: Editor im eigenen wetter-Display-Namespace `/display/wetter/regeln` — durch die ESB-1.a-Einheitlichkeit überholt.)*
 - **OPEN-WETTER-K — `data-stage="parent"`-Token-Block. VERTAGT (RAT-8, Nic
   2026-06-06):** im geteilten Token-Strang noch nicht definiert (nur reader/toddler);
   V1.1 fährt auf Basis-/Reader-Tokens. Der parent-Stufen-Block wird **bei der 2.
