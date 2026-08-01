@@ -96,13 +96,22 @@ def demo_instanz(tmp_path):
     return str(p)
 
 
+# AUTH-7b (#1400): der PUT-Endpoint ist hart cookie-gated. Die Schreib-Tests
+# fahren mit gültigem Session-Cookie (gekoppeltes Gerät); die Auth-Tests unten
+# prüfen 401 ohne Cookie separat.
+_BOT_TOKEN = "123456:ABCdef_paneltesttoken"
+
+
 @pytest.fixture
 def write_client(demo_instanz):
-    """Schreib-Modus: registry_path gesetzt."""
+    """Schreib-Modus: registry_path gesetzt, mit gültigem AUTH-7b-Cookie."""
+    from tools.initdata import session_cookie as _sc
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg, registry_path=demo_instanz)
+    panel_main.configure(reg, registry_path=demo_instanz, bot_token=_BOT_TOKEN)
     panel_main.app.testing = True
-    return panel_main.app.test_client(), demo_instanz
+    client = panel_main.app.test_client()
+    client.set_cookie(_sc.COOKIE_NAME, _sc.sign_session("op", _BOT_TOKEN))
+    return client, demo_instanz
 
 
 def _sha256(path):
@@ -358,11 +367,14 @@ def test_pbe4_flat_query_is_valid(write_client):
 
 
 def test_pbe4_no_registry_path_returns_503(demo_instanz):
-    """Test-Modus ohne registry_path → 503 (kein Schreiben möglich)."""
+    """Test-Modus ohne registry_path → 503 (kein Schreiben möglich). Mit gültigem
+    AUTH-7b-Cookie, damit das Gate (401) passiert und der 503-Pfad geprüft wird."""
+    from tools.initdata import session_cookie as _sc
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg)   # kein registry_path
+    panel_main.configure(reg, bot_token=_BOT_TOKEN)   # kein registry_path
     panel_main.app.testing = True
     client = panel_main.app.test_client()
+    client.set_cookie(_sc.COOKIE_NAME, _sc.sign_session("op", _BOT_TOKEN))
     r = client.put("/api/v1/panels/kueche-01/tiles",
                    json=GUELTIGE_TILES, content_type="application/json")
     assert r.status_code == 503
@@ -439,3 +451,27 @@ def test_pbe4_last_write_wins_zwei_sequentielle_puts(write_client):
     # Erster-PUT-Kacheln dürfen nicht mehr vorhanden sein.
     assert "wetter" not in keys, "wetter aus erstem PUT noch im Ergebnis (Misch-Stand)"
     assert "plan" not in keys, "plan aus erstem PUT noch im Ergebnis (Misch-Stand)"
+
+
+# ============================================================
+#  AUTH-7b (#1400 / #1389) — PBE-4 WRITE hart cookie-gated
+# ============================================================
+def test_pbe4_ohne_cookie_ist_401(demo_instanz):
+    """AUTH-7b / AUTH-3.a (#1400): PUT ohne gültigen Session-Cookie → 401.
+    WRITE ist hart ab Tag 0, keine Observe-Grace."""
+    reg = registry_mod.load(demo_instanz)
+    panel_main.configure(reg, registry_path=demo_instanz, bot_token=_BOT_TOKEN)
+    panel_main.app.testing = True
+    client = panel_main.app.test_client()  # KEIN Cookie
+    r = client.put("/api/v1/panels/kueche-01/tiles",
+                   json=GUELTIGE_TILES, content_type="application/json")
+    assert r.status_code == 401
+
+
+def test_pbe4_mit_gueltigem_cookie_ist_200(write_client):
+    """AUTH-7b (#1400): PUT mit gültigem Session-Cookie (gekoppeltes Gerät)
+    passiert das Gate → 200. Der write_client-Fixture trägt den Cookie."""
+    client, _ = write_client
+    r = client.put("/api/v1/panels/kueche-01/tiles",
+                   json=GUELTIGE_TILES, content_type="application/json")
+    assert r.status_code == 200

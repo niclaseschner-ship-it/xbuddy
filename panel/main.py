@@ -37,6 +37,7 @@ if _REPO_ROOT not in sys.path:
 
 from panel import registry as registry_mod  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools.initdata import auth_gate as _auth_gate  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # ============================================================
@@ -48,10 +49,11 @@ from tools.service_diagnostics import register_version  # noqa: E402
 runtime = {
     "registry":      registry_mod.Registry(),
     "registry_path": None,
+    "bot_token":     None,   # AUTH-7b (#1400): Cookie-Signatur-Key, ENV-Fallback
 }
 
 
-def configure(reg, registry_path=None):
+def configure(reg, registry_path=None, bot_token=None):
     """Setzt die laufende Registry und den Registry-Pfad.
 
     Wird `registry_path` nicht übergeben, bleibt das übergebene Registry-Objekt
@@ -61,6 +63,65 @@ def configure(reg, registry_path=None):
     """
     runtime["registry"] = reg
     runtime["registry_path"] = registry_path
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+
+
+# ============================================================
+#  AUTH-7b Dual-Gate (PBE-4, #1400 / #1389, auth.md AUTH-7 / RAT-32)
+# ============================================================
+# Der Panel-Tiles-SCHREIB-Endpoint (PUT .../tiles) ist WRITE → wenn funnel-
+# erreichbar HART ab Tag 0 (AUTH-3.a, keine Observe-Grace). Cookie gültig →
+# 200 + Rolling-Refresh; keine Cookie-Quelle → 401-Re-Pair. Faithful zum
+# seiten-Vorbild über die #1625-Factory (make_require_dual_gate).
+
+def _get_bot_token():
+    """Bot-Token (HMAC-Cookie-Key) aus runtime-Dict (Test-Naht) oder ENV
+    ELTERNCHAT_BOT_TOKEN (systemd EnvironmentFile-Sharing, #684) → TELEGRAM_BOT_TOKEN."""
+    return (
+        runtime.get("bot_token")
+        or os.environ.get("ELTERNCHAT_BOT_TOKEN")
+        or os.environ.get("TELEGRAM_BOT_TOKEN")
+    )
+
+
+def _client_ip():
+    """Client-IP für das AUTH-7-Observe-Log (RAT-32: kein Gate mehr, nur Log).
+    `X-Real-IP` vom Origin-nginx ist die vertrauenswürdige Quelle; Fallbacks
+    X-Forwarded-For (erstes Token), dann remote_addr."""
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr
+
+
+_DUAL_GATE_401_HTML = (
+    "<!doctype html><html lang=de><meta charset=utf-8>"
+    "<title>Zugang koppeln</title>"
+    "<body style='font-family:sans-serif;padding:2rem;max-width:32rem'>"
+    "<h1>Zugang nötig</h1>"
+    "<p>Dieser Bereich braucht ein gekoppeltes Gerät. Bitte öffne den "
+    "Pairing-Link aus dem Eltern-Chat auf diesem Gerät und versuche es erneut.</p>"
+    "</body></html>"
+)
+
+
+def _dual_auth_401():
+    """AUTH-8-Re-Pair-401 (D1, panel-Variante) — einziger Ort des 401-Texts."""
+    resp = Response(_DUAL_GATE_401_HTML, status=401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+require_dual_gate = _auth_gate.make_require_dual_gate(
+    get_bot_token=_get_bot_token,
+    get_client_ip=_client_ip,
+    auth_401=_dual_auth_401,
+    default_mode="observe",
+)
 
 
 # Schreib-Serialisierung (PREG-15): Read-Modify-Write der Registry-Datei aus
@@ -139,6 +200,7 @@ def _unprocessable(msg):
 
 
 @app.route("/api/v1/panels/<panel_id>/tiles", methods=["PUT"])
+@require_dual_gate(mode="hard")  # AUTH-7b / AUTH-3.a (#1400, #1389): WRITE hart ab Tag 0
 def put_panel_tiles(panel_id):
     """PBE-4: vollständige neue tiles-Liste schreiben.
 

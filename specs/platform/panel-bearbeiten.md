@@ -111,6 +111,16 @@ vollständige, neue `tiles`-Liste der Instanz entgegen und schreibt sie.
   Begründung, `tiles.json` **byte-unverändert**. Kein Schreibziel/Instanz
   unbekannt → **404**. Schreibfehler am Dateisystem → **500** mit JSON-Fehler
   (Geist von GER-6/DCOMP-4).
+- **AUTH-7b hart ab Tag 0** (AUTH-3.a, `auth.md` AUTH-7 / RAT-32; ratifiziert
+  /berater-runde #1389, #1400): PBE-4 ist ein **WRITE** — ist der panel-Service
+  funnel-erreichbar, gilt **keine Observe-Grace**. Das Dual-Gate
+  (`@require_dual_gate(mode="hard")`) verlangt einen gültigen Session-Cookie
+  (gekoppeltes Gerät): Cookie gültig → `200` **+ Rolling-Refresh**; keine
+  Cookie-Quelle → **`401`** (AUTH-8-Re-Pair, kein Schreibvorgang). Operator-IP ist
+  **kein** Zugangsweg mehr (RAT-32, nur Observe-Log). Der Bot-Token (Cookie-Signatur-
+  Key) kommt per-Instanz aus `ELTERNCHAT_BOT_TOKEN` (systemd-Drop-In). Nur der
+  Schreib-Endpunkt ist hart gegated; die Lese-`tiles.json`/`config.json` bleiben
+  unberührt.
 
 *Wenn* der Endpunkt eine gültige `tiles`-Liste für eine existierende Instanz
 erhält, *dann* liegt nach der Antwort `200` der neue Stand atomar in der
