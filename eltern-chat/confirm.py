@@ -13,6 +13,7 @@ lediglich, dass die Familie ihn erneut anstößt — er wird nie unbestätigt
 ausgeführt.
 """
 
+import string
 from dataclasses import dataclass
 
 # E-EC-7: die fest definierte Liste der Bestätigungswörter. Vergleich
@@ -23,16 +24,71 @@ CONFIRM_WORDS = frozenset({
     "passt", "mach", "machen", "go", "gogogo", "los",
 })
 
+# E-EC-7-Nachschärfung (2026-08-01, #1118): gutartige Füllwörter, die eine
+# MEHRWORT-Bestätigung nicht zur Nicht-Bestätigung machen. Bewusst eng — nur
+# eindeutig affirmative Partikel OHNE Kollision mit der Ablehnungs-Wortliste;
+# `mal`/`doch`/`das`/`dann` sind ausgeschlossen (sie tragen »lass mal«/»doch
+# nicht«).
+FILLER_WORDS = frozenset({"bitte", "gerne"})
+
+
+def _confirm_tokens(text):
+    """Zerlegt `text` case-insensitiv in Tokens, streift Satzzeichen je Token
+    (Emoji bleiben erhalten). Reine Interpunktions-Tokens entfallen."""
+    toks = (t.strip(string.punctuation) for t in text.strip().lower().split())
+    return [t for t in toks if t]
+
 
 def is_confirmation(text):
-    """True, wenn `text` GENAU einem Bestätigungswort entspricht (E-EC-7).
+    """True, wenn `text` eine Bestätigung ist (E-EC-7).
 
-    Deterministisch, ohne Sprachmodell. Teilstring-Treffer zählen nicht: »ja
-    aber lieber Dienstag« ist keine Bestätigung.
+    Deterministisch, ohne Sprachmodell. Token-weise (Nachschärfung #1118): eine
+    Nachricht bestätigt, wenn JEDES Token ein Bestätigungswort oder ein enger
+    Füller ist UND mindestens ein Bestätigungswort dabei ist (»ja mach«,
+    »ja bitte«, »mach gerne«). Ein einziges Fremdwort macht sie zur
+    Nicht-Bestätigung (»ja aber lieber Dienstag«, »doch nicht«, »lass mal«);
+    Teilstring zählt nicht (»jacke« ist kein »ja«).
     """
     if not text:
         return False
-    return text.strip().lower() in CONFIRM_WORDS
+    toks = _confirm_tokens(text)
+    if not toks:
+        return False
+    if not all(t in CONFIRM_WORDS or t in FILLER_WORDS for t in toks):
+        return False
+    return any(t in CONFIRM_WORDS for t in toks)
+
+
+# E-EC-13 (2026-08-01, #1118): Erfolgs-Behauptungs-Stämme. Solange ein
+# unbestätigter Schreib-Vorschlag offen ist, darf der freie LLM-Text keinen
+# Vollzug behaupten — deterministischer Post-LLM-Filter außerhalb des Loops.
+SUCCESS_CLAIM_STEMS = (
+    "verton", "fertig", "erledigt", "eingetragen", "angelegt",
+    "hinzugefügt", "gespeichert", "in der app", "ist erstellt",
+)
+
+_HONEST_PENDING_REPLY = (
+    "Ich habe das noch nicht ausgeführt — es wartet auf deine Bestätigung. "
+    "Antworte mit »ja« oder »mach«, dann lege ich los."
+)
+
+
+def honest_no_false_success(reply_text):
+    """E-EC-13: ersetzt einen freien LLM-Text, der bei OFFENEM unbestätigtem
+    Vorschlag einen Vollzug behauptet, durch einen ehrlichen Bestätigungs-
+    Hinweis. Rückfragen (Text endet auf »?«) bleiben unangetastet (legitimer
+    Re-Propose). Deterministisch; der Aufrufer stellt sicher, dass ein Vorschlag
+    offen ist (main.py: pending.open_count > 0).
+    """
+    if not reply_text:
+        return reply_text
+    stripped = reply_text.strip()
+    if stripped.endswith("?"):
+        return reply_text
+    low = stripped.lower()
+    if any(stem in low for stem in SUCCESS_CLAIM_STEMS):
+        return _HONEST_PENDING_REPLY
+    return reply_text
 
 
 @dataclass
