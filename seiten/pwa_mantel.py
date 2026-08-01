@@ -337,7 +337,7 @@ def _hoerspiel_primary_slug() -> str:
         insts = _inst.lade_instanzen("hoerspiel")
         if insts and insts[0].get("slug"):
             return insts[0]["slug"]
-    except Exception:  # noqa: BLE001 — Registry fehlt → INST-6-Default
+    except Exception:  # Registry fehlt → INST-6-Default
         pass
     return "mia"
 
