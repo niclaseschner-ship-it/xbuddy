@@ -20,9 +20,13 @@ from dataclasses import dataclass, field
 
 from _markdown_button_strip import strip_markdown_buttons
 from model import WRITE, GenerationRequest, Message, ProviderError, TaskResultBlock, TextBlock
-from providers.pricing import estimate_cost
 from tasks import HOERSPIEL_INSTANZEN, render_form_b
 from telemetry import ProviderCall, TurnTelemetry
+
+# OPEN-LLMP-A / #1636: EINE Kosten-Quelle — die frühere Zweit-Tabelle
+# (eltern-chat/providers/pricing.py) ist aufgelöst; Kosten kommen jetzt aus
+# dem unified tools.llm-Preis-Strang (identische Zahlen, kein Stückwerk).
+from tools.llm import estimate_cost
 
 # HSP-43 / #1263: Prompt-Namensliste aus DERSELBEN Instanz-Konstante wie die
 # HFE-enum (tasks.HOERSPIEL_INSTANZEN) — kein separater paula/neko-Hardcode im
