@@ -444,6 +444,23 @@ REGISTRY: dict[str, MantelConfig] = {
         sw_script_route="/seiten/routine/anpassen/sw.js",
         sw_scope="/seiten/routine/anpassen/",
     ),
+    # ── Wetter-Regeln (#1715 / ESB-1.a, Zweig A) — seiten-gehostete Mini-App ──
+    #    Der Garderoben-Editor zieht aus /display/wetter/ nach /seiten/wetter/regeln;
+    #    Datenrouten /api/v1/wetter/regeln (AUTH-3) im wetter-Service.
+    "wetter-regeln": MantelConfig(
+        build_id_source_set=("wetter-regeln.css",),
+        name="Wetter-Regeln · XBuddy",
+        short_name="Wetter-Regeln",
+        start_url="/seiten/wetter/regeln/",
+        icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
+        display="fullscreen",
+        theme_color="#47503C",
+        background_color="#F5F1E8",
+        html_cache_mode="network-first",
+        stop_prefixes=(),
+        sw_script_route="/seiten/wetter/regeln/sw.js",
+        sw_scope="/seiten/wetter/regeln/",
+    ),
     # ── Hörspiel-Eltern (T1681 / ESB-1) — eltern-facing PWA-Mantel ──
     #    Eigenstaendiger Mantel NEBEN hoerspiel-player (Kind-Sorte).
     #    Route: /seiten/hoerspiel/<kind_id>/eltern (per-kind_id).

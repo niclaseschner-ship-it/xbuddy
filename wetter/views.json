@@ -17,7 +17,8 @@
     },
     {
       "slug": "regeln",
-      "pfad": "/display/wetter/regeln",
+      "typ": "pwa",
+      "pfad": "/seiten/wetter/regeln",
       "label": "Wetter-Regeln",
       "synonyme": [
         "Garderoben-Editor",
@@ -27,7 +28,13 @@
         "regeln bearbeiten"
       ],
       "zeigt": "Die Garderoben-Regelmatrix: Eltern können Kleidungs-Sets je Wetterbedingung einsehen und bearbeiten.",
-      "zielgruppe": "eltern"
+      "zielgruppe": "eltern",
+      "pwa": {
+        "manifest": "/seiten/wetter/regeln/manifest.json",
+        "start_url": "/seiten/wetter/regeln/",
+        "service_worker": "/seiten/wetter/regeln/sw.js"
+      },
+      "auth": "tma"
     }
   ]
 }
