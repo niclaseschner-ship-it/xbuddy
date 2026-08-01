@@ -12,6 +12,9 @@
    lebt an EINEM Ort. connector-spezifische Ergänzungen (Layout/Komponenten) bleiben
    unten lokal. connector ist network-only (PWAM-3) → kein SW-Precache-Bedarf. */
 @import url('/display/_shared/design/tokens.css');
+/* PWAM-6 (#1723): geteilte Scroll-/Viewport-Baseline (uniformer Scroll-Root) —
+   opt-in n=1. connector hatte keine eigene Scroll-Baseline; rein additiv. */
+@import url('/display/_shared/design/mini-app-base.css');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
