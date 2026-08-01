@@ -204,6 +204,19 @@ schreibbar, KiBuddy-Prompt überschreibbar) IST der in AUTH-6 geforderte
   hierher gewandert, **Phase-3-Trigger gefeuert 2026-07-30**, Bau #1640):
   `config`, `alben`, `alben/<id>/manifest`, `resume`, `themen`,
   `folgen-vorschlag`. (`audio-stream` bleibt AUTH-6/Phase-4.)
+- **panel (Schreib-Endpunkt):** `PUT /api/v1/panels/<panel_id>/tiles` (der
+  Panel-Editor-Write, PBE-4). Nic-Setzung 2026-07-31 (#1400 → „a"): der Write
+  wird über **denselben same-origin-Cookie-Pfad wie die seiten-Shell** gesichert,
+  in die der RAT-31-Ein-Gerät-Modus den Editor re-homed hat — nicht mehr über die
+  reine Heimnetz-Grenze (die tote #1389-„7b-Dual-Gate"-Prämisse ist ersetzt). Der
+  panel-Service ist heute decorator-frei (auth.md AUTH-Decorator-Lib); der Bau
+  trägt den Factory-Decorator wie bei jedem AUTH-3-Buddy nach.
+  **READ bleibt außerhalb AUTH-3:** die Display-/Registry-Lesepfade
+  (`GET /api/v1/panels/<panel_id>/tiles`, `.../config.json`, PREG-13/14/15) werden
+  **nicht** mitgegatet — das Panel-Display ist ein cookieloses Kiosk-Gerät (wie die
+  `/display/…`-Renderer unten); ihr app-seitiges Gaten würde den Display-Fetch
+  erschlagen (belegter #1338-Bruch). Ihre Funnel-Exposition bleibt die separate
+  AUTH-7-Frage.
 
 Die **method-explizite** Endliste (GET/POST/PATCH/DELETE je Pfad) enumeriert der
 **#1321-Bau** gegen die realen Routen; der AUTH-9-Coverage-Test

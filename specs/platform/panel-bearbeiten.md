@@ -68,11 +68,21 @@ Registry führt **je Instanz** (Sorte d) deren Editor-URL als auffindbaren Eintr
 > spezifiziert (gemeinsame seiten-registry-/Manifest-Erweiterung, die #330
 > konsumiert). #330 und #387 werden **in einer Session zusammen** gebaut.
 
-### PBE-3 — Auth = Heimnetz/Tailscale-Grenze
-Die Editor-Seite und ihr Schreib-Endpunkt (PBE-4) sind **nicht** öffentlich
-erreichbar; die Grenze ist das Heimnetz/Tailscale (RAT-2). Es gibt **keine**
-zusätzliche Rollen-/Login-Schicht in V1 — Kanal/Netz ist das Gate, wie beim
-Garderoben-Editor (#328).
+### PBE-3 — Auth = same-origin-Cookie der seiten-Shell (AUTH-3)
+Der Schreib-Endpunkt (PBE-4) ist über den **same-origin-Cookie-Pfad der
+seiten-Shell** gesichert — dieselbe AUTH-2/AUTH-3-Cookie-Grenze, in die der
+RAT-31-Ein-Gerät-Modus den Panel-Editor re-homed hat. `PUT /api/v1/panels/<panel_id>/tiles`
+steht in der **AUTH-3-Liste** (`specs/platform/auth.md` → panel Schreib-Endpunkt)
+und trägt den Factory-Auth-Decorator wie jeder AUTH-3-Buddy; fehlende/ungültige
+Identität → `401`. (Nic-Setzung 2026-07-31, #1400 → „a": die alte reine
+Heimnetz/Tailscale-Grenze und die tote #1389-„7b-Dual-Gate"-Prämisse sind ersetzt;
+Kanal/Netz allein ist **nicht** mehr das Gate für den Write.)
+
+Der **Lesepfad bleibt außerhalb AUTH-3**: die Display-Render-/Registry-Reads
+(`GET /api/v1/panels/<panel_id>/tiles`, `.../config.json`, PREG-9-Proxy) werden
+**nicht** cookie-gegatet — das Panel-Display ist ein cookieloses Kiosk-Gerät; ein
+app-seitiges Gaten würde den Display-Fetch erschlagen (belegter #1338-Bruch). Ihre
+Funnel-Exposition bleibt die separate AUTH-7-Frage.
 
 ---
 
