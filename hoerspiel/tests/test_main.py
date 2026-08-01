@@ -802,7 +802,7 @@ def client_familie_drei(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini)
          "foto": "/display/_shared/fotos/mia.jpg"},
         {"id": "finn", "name": "Finn", "ring": "blue", "art": "kinder",
          "foto": "/display/_shared/fotos/finn.jpg"},
-        {"id": "emil", "name": "Niclas", "ring": "green", "art": "erwachsene",
+        {"id": "emil", "name": "Emil", "ring": "green", "art": "erwachsene",
          "foto": "/display/_shared/fotos/emil.jpg"},
     ])
     mock_client = fc_mod.FamilieClient(
@@ -829,7 +829,7 @@ def test_cycle_toggle_n3_zeigt_aktives_kind_href_naechstes(client_familie_drei):
     html = resp.data.decode("utf-8")
     # EINE Cycle-Pille — href zeigt auf nächsten im Ring (finn).
     assert 'href="/display/hoerspiel/finn/alben"' in html
-    # Niclas-href darf NICHT erscheinen (KEINE Reihe mehr, AC1).
+    # Emil-href darf NICHT erscheinen (KEINE Reihe mehr, AC1).
     assert 'href="/display/hoerspiel/emil/alben"' not in html
     # Aktives Kind (Mia) in der Pille sichtbar.
     assert "Mia" in html
@@ -855,7 +855,7 @@ def test_cycle_toggle_ring_wrap_around():
          "foto": "/display/_shared/fotos/mia.jpg"},
         {"id": "finn", "name": "Finn", "ring": "blue", "art": "kinder",
          "foto": "/display/_shared/fotos/finn.jpg"},
-        {"id": "emil", "name": "Niclas", "ring": "green", "art": "erwachsene",
+        {"id": "emil", "name": "Emil", "ring": "green", "art": "erwachsene",
          "foto": "/display/_shared/fotos/emil.jpg"},
     ])
     mock_client = fc_mod.FamilieClient(
@@ -896,7 +896,7 @@ def test_cycle_toggle_solo_bleibt_unpetraendert(client_mit_familie):
     transport = _make_familie_transport([
         {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
          "foto": "/display/_shared/fotos/mia.jpg"},
-        # finn FEHLT im Snapshot — Niclas auch.
+        # finn FEHLT im Snapshot — Emil auch.
     ])
     mock_client = fc_mod.FamilieClient(
         origin_url="http://127.0.0.1:5010", transport=transport)

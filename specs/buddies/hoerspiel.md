@@ -1,12 +1,12 @@
 # Hörspiel-Buddy — Spec     (ID-Präfix: HSP)
 
-> Status: V1 · Refs #729, #907 (Mehr-Instanz-Cut Mia + Finn, RAT-17), #1263 (dritte Instanz „Niclas" Erwachsener, n≥3-Modell, HSP-28a reaktiviert)
+> Status: V1 · Refs #729, #907 (Mehr-Instanz-Cut Mia + Finn, RAT-17), #1263 (dritte Instanz „Emil" Erwachsener, n≥3-Modell, HSP-28a reaktiviert)
 
 ## Problem & North-Star-Bezug
 
 Jedes Kind in der Familie hat sein eigenes Hörspiel-Universum: Mia (4)
 hört seit Monaten „Stigi, Malini & Vögelchen — Geschichten aus dem Garten
-im Mustertal", Finn bekommt mit V1 (RAT-17) seine eigene Welt. Folgen
+im Beispieltal", Finn bekommt mit V1 (RAT-17) seine eigene Welt. Folgen
 wurden bisher lokal geschrieben und über das Handy eines Elternteils
 abgespielt. Drei Probleme:
 
@@ -34,7 +34,7 @@ Verwaltung) und stellt das Ergebnis über seine Display-View bereit
 (HSP-1, APP-1).
 
 Der Buddy läuft mit **mehreren expliziten Instanzen** (V1: Mia + Finn;
-ab #1263 zusätzlich Niclas als gleichrangige Erwachsenen-Instanz),
+ab #1263 zusätzlich Emil als gleichrangige Erwachsenen-Instanz),
 handverdrahtet je Instanz (eigene systemd-Unit, eigener Port, eigene
 Origin-Pfade nach URL-3a). Eine **hörspiel-lokale Instanz-Liste** trägt
 die Laufzeit-Iteration über die verdrahteten Instanzen (HSP-43); eine
@@ -71,7 +71,7 @@ ID-Präfix HFE).
 - **OPEN-HSP-C** — Bilder synchron zum Track-Inhalt (Bilderbuch-Modus).
   Braucht die Track-Granularität, die V1 schon legt.
 - **OPEN-HSP-D** — Aussprache-Lexikon für Eigennamen (Stigi, Schmuggli,
-  Mustertal …) das die TTS-Vorlage vor der Synthese anwendet.
+  Beispieltal …) das die TTS-Vorlage vor der Synthese anwendet.
 - **OPEN-HSP-E** — mehrere Hörspiel-Serien parallel (V1: eine Serie,
   „Stigi & Co.").
 - **OPEN-HSP-F** — Premium-Voice-Upgrade zu ElevenLabs oder einer Custom-
@@ -1098,19 +1098,19 @@ Die Mia-Instanz läuft als eigener Prozess `xbuddy-hoerspiel.service`
 `127.0.0.1` (PORT-3). Port **5053** (PORT-2, `xbuddy-hoerspiel`,
 eingetragen in `conventions/ports.md`).
 
-### HSP-28a — Mehr-Instanz-Realität: Mia + Finn + Niclas handverdrahtet (RAT-17, reaktiviert #1263)
+### HSP-28a — Mehr-Instanz-Realität: Mia + Finn + Emil handverdrahtet (RAT-17, reaktiviert #1263)
 
 **Reaktivierungs-Vermerk (#1263, RATIFIZIERT 2026-07-03).** Der in der
 V1-Fassung dieser Klausel gesetzte Wiederaufnahme-Trigger („wenn ein
 drittes Kind … hinzukommt, wird der Cut neu beraten") ist **gefeuert**:
-Niclas kommt als dritte, gleichrangige Hörspiel-Instanz (Erwachsener)
+Emil kommt als dritte, gleichrangige Hörspiel-Instanz (Erwachsener)
 hinzu. Nic-Verdikt: der Cut wird **hörspiel-lokal** über eine
 **Instanz-Liste mit Laufzeit-Iteration** (HSP-43) aufgelöst — **keine**
 generische RAT-17-Registry. (ENTSCHEID-1263 → Nic-Verdikt → „hörspiel-
 lokale Liste = nur Runtime-Iteration, keine RAT-17-Registry".)
 
 Der Buddy läuft mit **drei expliziten Hörspiel-Instanzen** Mia, Finn und
-Niclas. Diese sind **handverdrahtet** — kein Port-Offset-Algorithmus,
+Emil. Diese sind **handverdrahtet** — kein Port-Offset-Algorithmus,
 keine generische „Buddy-mit-n-Instanzen"-Konvention. Jede Instanz ist ein
 eigener Eintrag an den bekannten Stellen (`conventions/ports.md`,
 `conventions/urls.md`, `deploy/nginx/xbuddy-origin.conf`,
@@ -1121,9 +1121,9 @@ Pflicht-Checkliste je neuer Instanz steht in HSP-44.
 |---------|------------------------------------|------|-------------------------------------|----------------------------------------------------------------|
 | Mia   | `xbuddy-hoerspiel.service`         | 5053 | `xbuddy-data/hoerspiel/mia/`      | `/display/hoerspiel/mia/<view>` · `/api/v1/hoerspiel/mia/<resource>` |
 | Finn    | `xbuddy-hoerspiel-finn.service`    | 5055 | `xbuddy-data/hoerspiel/finn/`       | `/display/hoerspiel/finn/<view>` · `/api/v1/hoerspiel/finn/<resource>`   |
-| Niclas  | `xbuddy-hoerspiel-emil.service`  | 5056 | `xbuddy-data/hoerspiel/emil/`     | `/display/hoerspiel/emil/<view>` · `/api/v1/hoerspiel/emil/<resource>` |
+| Emil  | `xbuddy-hoerspiel-emil.service`  | 5056 | `xbuddy-data/hoerspiel/emil/`     | `/display/hoerspiel/emil/<view>` · `/api/v1/hoerspiel/emil/<resource>` |
 
-*(Port-Reconcile #1263: Finn real 5055 laut `conventions/ports.md:27`, nicht 5054; Niclas 5056 als nächster freier aus dem PORT-2-Block.)*
+*(Port-Reconcile #1263: Finn real 5055 laut `conventions/ports.md:27`, nicht 5054; Emil 5056 als nächster freier aus dem PORT-2-Block.)*
 
 **RAT-17-Registry bleibt vertagt.** Die Wiederaufnahme in #1263 hat den
 Cut **hörspiel-lokal** aufgelöst (Instanz-Liste als Runtime-Iteration,
@@ -1371,7 +1371,7 @@ Trigger „dritte Instanz" gefeuert (#1263, RATIFIZIERT 2026-07-03) →
 Aggregation iteriert jetzt über die Instanz-Liste (HSP-43), nicht über
 eine 2-Element-Konstante (`KIND_IDS_V1`):** Der Folgen-Tab lädt parallel
 die Folgen **aller Instanzen** aus der Instanz-Liste (V1: Mia, Finn,
-Niclas — gleichrangig, kein `zielgruppe`-Filter, HSP-46), mergt sie und
+Emil — gleichrangig, kein `zielgruppe`-Filter, HSP-46), mergt sie und
 sortiert nach `erstellt-am` desc (gleicher Datumswert: `nummer` desc als
 Fallback).
 Jede Folge trägt ihre `kind_id` im JS-State — Player öffnet
@@ -1589,7 +1589,7 @@ ihren Stellen als SUPERSEDED markiert. Der Code-/UI-Rückbau für `audio_ziel` u
 ## 14. Mehr-Instanz-Modell (n≥3) — #1263
 
 > RATIFIZIERT 2026-07-03 (#1263, ENTSCHEID-1263). Reaktiviert den in
-> HSP-28a gesetzten Wiederaufnahme-Trigger: die dritte Instanz (Niclas,
+> HSP-28a gesetzten Wiederaufnahme-Trigger: die dritte Instanz (Emil,
 > Erwachsener) ist da. Der Cut wird **hörspiel-lokal** aufgelöst
 > (Instanz-Liste als Runtime-Iteration), **nicht** als plattformweite
 > RAT-17-Registry.
@@ -1656,12 +1656,12 @@ Pflicht-Checkliste.)
 
 ### HSP-45 — Erwachsenen-Instanz allein über Daten (kein App-UI-Alters-Achse)
 Der Zielgruppen-Ton einer Instanz (kindlich für Mia/Finn, erwachsen
-für Niclas) lebt **ausschließlich in den Instanz-Daten**, nicht in einer
+für Emil) lebt **ausschließlich in den Instanz-Daten**, nicht in einer
 App-UI-Achse und nicht in Modul-Konstanten. Träger:
 
 - **instance.json (HSP-27)** trägt die zielgruppen-tragenden Felder
   `zielgruppe` (z. B. `"kind"` | `"erwachsen"`), `ton`/`perspektive` und
-  das instanz-eigene `alter` (bei Niclas ein Erwachsenen-Wert). Diese
+  das instanz-eigene `alter` (bei Emil ein Erwachsenen-Wert). Diese
   Felder sind Daten, je Instanz gepflegt.
 - **Story-Prompt parametrisiert (HSP-12).** Das Prompt-Template
   `prompts/geschichtenbuddy.md` enthält **keinen** hartkodierten
@@ -1674,11 +1674,11 @@ erreicht der Instanz-Name den Story-Prompt nicht: `geschichtenbuddy.md`
 ist auf „Mia (4 Jahre)" hartkodiert, sodass die Finn-Instanz aktuell
 im Mia-Rahmen erzählt. **Wenn** eine Folge erzeugt wird, **dann** trägt
 der an den LLM gereichte Prompt Name/Alter/Perspektive der **aufrufenden
-Instanz** (`kind_id`). Ohne diesen Fix erzählt auch Niclas „Mia" — der
+Instanz** (`kind_id`). Ohne diesen Fix erzählt auch Emil „Mia" — der
 Fix ist Vorbedingung der dritten Instanz.
 
 **Validierung (Zwei-Wege-Tür, das Tun ist das Experiment).** Je eine
-Mia- und eine Niclas-Folge erzeugen und lesen. **Kill-Kriterium:**
+Mia- und eine Emil-Folge erzeugen und lesen. **Kill-Kriterium:**
 passt Ton/Länge/Sicherheitsrahmen bei einer Zielgruppe mit **einer**
 gemeinsamen Prompt-Schale nicht, dann **getrennte Prompt-Vorlagen je
 Zielgruppe** (weiter Daten-getrieben, weiterhin keine App-Achse).
@@ -1717,7 +1717,7 @@ LLM-Pfad. Damit tragen **beide** `serien_name`-Pfade (LLM + Display/config)
 den Namen ausschließlich aus `instance.json`; kein Modul-Default leakt mehr.
 
 ### HSP-46 — Keine Zielgruppen-Sicht-Trennung (Nic-Setzung 2026-07-03)
-Niclas erscheint als **gleichrangige** dritte Instanz in derselben
+Emil erscheint als **gleichrangige** dritte Instanz in derselben
 Face-Pille (HSP-3a), derselben Folgen-Aggregation (HSP-35) und demselben
 View-Bestand (HSP-31) wie Mia und Finn. Es gibt **keinen**
 `zielgruppe`-Sichtbarkeits-Filter: das `zielgruppe`-Feld (HSP-45) ist
@@ -1791,7 +1791,7 @@ Muster wie Face-Pille HSP-3a). Tap wechselt den aktiven `<kind_id>` → Regal +
 Player laden das andere Instanz-Bündel (`/api/v1/hoerspiel/<kind_id>/…`).
 Die Instanz-Auswahl **iteriert die hörspiel-lokale Instanz-Liste (HSP-43)** —
 kein 2-Element-Hardcode; sie trägt V1 `mia`, `finn`, `emil`. `zielgruppe`
-ist deskriptiv (HSP-46) — die Erwachsenen-Instanz (Niclas, HSP-45) erscheint im
+ist deskriptiv (HSP-46) — die Erwachsenen-Instanz (Emil, HSP-45) erscheint im
 Umschalter wie jede andere. Modell = **Umschalter je Kontext**, NICHT die
 aggregierte Cross-Kind-Liste des alten Folgen-Tabs (HSP-35). Resume-Namensräume
 sind `<kind_id>`-getrennt. Läuft beim Kind-Wechsel noch ein Fremd-Album weiter,
@@ -2074,12 +2074,12 @@ Geschwister-Drift produzieren). Eine plattformweite Konvention für die
 Komponente entsteht — wenn überhaupt — beim 2.–3. Vorkommen
 (Berater-Memory n=2-Regel).
 
-### E-HSP-12 — Dritte Instanz (Niclas): hörspiel-lokale Liste, Daten-Ton, keine Sicht-Trennung
+### E-HSP-12 — Dritte Instanz (Emil): hörspiel-lokale Liste, Daten-Ton, keine Sicht-Trennung
 *Datum:* 2026-07-03 (#1263, ENTSCHEID-1263) · Nic-Verdikt: Hörspiel ist
 ein Familien-Ding, die Erwachsenen-Instanz ist dauerhaft gewollt (HSP-28a
 reaktiviert). Der Mehr-Instanz-Cut wird **hörspiel-lokal** über eine
 Runtime-Iterations-Liste gelöst (HSP-43), der Erwachsenen-Ton **rein über
-Instanz-Daten** (HSP-45), und Niclas erscheint **gleichrangig ohne
+Instanz-Daten** (HSP-45), und Emil erscheint **gleichrangig ohne
 Zielgruppen-Sicht-Filter** (HSP-46). **Verworfen:** (a) generische
 RAT-17-Registry mit Ports/Origins in der Liste — bleibt vertagt bis zur
 zweiten n-Instanz-Buddy-Klasse (Premature Generalization); (b) App-UI-
@@ -2091,7 +2091,7 @@ OPEN-HSP-S bis zur Settings-App-als-Player.
 *Datum:* 2026-07-08 (fix/hoerspiel-switcher-cycle, #1406) ·
 *Supersedes ENTSCHEID-1263 F2 „Face-Pille als Reihe bei n≥3".*
 Nic-Verdikt: „zwei Knöpfe die sich widersprechen" — die additiven Pillen
-der übrigen Instanzen (Finn + Niclas) erzeugen aus Mias View einen
+der übrigen Instanzen (Finn + Emil) erzeugen aus Mias View einen
 visuellen Widerspruch ohne klare Semantik. **Lösung: EIN Cycle-Toggle.**
 Die Pille zeigt das **aktive Kind** (Ring + Foto + Name) und einen
 „↔ wechseln"-Hinweis; Tap führt per vollständiger Navigation zur

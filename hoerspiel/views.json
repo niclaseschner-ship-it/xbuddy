@@ -36,9 +36,9 @@
     {
       "slug": "alben-emil",
       "pfad": "/display/hoerspiel/emil/alben",
-      "label": "Niclas' Hörspiele",
+      "label": "Emil' Hörspiele",
       "synonyme": ["emil", "hörspiel"],
-      "zeigt": "Album-Kacheln und Player für Niclas' Hörspiel-Serie.",
+      "zeigt": "Album-Kacheln und Player für Emil' Hörspiel-Serie.",
       "zielgruppe": "erwachsen",
       "icons": ["arasaac/5915.png"]
     }

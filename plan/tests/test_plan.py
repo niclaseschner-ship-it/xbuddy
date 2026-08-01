@@ -464,7 +464,7 @@ def test_1145_kind_mit_zwei_slots_event_in_beiden_zeilen(tmp_path, demo_registry
 
 def test_1178_erwachsener_kalender_read_slot_bekommt_event(tmp_path, demo_registry):
     """T1178 AC1: Ein kalender-read-Slot mit kind=<Erwachsener-ID> (emil)
-    wird mit dessen Kalender-Terminen befüllt — ein Event 'Niclas Zahnarzt'
+    wird mit dessen Kalender-Terminen befüllt — ein Event 'Emil Zahnarzt'
     landet in schedule[iso][emil_kal].
 
     AC2-Regression: Mias Kind-Slot bleibt leer; das Event ist kein Termin.
@@ -476,14 +476,14 @@ def test_1178_erwachsener_kalender_read_slot_bekommt_event(tmp_path, demo_regist
          "kind": "mia"},
     ])
     heute = date(2026, 5, 20)
-    raw = [gcal_allday("e_emil", "Niclas Zahnarzt", heute.isoformat())]
+    raw = [gcal_allday("e_emil", "Emil Zahnarzt", heute.isoformat())]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(cfg.db_datei)
     view = render_mod.baue_view(cfg, conn, kalender, demo_registry,
                                 heute, 7, True, heute=heute)
     conn.close()
     iso = heute.isoformat()
-    # AC1: Niclas-Slot befüllt.
+    # AC1: Emil-Slot befüllt.
     zelle = view["schedule"][iso]["emil_kal"]
     assert zelle is not None, (
         "Erwachsenen-kalender-read-Slot bleibt leer — T1178 nicht greift"
@@ -491,7 +491,7 @@ def test_1178_erwachsener_kalender_read_slot_bekommt_event(tmp_path, demo_regist
     assert zelle["event_id"] == "e_emil"
     # AC2: Mias Slot bleibt leer — kein Regress.
     assert view["schedule"][iso]["mia_kal"] is None, (
-        "Mias Slot darf durch Niclas-Event nicht befüllt werden"
+        "Mias Slot darf durch Emil-Event nicht befüllt werden"
     )
     # Das Event ist KEIN Termin — es landet im Slot, nicht in der Leiste.
     assert view["appointments"][iso] == [], (
@@ -1221,7 +1221,7 @@ def test_cycle_iteriert_alle_personen(demo_config, demo_registry):
 def test_termin_label_strippt_einzelne_person(demo_registry):
     """PLAN-24 V1.3: Trägt der Termin-Titel GENAU EINEN Personen-Namen, wird er
     aus dem Label gestrippt (Foto-im-Ring trägt die Identität)."""
-    label = render_mod.strip_person_name("Niclas Zahnarzt", demo_registry.alle())
+    label = render_mod.strip_person_name("Emil Zahnarzt", demo_registry.alle())
     assert label == "Zahnarzt", (
         "Eindeutiger n=1-Name muss gestrippt werden, bekam %r" % label
     )
@@ -1230,7 +1230,7 @@ def test_termin_label_strippt_einzelne_person(demo_registry):
 def test_termin_label_verbatim_bei_multi_person(demo_registry):
     """PLAN-24 V1.3: Bei ZWEI Namens-Treffern bleibt das Label verbatim — der
     Namens-Bezug trägt semantisch bei Mehrdeutigkeit."""
-    titel = "Sport mit Petra und Niclas"
+    titel = "Sport mit Petra und Emil"
     label = render_mod.strip_person_name(titel, demo_registry.alle())
     assert label == titel, (
         "Multi-Person-Titel muss verbatim bleiben, bekam %r" % label
@@ -1339,7 +1339,7 @@ def test_PLAN_17_raw_response_to_normalised_model(demo_registry):
 
 def test_PLAN_19_title_match_beats_creator_email(demo_registry):
     """Bei einem Titel-Treffer gewinnt dieser über die Creator-E-Mail."""
-    # Titel nennt Petra, Creator-E-Mail ist Niclas → Petra gewinnt.
+    # Titel nennt Petra, Creator-E-Mail ist Emil → Petra gewinnt.
     person = kalender_mod.resolve_person(
         "Abendessen mit Petra", "emil@example.org", demo_registry.alle())
     assert person == "petra"
@@ -1354,9 +1354,9 @@ def test_PLAN_19_creator_email_when_no_title_match(demo_registry):
 
 def test_PLAN_19_earliest_title_match_wins(demo_registry):
     """Kommen mehrere Personennamen im Titel vor, gewinnt der früheste."""
-    # "Petra" steht vor "Niclas" → Petra.
+    # "Petra" steht vor "Emil" → Petra.
     person = kalender_mod.resolve_person(
-        "Petra und Niclas Date", None, demo_registry.alle())
+        "Petra und Emil Date", None, demo_registry.alle())
     assert person == "petra"
 
 
@@ -1516,7 +1516,7 @@ def test_PLAN_24_no_person_names_in_rendered_view(demo_config, demo_registry):
     text = r.data.decode("utf-8")
     # Kein Personenname taucht als eigenständiges Wort auf — \b schließt
     # Substring-Treffer wie "Petra" in "Petrabredung" (Aktivitäts-Label) aus.
-    for name in ("Niclas", "Petra", "Mia", "Finn"):
+    for name in ("Emil", "Petra", "Mia", "Finn"):
         assert re.search(r"\b%s\b" % re.escape(name), text) is None, \
             "Personenname %r im UI (PLAN-24 verletzt)" % name
     # Aber die Ring-Klasse einer Person ist da — Identität nur über Foto/Ring.
@@ -2267,7 +2267,7 @@ def test_PLAN_19_render_reflects_external_registry_mutation(demo_config):
     Restart in der Wochen-View. Fix (DCOMP-1, #214): die Familie wird ueber
     HTTP angesprochen (`FamilieClient.snapshot()`), pro Request frisch."""
     transport = _MutableFamilieTransport([
-        {"id": "emil", "name": "Niclas", "ring": "blue", "art": "erwachsene"},
+        {"id": "emil", "name": "Emil", "ring": "blue", "art": "erwachsene"},
     ])
     client_obj = familie_client_mod.FamilieClient(
         "http://127.0.0.1:5010", transport=transport)
@@ -2276,7 +2276,7 @@ def test_PLAN_19_render_reflects_external_registry_mutation(demo_config):
     plan_main.app.testing = True
     client = plan_main.app.test_client()
 
-    # Erst-Render: Niclas ist drin.
+    # Erst-Render: Emil ist drin.
     r1 = client.get("/display/plan/woche")
     assert r1.status_code == 200
     assert b"emil" in r1.data
@@ -2298,7 +2298,7 @@ def test_PLAN_19_zuteilung_validates_against_fresh_registry(demo_config):
     Zuteilungs-API benutzt werden (DCOMP-1: Plan fragt die Familie pro
     Request via HTTP)."""
     transport = _MutableFamilieTransport([
-        {"id": "emil", "name": "Niclas", "ring": "blue", "art": "erwachsene"},
+        {"id": "emil", "name": "Emil", "ring": "blue", "art": "erwachsene"},
     ])
     client_obj = familie_client_mod.FamilieClient(
         "http://127.0.0.1:5010", transport=transport)
@@ -2839,7 +2839,7 @@ def test_DCOMP_1_familie_client_parses_fam7_response():
     `RegistryView` mit Person-Objekten in der Form, die `render.baue_view`
     und `kalender.Kalender` brauchen."""
     payload = json.dumps([
-        {"id": "emil", "name": "Niclas", "ring": "blue", "art": "erwachsene",
+        {"id": "emil", "name": "Emil", "ring": "blue", "art": "erwachsene",
          "email": "emil@example.org"},
         {"id": "mia", "name": "Mia", "ring": "purple", "art": "kinder"},
     ]).encode("utf-8")
@@ -2855,7 +2855,7 @@ def test_DCOMP_1_familie_client_parses_fam7_response():
     view = fc.snapshot()
     assert transport_calls == ["http://127.0.0.1:5010/api/v1/familie/personen"]
     namen = sorted(p.name for p in view.alle())
-    assert namen == ["Niclas", "Mia"]
+    assert namen == ["Emil", "Mia"]
     emil = view.get("emil")
     assert emil is not None
     assert emil.is_erwachsene()
@@ -4231,7 +4231,7 @@ def test_PLAN_19_resolve_personen_max_zwei_treffer(demo_registry):
 
     AC1: resolve_personen liefert max 2 Treffer; weitere werden ignoriert.
     """
-    # Demo-Registry: Niclas, Petra (Erwachsene), Mia, Finn (Kinder)
+    # Demo-Registry: Emil, Petra (Erwachsene), Mia, Finn (Kinder)
     # Titel nennt drei: Petra, Mia, Finn — nur Petra + Mia (erste zwei).
     result = kalender_mod.resolve_personen(
         "Petra Mia Finn Ausflug", None, demo_registry.alle())

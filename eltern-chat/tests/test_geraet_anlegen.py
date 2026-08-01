@@ -21,7 +21,7 @@ from skills.geraet_anlegen import (
 from tools.initdata import session_cookie as sc
 
 BOT_TOKEN = "123456:ABCdef_testtoken"
-ORIGIN = "https://buddyboard.demo-tailnet.ts.net"
+ORIGIN = "https://buddyboard.<tailscale-id>.ts.net"
 
 
 def _member_tg():

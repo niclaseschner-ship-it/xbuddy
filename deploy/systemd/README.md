@@ -49,7 +49,7 @@ Die `*.service`-Dateien enthalten Per-Instanz-Werte als Platzhalter im Format
 | `__XBUDDY_DATA__` | Wurzel der Per-Instanz-Daten außerhalb des Checkouts (SVC-5). | `/home/buddy/xbuddy-data` |
 | `__XBUDDY_DISPLAY_ORIGIN_HEIM__` | Heimnetz-Origin für Display-URLs (SREG-7: eine Origin, Routing im Router). | `https://xbuddy-hub.local:8443` |
 | `__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__` | Tailscale-Origin für Display-URLs (SREG-7: 4-Segment-Form, tauscht Platzhalter in Tailnet-Slug). | `https://xbuddy-hub.tailnet-xxxx.ts.net:8443` |
-| `__XBUDDY_DISPLAY_ORIGIN_FUNNEL__` | Funnel-FQDN mit LE-Cert für Familien-User-Geräte (SREG-7, AUTH-7b). Leer = kein externer User-Geräte-Zugang (SEITEN_FUNNEL_ORIGIN). | `https://buddyboard.demo-tailnet.ts.net` |
+| `__XBUDDY_DISPLAY_ORIGIN_FUNNEL__` | Funnel-FQDN mit LE-Cert für Familien-User-Geräte (SREG-7, AUTH-7b). Leer = kein externer User-Geräte-Zugang (SEITEN_FUNNEL_ORIGIN). | `https://buddyboard.<tailscale-id>.ts.net` |
 
 Die `__…__`-Platzhalter erzwingen, dass nichts versehentlich vor dem `cp`
 als „passt schon" durchgeht — wer einen Service-File mit `__XBUDDY_REPO__`
@@ -158,7 +158,7 @@ bleibt klar.
        -e 's|__XBUDDY_DATA__|/home/buddy/xbuddy-data|g' \
        -e 's|__XBUDDY_DISPLAY_ORIGIN_HEIM__|https://xbuddy-hub.local:8443|g' \
        -e 's|__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__|https://xbuddy-hub.tailnet-xxxx.ts.net:8443|g' \
-       -e 's|__XBUDDY_DISPLAY_ORIGIN_FUNNEL__|https://buddyboard.demo-tailnet.ts.net|g' \
+       -e 's|__XBUDDY_DISPLAY_ORIGIN_FUNNEL__|https://buddyboard.<tailscale-id>.ts.net|g' \
        "${SVC_SRC[$svc]}" \
        | sudo tee "/etc/systemd/system/${svc}.service" >/dev/null
    done

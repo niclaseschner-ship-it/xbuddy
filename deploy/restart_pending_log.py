@@ -36,10 +36,10 @@ GIT_PULL_RE = re.compile(
 )
 # SHA-Range aus stdout: "abc1234..def5678  main       -> origin/main"
 SHA_RANGE_RE = re.compile(r"\b([0-9a-f]{7,40})\.\.([0-9a-f]{7,40})\b")
-# Repo-Indikator aus stdout: "From github.com:emilsonntag-ship-it/xbuddy"
+# Repo-Indikator aus stdout: "From github.com:<your-org>/xbuddy"
 # (Codex-Pass-2-Fix: arbeitstag-Cleanup laeuft im xbuddy-CWD ohne -C, ohne
 # Pfad-im-Command — Repo-Indikator muss aus Pull-Output kommen.)
-XBUDDY_REMOTE_RE = re.compile(r"From\s+github\.com[:/]emilsonntag-ship-it/xbuddy\b")
+XBUDDY_REMOTE_RE = re.compile(r"From\s+github\.com[:/]<your-org>/xbuddy\b")
 # Markdown-Tabellen-Zeile: | `pfad/` ... | `sudo systemctl restart svc` |
 # Wir extrahieren nur den ersten Backtick-Pfad und den restart-Befehl.
 MAPPING_ROW_RE = re.compile(

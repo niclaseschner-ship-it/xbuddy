@@ -18,7 +18,7 @@ keine Convention (n=1; Tier-B-Hochzug erst beim 2. Buddy mit Kollisionsvertrag).
 
 - System-Chromium unter `/usr/bin/chromium` (getestet: Chromium 147).
 - Node ≥ 20 (getestet: v20.20.2).
-- Die Live-Origin muss erreichbar sein. Annahme: `https://192.0.2.10:8443`
+- Die Live-Origin muss erreichbar sein. Annahme: `https://192.168.0.78:8443`
   (lokale Pi-IP, NIE `buddyboard.local`/`localhost`). Self-signed-Cert wird via
   `acceptInsecureCerts` akzeptiert.
 

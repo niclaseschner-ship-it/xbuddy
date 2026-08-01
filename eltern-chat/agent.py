@@ -30,7 +30,7 @@ from tools.llm import estimate_cost
 
 # HSP-43 / #1263: Prompt-Namensliste aus DERSELBEN Instanz-Konstante wie die
 # HFE-enum (tasks.HOERSPIEL_INSTANZEN) — kein separater mia/finn-Hardcode im
-# Prompt. Nimmt emil automatisch mit (→ „Mia, Finn oder Niclas").
+# Prompt. Nimmt emil automatisch mit (→ „Mia, Finn oder Emil").
 _HSP_NAMEN = [i["name"] for i in HOERSPIEL_INSTANZEN]
 _HSP_IDS = [i["kind_id"] for i in HOERSPIEL_INSTANZEN]
 
@@ -43,8 +43,8 @@ def _oder_liste(items) -> str:
     return "%s oder %s" % (", ".join(items[:-1]), items[-1])
 
 
-_HSP_NAMEN_ODER = _oder_liste(_HSP_NAMEN)                       # "Mia, Finn oder Niclas"
-_HSP_NAMEN_GUILL = "/".join("»%s«" % n for n in _HSP_NAMEN)    # "»Mia«/»Finn«/»Niclas«"
+_HSP_NAMEN_ODER = _oder_liste(_HSP_NAMEN)                       # "Mia, Finn oder Emil"
+_HSP_NAMEN_GUILL = "/".join("»%s«" % n for n in _HSP_NAMEN)    # "»Mia«/»Finn«/»Emil«"
 _HSP_IDS_BZW = " bzw. ".join("»%s«" % k for k in _HSP_IDS)     # "»mia« bzw. »finn« bzw. »emil«"
 
 SYSTEM_PROMPT = (
@@ -484,7 +484,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     # Inline-Button gefeuert hat (TASK-10c Form (b) `inline_button`). Der
     # Markdown-Strip-Filter im finalen reply_text-Pfad nutzt dieses Flag, um
     # parallele Markdown-Knopf-Halluzinationen extra aggressiv zu entfernen
-    # (Live-Befund 2026-06-22 chat 0000000000, Refs #1075).
+    # (Live-Befund 2026-06-22 chat <chat-id>, Refs #1075).
     _inline_button_emitted = False
 
     for _ in range(max_iterations):

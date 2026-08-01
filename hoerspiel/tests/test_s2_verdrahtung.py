@@ -1,7 +1,7 @@
 """T1340-S2 — Whitelist-Verdrahtung: zielgruppe-Durchreichung + META-Append.
 
 AC1: POST /folgen-vorschlag reicht zielgruppe=instance.zielgruppe (und tiefe)
-     an erzeuge_folgen_vorschlag durch. Niclas-Instanz (erwachsen) != Kind-Default.
+     an erzeuge_folgen_vorschlag durch. Emil-Instanz (erwachsen) != Kind-Default.
      Kind-Pfad DARF sich nicht ändern: zielgruppe default=kind unverändert.
 AC2: album_builder.baue_album hängt den META-Block (via llm_service.format_meta_
      historie) an folgen-historie.md an, wenn meta übergeben wird. Kind-Eintrag
@@ -52,10 +52,10 @@ class TestZielgruppeDurchreichung:
         wird mit zielgruppe='erwachsen' aufgerufen."""
         instance = {
             "kind_id": "mia",
-            "name": "Niclas",
+            "name": "Emil",
             "alter": 39,
             "zielgruppe": "erwachsen",
-            "serien_name": "Niclas Deep-Dives",
+            "serien_name": "Emil Deep-Dives",
             "ton": "sachlich, direkt",
             "perspektive": "dialogisch",
         }
@@ -83,7 +83,7 @@ class TestZielgruppeDurchreichung:
         """AC1: ?tiefe aus dem Request-Body landet in erzeuge_folgen_vorschlag."""
         instance = {
             "kind_id": "mia",
-            "name": "Niclas",
+            "name": "Emil",
             "zielgruppe": "erwachsen",
         }
         with open(os.path.join(data_root, "instance.json"), "w") as f:

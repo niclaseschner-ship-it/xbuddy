@@ -62,7 +62,7 @@ des Repos.
 1. **LE-Zertifikat holen** (Tailscale muss laufen, FQDN bekannt):
 
    ```bash
-   FQDN="buddyboard.demo-tailnet.ts.net"   # Instanz-FQDN anpassen
+   FQDN="buddyboard.<tailscale-id>.ts.net"   # Instanz-FQDN anpassen
    sudo mkdir -p /var/lib/tailscale/certs
    sudo tailscale cert \
        --cert-file /var/lib/tailscale/certs/${FQDN}.crt \
@@ -78,7 +78,7 @@ des Repos.
 2. **Renewal-Timer installieren** (einmalig, läuft dann täglich):
 
    ```bash
-   FQDN="buddyboard.demo-tailnet.ts.net"   # Instanz-FQDN anpassen
+   FQDN="buddyboard.<tailscale-id>.ts.net"   # Instanz-FQDN anpassen
 
    # Units ins System kopieren und FQDN-Platzhalter ersetzen
    sudo cp deploy/nginx/xbuddy-cert-renew.service /etc/systemd/system/
@@ -98,7 +98,7 @@ des Repos.
    `install.sh` (#164):
 
    ```bash
-   FQDN="buddyboard.demo-tailnet.ts.net"   # Instanz-FQDN anpassen
+   FQDN="buddyboard.<tailscale-id>.ts.net"   # Instanz-FQDN anpassen
 
    # Live-FQDN merken (aus laufender Conf, falls schon deployed):
    # FQDN=$(grep -oP '[\w.-]+\.ts\.net' /etc/nginx/conf.d/xbuddy-origin.conf | head -1)

@@ -34,7 +34,7 @@ from familie import registry as registry_mod  # noqa: E402
 # `petra` trägt absichtlich kein Foto (FAM-5/FAM-8: Person ohne Foto).
 DEMO_REGISTRY = {
     "erwachsene": [
-        {"id": "emil", "name": "Niclas", "ring": "blue",
+        {"id": "emil", "name": "Emil", "ring": "blue",
          "foto": "emil.png", "email": "emil@example.org",
          "telegram_id": 100000001},
         {"id": "petra", "name": "Petra", "ring": "orange",
@@ -122,7 +122,7 @@ def test_FAM_3_person_fields_required_and_optional(demo_instanz):
     Ein fehlendes optionales Merkmal ist kein Fehler."""
     reg = registry_mod.load(demo_instanz["registry"])
     emil = reg.get("emil")
-    assert (emil.id, emil.name, emil.ring) == ("emil", "Niclas", "blue")
+    assert (emil.id, emil.name, emil.ring) == ("emil", "Emil", "blue")
     assert emil.foto == "emil.png"
     assert emil.email == "emil@example.org"
     assert emil.telegram_id == 100000001

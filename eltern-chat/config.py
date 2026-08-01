@@ -145,10 +145,10 @@ DEFAULTS = {
     # Registry-Dict). Default 5055 = PORT-2-Slot Hörspiel-Buddy Finn. Leer ⇒
     # Finn-Anfragen scheitern mit Fehler-Text im Tool-Result.
     "hoerspiel_url_origin_finn": "http://127.0.0.1:5055",
-    # HSP-43 / #1263: dritte Hörspiel-Buddy-Origin (Niclas-Instanz, erwachsen).
+    # HSP-43 / #1263: dritte Hörspiel-Buddy-Origin (Emil-Instanz, erwachsen).
     # Resolution-Logik im Skill (HFE-3, E-HFE-6): kind_id="emil" →
     # hoerspiel_url_origin_emil. Handverdrahtet wie finn (kein Registry-Dict).
-    # Default 5056 = PORT-2-Slot Hörspiel-Buddy Niclas (Backend manuell provisioniert,
+    # Default 5056 = PORT-2-Slot Hörspiel-Buddy Emil (Backend manuell provisioniert,
     # HSP-44). Leer ⇒ emil-Anfragen scheitern mit Fehler-Text im Tool-Result.
     "hoerspiel_url_origin_emil": "http://127.0.0.1:5056",
     # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts, über den die
@@ -238,8 +238,8 @@ class Config:
         self.hoerspiel_url_origin = hoerspiel_url_origin  # leer → HFE NICHT im Katalog
         # RAT-17 / #910: zweite Origin für Finn-Instanz (Option A handverdrahtet, E-HFE-6).
         self.hoerspiel_url_origin_finn = hoerspiel_url_origin_finn  # leer → Finn-Fehler-Text
-        # HSP-43 / #1263: dritte Origin für Niclas-Instanz (handverdrahtet wie finn).
-        self.hoerspiel_url_origin_emil = hoerspiel_url_origin_emil  # leer → Niclas-Fehler-Text
+        # HSP-43 / #1263: dritte Origin für Emil-Instanz (handverdrahtet wie finn).
+        self.hoerspiel_url_origin_emil = hoerspiel_url_origin_emil  # leer → Emil-Fehler-Text
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-24/25).
         self.kibuddy_origin_url = kibuddy_origin_url      # leer → KAQS NICHT im Katalog
         # WRO-5 / #1094: Origin des Garderoben-Editors (/display/wetter/regeln)
@@ -394,7 +394,7 @@ def resolve(config_path, zd=None):
         hoerspiel_url_origin=str(values["hoerspiel_url_origin"]).strip().rstrip("/"),
         # RAT-17 / #910: zweite Origin für Finn-Instanz (Option A handverdrahtet).
         hoerspiel_url_origin_finn=str(values["hoerspiel_url_origin_finn"]).strip().rstrip("/"),
-        # HSP-43 / #1263: dritte Origin für Niclas-Instanz (handverdrahtet wie finn).
+        # HSP-43 / #1263: dritte Origin für Emil-Instanz (handverdrahtet wie finn).
         hoerspiel_url_origin_emil=str(values["hoerspiel_url_origin_emil"]).strip().rstrip("/"),
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-25).
         kibuddy_origin_url=str(values["kibuddy_origin_url"]).strip().rstrip("/"),

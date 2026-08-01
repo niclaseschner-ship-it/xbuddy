@@ -291,9 +291,9 @@ def strip_person_name(titel, personen):
     Trägt der Titel **genau einen** Personen-Namen aus der Familien-Registry
     (`personen` = `registry.alle()`), wird dieser Name aus dem Label entfernt —
     die Foto-Resolution (Foto-im-Ring) trägt dann die Identität, das Label den
-    verbleibenden Termin-Inhalt (z. B. „Niclas Zahnarzt" → „Zahnarzt").
+    verbleibenden Termin-Inhalt (z. B. „Emil Zahnarzt" → „Zahnarzt").
 
-    Bei **≥2** Namens-Treffern (z. B. „Sport mit Petra und Niclas") oder **0**
+    Bei **≥2** Namens-Treffern (z. B. „Sport mit Petra und Emil") oder **0**
     Treffern bleibt das Label **verbatim** — bei Mehrdeutigkeit trägt der
     Namens-Bezug semantisch, bei keinem Treffer gibt es nichts zu strippen.
 

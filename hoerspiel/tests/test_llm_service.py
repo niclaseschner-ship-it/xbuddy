@@ -66,15 +66,15 @@ def test_mia_folge_traegt_namen_kein_stigi_bei_leerem_serien_name():
 
 
 def test_emil_folge_nennt_nie_mia_oder_finn():
-    """AC2: emil-Folge trägt Niclas + eigene Serie, nennt NIE Mia/Finn."""
+    """AC2: emil-Folge trägt Emil + eigene Serie, nennt NIE Mia/Finn."""
     llm = _RecordingLLM()
     llm_service.erzeuge_folgen_vorschlag(
         idee="Eine Folge über Systemdesign", bible="", historie="",
         naechste_nummer=1, llm=llm,
-        name="Niclas", alter=39, ton="trocken, pointiert",
+        name="Emil", alter=39, ton="trocken, pointiert",
         perspektive="Ich-Erzähler", serien_name="Nachtschicht-Notizen")
     user = llm.last_user
-    assert "Niclas" in user
+    assert "Emil" in user
     assert "Nachtschicht-Notizen" in user
     assert "Mia" not in user, "Name-Drift: Mia darf im emil-Prompt nicht auftauchen"
     assert "Finn" not in user, "Name-Drift: Finn darf im emil-Prompt nicht auftauchen"

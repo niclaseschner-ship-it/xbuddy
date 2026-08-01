@@ -34,7 +34,7 @@ Jeder Instanz-Eintrag hat genau diese vier Felder:
 | `slug` | opaker technischer Bezeichner (`mia`/`finn`/`emil`) — an nginx/systemd/URL/Cookie gekoppelt. Bleibt stabil (INST-4). |
 | `port` | Loopback-Port der Instanz — **Lese-Spiegel** von `conventions/ports.md`, kein Generator-Input (INST-3). |
 | `origin` | Origin der Instanz (`127.0.0.1:<port>`) — **Lese-Spiegel** der handverdrahteten nginx-/Eltern-Chat-Realität (INST-3). |
-| `display_name` | der Klarname, den die Familie sieht (`Mia`/`Finn`/`Niclas`) — der eigentliche config-out-Wert. |
+| `display_name` | der Klarname, den die Familie sieht (`Mia`/`Finn`/`Emil`) — der eigentliche config-out-Wert. |
 
 Andere Felder gehören nicht in diese Datei. Per-Kind-Fachdaten
 (Entwicklungsstufe, Themen o. Ä.) leben in
