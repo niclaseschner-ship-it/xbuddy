@@ -1,0 +1,22 @@
+/* mini-app-base.css — PWAM-6 Scroll-/Viewport-Baseline (uniformer Scroll-Root).
+ *
+ * Konvention: conventions/pwa-mantel.md PWAM-6 (NIC-VERDIKT 2026-07-01, #1723).
+ * Geteilter Scroll-Root statt pro-App-Hand-Rollen. **opt-in pro geprüfter App**
+ * (kein Blanket-Einbinden — bewusste Spezialflächen sollen nicht regressieren).
+ *
+ * Einbinden (wie der geteilte Token-Strang, ROU-30-served):
+ *   @import url('/display/_shared/design/mini-app-base.css');   (in der App-CSS)
+ * bzw. <link rel="stylesheet" href="/display/_shared/design/mini-app-base.css">
+ * VOR der App-eigenen CSS, damit App-Regeln die Baseline überschreiben können.
+ *
+ * Die App-spezifische Scroll-Container-Höhe (z. B. `height: 100dvh; overflow-y:
+ * auto` für den Telegram-WebView-Fix) bleibt in der App-CSS — die Baseline liefert
+ * nur den geteilten Rahmen (min-height, horizontales Clipping, Overscroll-Containment).
+ */
+
+html, body { min-height: 100dvh; }
+
+body {
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
