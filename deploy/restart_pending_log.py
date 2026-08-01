@@ -60,7 +60,7 @@ def _hoerspiel_service_names() -> list[str]:
             slug = (e.get("slug") or "").strip()
             if slug:
                 names.append(f"xbuddy-hoerspiel-{slug}")
-    except Exception:  # noqa: BLE001 — Registry fehlt → nur Primär-Service
+    except Exception:  # Registry fehlt → nur Primär-Service
         pass
     return names
 

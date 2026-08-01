@@ -106,7 +106,7 @@ def _hoerspiel_instanz_services() -> list[tuple[int, str]]:
     try:
         from tools import instanzen as _inst
         insts = _inst.lade_instanzen("hoerspiel")
-    except Exception:  # noqa: BLE001 — Registry fehlt/kaputt → nur Basis-Services
+    except Exception:  # Registry fehlt/kaputt → nur Basis-Services
         return []
     out: list[tuple[int, str]] = []
     for e in insts[1:]:
