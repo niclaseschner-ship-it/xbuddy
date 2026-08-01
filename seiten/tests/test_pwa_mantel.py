@@ -97,11 +97,12 @@ def test_read_sw_ersetzt_platzhalter(tmp_path):
 # ── T-LIB-UNIT — REGISTRY ────────────────────────────────────────────────────
 
 def test_registry_hat_sechs_keys_mit_source_set():
-    """PWAM-5: die 8 registrierten Konsumenten, jeder mit build_id_source_set
-    (6 Bestand + hoerspiel-player + hoerspiel-eltern T1681 / ESB-1)."""
+    """PWAM-5: die 9 registrierten Konsumenten, jeder mit build_id_source_set
+    (6 Bestand + hoerspiel-player + hoerspiel-eltern + wetter-regeln #1715/ESB-1.a)."""
     assert set(pwa_mantel.REGISTRY) == {
         "einkauf", "plan", "connector", "shell",
         "mini-app-uebersicht", "routine", "hoerspiel-player", "hoerspiel-eltern",
+        "wetter-regeln",
     }
     for name, cfg in pwa_mantel.REGISTRY.items():
         assert cfg.build_id_source_set, \
