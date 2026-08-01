@@ -65,9 +65,10 @@ class GeraetAnlegenTask(WriteTask):
                 "Erzeugt einen frischen Pairing-Link für ein neues Gerät der "
                 "Familie und schickt ihn per Privatchat. Aufrufen, wenn jemand "
                 "sagt »koppel mein Tablet«, »neues Gerät hinzufügen«, »richte "
-                "das Kinder-Display ein«, oder ähnliche Bitten. Die Rolle "
-                "(Kinder-Display oder Elterngerät) wählt die Familie beim "
-                "Installieren am Gerät selbst."),
+                "das Kinder-Display ein«, oder ähnliche Bitten. Auch der Pfad "
+                "für das proaktive Einrichtungs-Angebot bei App-Einrichtung "
+                "(EC-44). Die Rolle (Kinder-Display oder Elterngerät) wählt die "
+                "Familie beim Installieren am Gerät selbst."),
             parameters={"type": "object", "properties": {}})
         self._tg = tg
         self._family_group_chat_id_getter = family_group_chat_id_getter
