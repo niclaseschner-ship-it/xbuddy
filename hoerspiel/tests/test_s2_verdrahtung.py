@@ -1,7 +1,7 @@
 """T1340-S2 — Whitelist-Verdrahtung: zielgruppe-Durchreichung + META-Append.
 
 AC1: POST /folgen-vorschlag reicht zielgruppe=instance.zielgruppe (und tiefe)
-     an erzeuge_folgen_vorschlag durch. Niclas-Instanz (erwachsen) != Kind-Default.
+     an erzeuge_folgen_vorschlag durch. Emil-Instanz (erwachsen) != Kind-Default.
      Kind-Pfad DARF sich nicht ändern: zielgruppe default=kind unverändert.
 AC2: album_builder.baue_album hängt den META-Block (via llm_service.format_meta_
      historie) an folgen-historie.md an, wenn meta übergeben wird. Kind-Eintrag
@@ -51,11 +51,11 @@ class TestZielgruppeDurchreichung:
         """AC1: instance.json mit zielgruppe=erwachsen → erzeuge_folgen_vorschlag
         wird mit zielgruppe='erwachsen' aufgerufen."""
         instance = {
-            "kind_id": "paula",
-            "name": "Niclas",
+            "kind_id": "mia",
+            "name": "Emil",
             "alter": 39,
             "zielgruppe": "erwachsen",
-            "serien_name": "Niclas Deep-Dives",
+            "serien_name": "Emil Deep-Dives",
             "ton": "sachlich, direkt",
             "perspektive": "dialogisch",
         }
@@ -71,7 +71,7 @@ class TestZielgruppeDurchreichung:
         with patch.object(llm_service, "erzeuge_folgen_vorschlag",
                           side_effect=fake_erzeuge):
             resp = client.post(
-                "/api/v1/hoerspiel/paula/folgen-vorschlag",
+                "/api/v1/hoerspiel/mia/folgen-vorschlag",
                 json={"idee": "Quantencomputing und Risiken"},
             )
 
@@ -82,8 +82,8 @@ class TestZielgruppeDurchreichung:
     def test_tiefe_aus_body_wird_durchgereicht(self, client, data_root):
         """AC1: ?tiefe aus dem Request-Body landet in erzeuge_folgen_vorschlag."""
         instance = {
-            "kind_id": "paula",
-            "name": "Niclas",
+            "kind_id": "mia",
+            "name": "Emil",
             "zielgruppe": "erwachsen",
         }
         with open(os.path.join(data_root, "instance.json"), "w") as f:
@@ -98,7 +98,7 @@ class TestZielgruppeDurchreichung:
         with patch.object(llm_service, "erzeuge_folgen_vorschlag",
                           side_effect=fake_erzeuge):
             resp = client.post(
-                "/api/v1/hoerspiel/paula/folgen-vorschlag",
+                "/api/v1/hoerspiel/mia/folgen-vorschlag",
                 json={"idee": "Thema", "tiefe": "tief"},
             )
 
@@ -119,7 +119,7 @@ class TestZielgruppeDurchreichung:
         with patch.object(llm_service, "erzeuge_folgen_vorschlag",
                           side_effect=fake_erzeuge):
             resp = client.post(
-                "/api/v1/hoerspiel/paula/folgen-vorschlag",
+                "/api/v1/hoerspiel/mia/folgen-vorschlag",
                 json={"idee": "Thema"},
             )
 
@@ -128,7 +128,7 @@ class TestZielgruppeDurchreichung:
 
     def test_kind_instanz_reicht_zielgruppe_kind(self, client, data_root):
         """AC1 / Kind-Pfad-Guard: ohne instance.json → zielgruppe Default 'kind'
-        (paula/neko-Instanzen unverändert)."""
+        (mia/finn-Instanzen unverändert)."""
         # Kein instance.json → ENV-Fallback → zielgruppe="kind"
         captured = {}
 
@@ -142,7 +142,7 @@ class TestZielgruppeDurchreichung:
         with patch.object(llm_service, "erzeuge_folgen_vorschlag",
                           side_effect=fake_erzeuge):
             resp = client.post(
-                "/api/v1/hoerspiel/paula/folgen-vorschlag",
+                "/api/v1/hoerspiel/mia/folgen-vorschlag",
                 json={"idee": "Stigi findet Federn"},
             )
 
@@ -165,7 +165,7 @@ class TestMetaAppend:
         album_builder.baue_album(
             titel="Deep Dive Quantencomputing",
             text=text, voice="shimmer", idee="Quantencomputing",
-            data_root=data_root, kind_id="paula",
+            data_root=data_root, kind_id="mia",
             llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
             meta=_SAMPLE_META,
         )
@@ -186,9 +186,9 @@ class TestMetaAppend:
         (Kind-Einträge byte-gleich zur Vorform)."""
         text = "\n\n".join(["wort " * 80 for _ in range(2)])
         album_builder.baue_album(
-            titel="Paula und der Schmetterling",
+            titel="Mia und der Schmetterling",
             text=text, voice="shimmer", idee="Schmetterling",
-            data_root=data_root, kind_id="paula",
+            data_root=data_root, kind_id="mia",
             llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
             # meta=None (explizit kein META)
         )
@@ -207,7 +207,7 @@ class TestMetaAppend:
         album_builder.baue_album(
             titel="Test Leer",
             text=text, voice="shimmer", idee="leer",
-            data_root=data_root, kind_id="paula",
+            data_root=data_root, kind_id="mia",
             llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
             meta=leeres_meta,
         )

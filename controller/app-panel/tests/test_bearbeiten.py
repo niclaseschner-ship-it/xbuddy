@@ -205,13 +205,13 @@ def test_PBE_7_flatten_registry_entry_with_variant():
 
 def test_PBE_7_flatten_registry_entry_multi_segment_view():
     """AC3 / T1007-S2: flattenRegistryEntry parst Multi-Segment-Views korrekt.
-    /display/hoerspiel/paula/alben → app='hoerspiel', view='paula/alben'.
-    Vorher schnitt der 2-Segment-Regex das view auf 'paula' ab."""
+    /display/hoerspiel/mia/alben → app='hoerspiel', view='mia/alben'.
+    Vorher schnitt der 2-Segment-Regex das view auf 'mia' ab."""
     out = run_node('''
         const entry = {
           typ: 'display',
-          pfad: '/display/hoerspiel/paula/alben',
-          label: 'Paulas Hörspiele',
+          pfad: '/display/hoerspiel/mia/alben',
+          label: 'Mias Hörspiele',
           icons: ['arasaac/5915.png'],
         };
         const cands = editorLib.flattenRegistryEntry(entry);
@@ -220,8 +220,8 @@ def test_PBE_7_flatten_registry_entry_multi_segment_view():
     assert len(out) == 1, 'flattenRegistryEntry: 1 Eintrag erwartet (kein Varianten)'
     assert out[0]['app'] == 'hoerspiel', \
         'app muss "hoerspiel" sein, bekommen: %r' % out[0].get('app')
-    assert out[0]['view'] == 'paula/alben', \
-        'view muss "paula/alben" sein (Multi-Segment), bekommen: %r' % out[0].get('view')
+    assert out[0]['view'] == 'mia/alben', \
+        'view muss "mia/alben" sein (Multi-Segment), bekommen: %r' % out[0].get('view')
 
 
 def test_PBE_7_flatten_registry_entry_multi_segment_with_query_edge():

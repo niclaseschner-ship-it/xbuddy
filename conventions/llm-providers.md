@@ -113,7 +113,7 @@ fatal — deshalb bleibt sie Nutzungs-Opt-in (Spiegel `multimodal_input`). Der
 Rufer aktiviert das Server-Tool NUR, wenn `"web_search" in agent.capabilities`
 (die `get_agent`-Fassade legt die Vendor-`CAPABILITIES` offen); ein Slot-Vendor
 ohne `web_search` degradiert sauber (kein Silent-Send eines unbekannten Tools).
-Erster Konsument: hoerspiel-Recherche-Vorschritt (HSP-57, niclas-erwachsen).
+Erster Konsument: hoerspiel-Recherche-Vorschritt (HSP-57, emil-erwachsen).
 
 **`multimodal_input` ist per-Rufer-Opt-in — keine Sicht und kein Required-Set-
 Mitglied (ENTSCHEID-1262 → „multimodal_input = Capability, keine Sicht").**

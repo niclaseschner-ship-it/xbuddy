@@ -29,8 +29,8 @@ from seiten import pwa_mantel  # noqa: E402
 from tools.initdata import session_cookie as _sc  # noqa: E402
 
 # Pilot-IDs — nur in Tests, nie im Produktiv-Code (SHELL-9).
-PANEL_ID = "paulas-panel-01"
-DISPLAY_ID = "tablet-tablet-paula-01"
+PANEL_ID = "mias-panel-01"
+DISPLAY_ID = "tablet-tablet-mia-01"
 
 
 # ============================================================
@@ -201,15 +201,15 @@ def test_shell9_keine_hardcode_ids():
     template_path = os.path.join(base, "templates", "heim-shell.html")
     with open(template_path, encoding="utf-8") as fh:
         tmpl = fh.read()
-    assert "paulas-panel-01" not in tmpl, "Pilot-Panel-ID nicht im Template"
-    assert "tablet-tablet-paula-01" not in tmpl, "Pilot-Display-ID nicht im Template"
+    assert "mias-panel-01" not in tmpl, "Pilot-Panel-ID nicht im Template"
+    assert "tablet-tablet-mia-01" not in tmpl, "Pilot-Display-ID nicht im Template"
 
     # CSS pruefen
     css_path = os.path.join(base, "static", "heim-shell.css")
     with open(css_path, encoding="utf-8") as fh:
         css = fh.read()
-    assert "paulas-panel-01" not in css
-    assert "tablet-tablet-paula-01" not in css
+    assert "mias-panel-01" not in css
+    assert "tablet-tablet-mia-01" not in css
 
     # Manifest-Route pruefen: liefert panel_id aus URL, kein Hardcode
     seiten_main.app.config["TESTING"] = True
@@ -218,7 +218,7 @@ def test_shell9_keine_hardcode_ids():
     assert manifest_resp.status_code == 200
     data = json.loads(manifest_resp.get_data(as_text=True))
     assert "test-panel-99" in data["start_url"], "start_url muss panel_id aus URL enthalten"
-    assert "paulas-panel-01" not in data["start_url"], "Kein Hardcode in start_url"
+    assert "mias-panel-01" not in data["start_url"], "Kein Hardcode in start_url"
 
 
 # ============================================================

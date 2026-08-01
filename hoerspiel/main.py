@@ -89,8 +89,8 @@ logger = logging.getLogger(__name__)
 
 # HSP-3a / HSP-43 (#1263) / INST-1 (#1656): die „anderen Kinder" ergeben sich aus
 # der Instanz-Liste `config.instanzen()` (Leser von instanzen.json, alle Einträge
-# außer der eigenen kind_id) — kein binärer paula↔neko-Toggle mehr, damit n≥3
-# (niclas) additiv trägt (HSP-3a n≥3, HSP-46). KEINE Registry, KEIN Cross-Service-Import.
+# außer der eigenen kind_id) — kein binärer mia↔finn-Toggle mehr, damit n≥3
+# (emil) additiv trägt (HSP-3a n≥3, HSP-46). KEINE Registry, KEIN Cross-Service-Import.
 
 # ENV-Key für den Familie-Service-Origin (DCOMP-1 / CLIENT-1).
 # Default kommt aus tools.familie_client.DEFAULT_ORIGIN (zentral, CLIENT-1).
@@ -317,14 +317,14 @@ def _pille_vars(kind_id: str) -> dict:
     - 'aktives_kind'  — Person | None (das in der URL adressierte Kind)
     - 'naechstes_kind' — {'person': Person, 'url': str} | None
         Nächste Instanz im Ring (wrap-around) nach dem aktiven kind_id,
-        iteriert über config.INSTANZEN-Reihenfolge (paula→neko→niclas→paula),
+        iteriert über config.INSTANZEN-Reihenfolge (mia→finn→emil→mia),
         gefiltert auf im Familie-Snapshot vorhandene Personen.
         None bei Solo-Betrieb (nur 1 Instanz im Snapshot) oder wenn aktives
         Kind selbst nicht im Snapshot ist.
     - 'andere_kinder' — Leer-Liste (nur noch für Template-Kompatibilität;
         der n≥3-Cycle-Toggle nutzt 'naechstes_kind').
 
-    Fehlt eine Person im Snapshot (z. B. niclas vor Provisionierung) oder ist
+    Fehlt eine Person im Snapshot (z. B. emil vor Provisionierung) oder ist
     der Familie-Service unerreichbar, fällt sie aus dem Ring — das naechstes_kind
     überspringt sie (PLAN-20-Geist).
     """
@@ -451,7 +451,7 @@ app = Flask(__name__, static_url_path="/display/hoerspiel/static")
 register_version(app)
 
 
-# ---- Display-View (HSP-2, HSP-3 — Single-Page-Splitscreen Paula-View) ----
+# ---- Display-View (HSP-2, HSP-3 — Single-Page-Splitscreen Mia-View) ----
 
 @app.route("/display/hoerspiel/<kind_id>/", methods=["GET"])
 @app.route("/display/hoerspiel/<kind_id>", methods=["GET"])
@@ -563,7 +563,7 @@ def folgen_vorschlag(kind_id: str):
     naechste = _naechste_nummer_aus_historie(historie)
     # HSP-45 / #1263: Instanz-Rahmung der aktiven Instanz in den Story-Prompt
     # reichen (Name-Drift-Fix — Muster wie themen_endpoint :846). Leere Felder
-    # fängt der transitionale Fallback in llm_service ab (paula/neko byte-gleich).
+    # fängt der transitionale Fallback in llm_service ab (mia/finn byte-gleich).
     instance = config_mod.load_instance(
         data_root=_data_root(),
         kind_id=_self_kind_id(),
@@ -577,8 +577,8 @@ def folgen_vorschlag(kind_id: str):
             ton=instance.ton, perspektive=instance.perspektive,
             serien_name=instance.serien_name,
             # HSP-56/57: zielgruppe steuert Prompt-Wahl + Recherche-Vorschritt.
-            # niclas-Instanz (zielgruppe=erwachsen) löst den Recherche-Pfad aus;
-            # Kind-Instanzen (paula/neko, zielgruppe=kind) bleiben unverändert.
+            # emil-Instanz (zielgruppe=erwachsen) löst den Recherche-Pfad aus;
+            # Kind-Instanzen (mia/finn, zielgruppe=kind) bleiben unverändert.
             zielgruppe=instance.zielgruppe,
             tiefe=tiefe,
         )
@@ -844,7 +844,7 @@ def themen_endpoint(kind_id: str):
     Kein ?alter=-Query mehr (RAT-17, URL-3a): Alter zieht der Buddy aus
     seiner instance.json. kind_id-Self-Check via _assert_self_kind (HSP-26).
 
-    200 {"kind_id": "paula", "name": "Paula", "alter": 4, "themen": [...]}
+    200 {"kind_id": "mia", "name": "Mia", "alter": 4, "themen": [...]}
     404 wenn kind_id unbekannt (kein hoerspiel-Pfad für diesen Wert)
     422 wenn das Alter der Instanz nicht in themen_je_alter gepflegt ist
     """

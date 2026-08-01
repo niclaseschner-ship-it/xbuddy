@@ -6,7 +6,7 @@
 # Kein Tab-Parameter mehr, kein Hash-Fragment (#folgen/#einstellungen).
 #
 # Aufrufbare, trigger-agnostische Funktion (HOE-1, E-HOE-1 analog E-RAO-1):
-# liest die Album-Liste (GET /api/v1/hoerspiel/paula/alben) als festen
+# liest die Album-Liste (GET /api/v1/hoerspiel/mia/alben) als festen
 # Launcher, baut eine kompakte Folgen-Uebersichts-Nachricht + URL-Button auf
 # die Player-PWA (HOE-4) und gibt ein Form-(b)-Dict zurueck (TASK-10c).
 #
@@ -18,7 +18,7 @@
 # Eingang:
 #   chat_id          -- Telegram-Chat (HOE-1).
 #   from_user_id     -- Telegram-User-ID des Aufrufers (Berechtigung HOE-2).
-#   hoerspiel_client -- HoerspielClient-Instanz fuer paula (HOE-1, CLIENT-1).
+#   hoerspiel_client -- HoerspielClient-Instanz fuer mia (HOE-1, CLIENT-1).
 #   is_member_fn     -- Callable (user_id) -> bool (HOE-2, EC-2).
 #   mini_app_url     -- URL der Player-PWA (HOE-5, HSP-47).
 #                       Leer -> Fehler-Text (HOE-7).

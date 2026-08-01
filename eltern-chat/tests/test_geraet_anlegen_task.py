@@ -17,7 +17,7 @@ from tasks import TurnContext, build_catalog
 from tools.initdata import session_cookie as sc
 
 BOT_TOKEN = "123456:ABCdef_testtoken"
-ORIGIN = "https://buddyboard.taile235cf.ts.net"
+ORIGIN = "https://buddyboard.<tailscale-id>.ts.net"
 
 
 def _members(*user_ids):

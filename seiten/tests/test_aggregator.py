@@ -388,12 +388,12 @@ def test_aggregator_typ_mini_app(tmp_path, monkeypatch):
         _view_mini_app("mini-app-uebersicht", "/api/v1/seiten/mini-app-uebersicht", "uebersicht"),
     ])
     _schreibe_manifest(root, "hoerspiel", [
-        # HSP-26 / URL-3a / T970: kind_id-tragender Pfad (hier: paula als Beispiel-Instanz)
-        _view_mini_app("eltern", "/seiten/hoerspiel/paula/eltern", "hoerspiel"),
+        # HSP-26 / URL-3a / T970: kind_id-tragender Pfad (hier: mia als Beispiel-Instanz)
+        _view_mini_app("eltern", "/seiten/hoerspiel/mia/eltern", "hoerspiel"),
     ])
 
     eintraege = aggregator.manifest_eintraege(
-        root, funnel_domain="buddyboard.taile235cf.ts.net")
+        root, funnel_domain="buddyboard.<tailscale-id>.ts.net")
     mini_apps = [e for e in eintraege if e["typ"] == aggregator.TYP_MINI_APP]
     assert len(mini_apps) == 4, "Vier Mini-App-Einträge erwartet, got: %d" % len(mini_apps)
 
@@ -403,7 +403,7 @@ def test_aggregator_typ_mini_app(tmp_path, monkeypatch):
     einkauf = by_key["essen-einkauf"]
     assert einkauf["typ"] == aggregator.TYP_MINI_APP
     assert einkauf["web_app_url"] == "https://t.me/testbot/einkauf"
-    assert einkauf["funnel_url"] == "https://buddyboard.taile235cf.ts.net/seiten/essen/einkauf"
+    assert einkauf["funnel_url"] == "https://buddyboard.<tailscale-id>.ts.net/seiten/essen/einkauf"
     assert "icons" in einkauf  # icons[] aus web_app.icons[] durchgereicht
 
     # Alle vier haben web_app_url + funnel_url
@@ -411,7 +411,7 @@ def test_aggregator_typ_mini_app(tmp_path, monkeypatch):
         assert "web_app_url" in e, "web_app_url fehlt bei %r" % e["key"]
         assert "funnel_url" in e, "funnel_url fehlt bei %r" % e["key"]
         assert e["web_app_url"].startswith("https://t.me/testbot/")
-        assert e["funnel_url"].startswith("https://buddyboard.taile235cf.ts.net/")
+        assert e["funnel_url"].startswith("https://buddyboard.<tailscale-id>.ts.net/")
 
 
 def test_aggregator_typ_mini_app_ohne_app_short_name(tmp_path, monkeypatch):

@@ -32,7 +32,7 @@ Tokens + MAD-Skalierungs-Parameter, MAD-2-Card-Liste-Layout, MAD-7
 Auth via `initData`-Header.
 
 *Test (Live):* `curl -H "Authorization: tma <gültige-initData>"
-https://buddyboard.taile235cf.ts.net/api/v1/seiten/mini-app-uebersicht`
+https://buddyboard.<tailscale-id>.ts.net/api/v1/seiten/mini-app-uebersicht`
 antwortet 200 + HTML. Ohne Header → 401.
 
 ## MAU-2 — Inventar-Quelle ist der Aggregator (keine Doppel-Liste)
@@ -179,7 +179,7 @@ dokumentiert und View-spezifisch begründet.
 
 Was variiert je Familie:
 - Bot-Token, Bot-Username (Mini-App-URL `t.me/<bot>/<app_short_name>`).
-- Funnel-Domain (`*.taile235cf.ts.net` ist familienspezifisch).
+- Funnel-Domain (`*.<tailscale-id>.ts.net` ist familienspezifisch).
 - Familien-Display-/Panel-/Mini-App-Bestand.
 
 Alles Konfig, kein Code. Mini-App-Übersicht ist familien-agnostisch.

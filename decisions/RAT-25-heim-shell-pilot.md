@@ -7,8 +7,8 @@ Ein Familien-Gerät trägt Panel UND Buddy-View als **dünne PWA-Shell**
 (Panel-Kachel-Nav links, geroutete Buddy-View rechts), gebaut als
 **Split-Layout-Container um zwei bestehende Iframes** — **kein neuer
 Routing-Kern**. Tile-Tap läuft unverändert `tile_selected` → Router → SSE →
-Render. Verortung `seiten/static/` + `platform.js`. Pilot: **Paula-Tablet**
-(`tablet-tablet-paula-01`, 1920×1200), **LAN-only**.
+Render. Verortung `seiten/static/` + `platform.js`. Pilot: **Mia-Tablet**
+(`tablet-tablet-mia-01`, 1920×1200), **LAN-only**.
 
 Konkrete Form (Antiberater-Patches eingebacken):
 - **Einstieg über `panel_id`** (`/shell/<panel_id>`), `display_id` per
@@ -18,7 +18,7 @@ Konkrete Form (Antiberater-Patches eingebacken):
 - **Rechtes Pane = iframe**, keine Display-Client-Codekopie.
 - **Rail 280px** (Gate B 2026-06-30): das Panel reflowt seine Kacheln **selbst**
   einspaltig (PANEL-12 `computeGridGeometry`) — **Panel bleibt unverändert**.
-- **n=1 (nur Paula), keine antizipative Shell-Konvention.** IDs aus Daten.
+- **n=1 (nur Mia), keine antizipative Shell-Konvention.** IDs aus Daten.
 
 ## Warum
 - **Gewinn:** ein Gerät statt zwei; bestehende Routing-/Render-Mechanik komplett
@@ -45,6 +45,6 @@ Konkrete Form (Antiberater-Patches eingebacken):
 (Gate-B-Beleg) · Bezug RAT-18 / RAT-19 / AUTH-6 / AUTH-7 / #948 · #1182 (Keystone)
 
 ## Transkript
-- Vorschlag: `brainstorm/berater-runde/20260630-150651-vorschlag-pwa-shell-paula.md`
-- Antiberater (Codex): `brainstorm/berater-runde/2026-06-30-1507-antiberater-pwa-shell-paula.md`
-- Ratifikation: `brainstorm/berater-runde/20260630-151000-RATIFIZIERT-pwa-shell-paula.md`
+- Vorschlag: `brainstorm/berater-runde/20260630-150651-vorschlag-pwa-shell-mia.md`
+- Antiberater (Codex): `brainstorm/berater-runde/2026-06-30-1507-antiberater-pwa-shell-mia.md`
+- Ratifikation: `brainstorm/berater-runde/20260630-151000-RATIFIZIERT-pwa-shell-mia.md`

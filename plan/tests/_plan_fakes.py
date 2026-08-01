@@ -122,14 +122,14 @@ class FakeTransport:
 # Familien-Registry: zwei Erwachsene, zwei Kinder — wie der Wireframe-Handoff.
 DEMO_REGISTRY = {
     "erwachsene": [
-        {"id": "niclas", "name": "Niclas", "ring": "blue",
-         "email": "niclas@example.org"},
-        {"id": "vera", "name": "Vera", "ring": "orange",
-         "email": "vera@example.org"},
+        {"id": "emil", "name": "Emil", "ring": "blue",
+         "email": "emil@example.org"},
+        {"id": "petra", "name": "Petra", "ring": "orange",
+         "email": "petra@example.org"},
     ],
     "kinder": [
-        {"id": "paula", "name": "Paula", "ring": "purple"},
-        {"id": "neko", "name": "Neko", "ring": "teal"},
+        {"id": "mia", "name": "Mia", "ring": "purple"},
+        {"id": "finn", "name": "Finn", "ring": "teal"},
     ],
 }
 
@@ -138,15 +138,15 @@ DEMO_CONFIG = {
     "slots": [
         {"schluessel": "bring", "art": "verantwortlich", "icon": "37807"},
         {"schluessel": "pick", "art": "verantwortlich", "icon": "39520"},
-        {"schluessel": "act1", "art": "kalender-read", "icon": "3071", "kind": "paula"},
-        {"schluessel": "act2", "art": "kalender-read", "icon": "3071", "kind": "neko"},
+        {"schluessel": "act1", "art": "kalender-read", "icon": "3071", "kind": "mia"},
+        {"schluessel": "act2", "art": "kalender-read", "icon": "3071", "kind": "finn"},
         {"schluessel": "cook", "art": "verantwortlich", "icon": "2342"},
-        {"schluessel": "bed1", "art": "verantwortlich", "icon": "6027", "kind": "paula"},
-        {"schluessel": "bed2", "art": "verantwortlich", "icon": "6027", "kind": "neko"},
+        {"schluessel": "bed1", "art": "verantwortlich", "icon": "6027", "kind": "mia"},
+        {"schluessel": "bed2", "art": "verantwortlich", "icon": "6027", "kind": "finn"},
     ],
     "default_verantwortlichkeiten": {
-        # Index 0=Mo … 6=So. bring ist Mo niclas, Di vera.
-        "bring": ["niclas", "vera", "niclas", "vera", "niclas", None, None],
+        # Index 0=Mo … 6=So. bring ist Mo emil, Di petra.
+        "bring": ["emil", "petra", "emil", "petra", "emil", None, None],
     },
     "fenster_lesekind": 7,
     "fenster_kleinkind": 3,

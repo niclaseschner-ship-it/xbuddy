@@ -52,13 +52,13 @@ LLM-Intent (Folgen-Klasse, siehe HOE-3).
 
 - **Settings-Tab über HOE-Skill** — siehe Anti-Redundanz-Setzung oben.
   Agent verweist sprachlich auf die App.
-- **Per-Kind-Auswahl im Chat** — HOE öffnet `paula` als festen Launcher;
-  HSP-35 aggregiert beide V1-Kinder (Paula + Neko) clientseitig im
+- **Per-Kind-Auswahl im Chat** — HOE öffnet `mia` als festen Launcher;
+  HSP-35 aggregiert beide V1-Kinder (Mia + Finn) clientseitig im
   Folgen-Tab. Eine eigene Per-Kind-Auswahl wäre Re-Doppelung der
   clientseitigen Aggregation.
 - **Direkter Deeplink auf einzelne Folge** („spiel Folge 7 ab") — V1
   öffnet den ganzen Folgen-Tab, dort wählt Eltern aus.
-- **Volltext-Liste der Alben im Chat** — wer eine Liste „was hat Paula
+- **Volltext-Liste der Alben im Chat** — wer eine Liste „was hat Mia
   schon?" im Chat will, kriegt das von einem separaten Lese-Skill
   (analog WZE für die Einkaufsliste). HOE ist Aktiv-werden-Trigger,
   nicht Lese-Skill.
@@ -78,7 +78,7 @@ Mini-App. Settings-Trigger werden vom Eltern-Chat-Agent **nicht** über
 HOE bedient, sondern sprachlich auf die App verwiesen (Anti-Redundanz-
 Setzung, siehe Eingangs-Block + `eltern-chat/agent.py`-System-Prompt).
 
-**Wirkung:** ein lesender Buddy-Aufruf an `GET /api/v1/hoerspiel/paula/alben`
+**Wirkung:** ein lesender Buddy-Aufruf an `GET /api/v1/hoerspiel/mia/alben`
 (fester Launcher, HSP-35 aggregiert beide V1-Kinder clientseitig) —
 **keine** Familien-Daten-Änderung.
 
@@ -150,7 +150,7 @@ die Hörspiel-Mini-App (siehe `eltern-chat/agent.py`-System-Prompt) —
 die persistente Bot-Menü-Verlinkung).
 
 **Abgrenzung zu HFE:** Wenn die Eltern-Frage nach **Erzeugen** einer
-**neuen** Folge klingt („schreib eine Folge über Mut", „mach Paula ein
+**neuen** Folge klingt („schreib eine Folge über Mut", „mach Mia ein
 neues Hörspiel"), nutzt der Agent **HFE** (Klasse-C-Erzeugen-Skill,
 `hoerspiel-folge-erzeugen.md`). Wenn die Frage nach **Öffnen** der
 Wiedergabe-UI klingt, nutzt er HOE.
@@ -169,7 +169,7 @@ kein Hash; HOE-5):
 [🎧 Folgen anhören]   ← url-Button, öffnet Player-PWA
 ```
 
-Mit `N` = Album-Anzahl aus `GET /api/v1/hoerspiel/paula/alben` (fester
+Mit `N` = Album-Anzahl aus `GET /api/v1/hoerspiel/mia/alben` (fester
 Launcher; HSP-35 aggregiert beide V1-Kinder clientseitig im Folgen-Tab).
 `<nr>`/`<titel>` aus dem Album mit höchster `folgen_nr`. Die zweite
 Zeile fällt weg, wenn `N = 0` (siehe E-HOE-3).
@@ -227,7 +227,7 @@ Live-Probe: Eltern tippt Button im Telegram → Browser öffnet Player-PWA.
   Eingangs-Block. Settings (Voice, Anbieter, Modell, Tempo, Pausen)
   lebt ausschließlich in der Mini-App (HSP-34); Eltern-Chat-Agent
   verweist sprachlich auf die App.
-- **Per-Kind-Auswahl im Chat** — HOE öffnet `paula` als festen
+- **Per-Kind-Auswahl im Chat** — HOE öffnet `mia` als festen
   Launcher; HSP-35 aggregiert clientseitig.
 - **Direkter Deeplink auf einzelne Folge** — V1 öffnet den ganzen
   Folgen-Tab.
@@ -279,7 +279,7 @@ Abhängigkeiten gesetzt → Aufgabe drin; eine fehlt → Aufgabe nicht drin.
 
 *Datum:* 2026-06-15 (Werft-Lauf #848) · Der Skill-Vertrag spricht nicht
 über seinen Aufrufer. Heute LLM-Intent im Eltern-Chat, später ggf.
-anderer Trigger (Sprach-Trigger für Paula in V2 wäre denkbar, ist aber
+anderer Trigger (Sprach-Trigger für Mia in V2 wäre denkbar, ist aber
 für HOE — Eltern-Anliegen — unwahrscheinlich).
 
 **Verworfen:** Telegram-API-Aufrufe oder Chat-Form-Erwartungen in die

@@ -29,8 +29,8 @@ from telemetry import ProviderCall, TurnTelemetry
 from tools.llm import estimate_cost
 
 # HSP-43 / #1263: Prompt-Namensliste aus DERSELBEN Instanz-Konstante wie die
-# HFE-enum (tasks.HOERSPIEL_INSTANZEN) — kein separater paula/neko-Hardcode im
-# Prompt. Nimmt niclas automatisch mit (→ „Paula, Neko oder Niclas").
+# HFE-enum (tasks.HOERSPIEL_INSTANZEN) — kein separater mia/finn-Hardcode im
+# Prompt. Nimmt emil automatisch mit (→ „Mia, Finn oder Emil").
 _HSP_NAMEN = [i["name"] for i in HOERSPIEL_INSTANZEN]
 _HSP_IDS = [i["kind_id"] for i in HOERSPIEL_INSTANZEN]
 
@@ -43,9 +43,9 @@ def _oder_liste(items) -> str:
     return "%s oder %s" % (", ".join(items[:-1]), items[-1])
 
 
-_HSP_NAMEN_ODER = _oder_liste(_HSP_NAMEN)                       # "Paula, Neko oder Niclas"
-_HSP_NAMEN_GUILL = "/".join("»%s«" % n for n in _HSP_NAMEN)    # "»Paula«/»Neko«/»Niclas«"
-_HSP_IDS_BZW = " bzw. ".join("»%s«" % k for k in _HSP_IDS)     # "»paula« bzw. »neko« bzw. »niclas«"
+_HSP_NAMEN_ODER = _oder_liste(_HSP_NAMEN)                       # "Mia, Finn oder Emil"
+_HSP_NAMEN_GUILL = "/".join("»%s«" % n for n in _HSP_NAMEN)    # "»Mia«/»Finn«/»Emil«"
+_HSP_IDS_BZW = " bzw. ".join("»%s«" % k for k in _HSP_IDS)     # "»mia« bzw. »finn« bzw. »emil«"
 
 SYSTEM_PROMPT = (
     "Du bist der Eltern-Chat von XBuddy — ein freundlicher Assistent in der "
@@ -134,8 +134,8 @@ SYSTEM_PROMPT = (
     "»hoerspiel_folge_erzeugen« aufrufen — KEINE eigenen Rückfragen stellen, der "
     "Skill macht die Diskussion. Trigger-Phrasen (nicht abschließend): »Neues "
     "Hörbuch«, »Neues Hörspiel«, »Neue Folge«, »Hörbuch anlegen«, »Hörspiel "
-    "machen«, »Mach Paula eine Folge«, »Schreib eine Folge«, »Folge erzeugen«, "
-    "»Welche Themen gibt es?«, »Vorschläge?«, »Was könnte ich Paula erzählen?«. "
+    "machen«, »Mach Mia eine Folge«, »Schreib eine Folge«, »Folge erzeugen«, "
+    "»Welche Themen gibt es?«, »Vorschläge?«, »Was könnte ich Mia erzählen?«. "
     "Die Eltern-Diskussion (was, worüber, mit wem, wie) findet IM Skill statt, "
     "nicht im Agent.\n"
     "Themen-Anfrage-Phrasen (= leere oder vage Idee) — rufe das Werkzeug mit "
@@ -165,8 +165,8 @@ SYSTEM_PROMPT = (
     f"stelle EINE kurze Rückfrage: »Für {_HSP_NAMEN_ODER}?« — analog HFE — und "
     "antworte erst danach mit dem Verweis.\n"
     "Beispiele beiläufige Settings-Erwähnung (KEIN Tool-Call): »wechsel bei "
-    "Neko auf mistral« → »Anbieter und Modell von Neko wählst du in der "
-    "Hörspiel-Mini-App von Neko.«; »wechsel auf onyx«, »mit shimmer vertonen«, "
+    "Finn auf mistral« → »Anbieter und Modell von Finn wählst du in der "
+    "Hörspiel-Mini-App von Finn.«; »wechsel auf onyx«, »mit shimmer vertonen«, "
     f"»andere Stimme« (#995) → Rückfrage »Für {_HSP_NAMEN_ODER}?«, dann »Voice "
     "wählst du in der Hörspiel-Mini-App von <Name>.«; »Tempo ändern« / "
     "»Pausen tunen« → analog mit Kind-Verweis. Die Stimme im aktiven "
@@ -176,7 +176,7 @@ SYSTEM_PROMPT = (
     "WICHTIG: kein Settings-Inhalt im Chat-Text ausgeben — NUR den "
     "Türöffner-Button senden (HOE-4). »Knopf unten« oder »Button« NICHT "
     "versprechen — der Button kommt automatisch mit dem Tool-Call. "
-    "Beiläufige Settings-Erwähnung (z. B. »Voice von Neko ändern«, "
+    "Beiläufige Settings-Erwähnung (z. B. »Voice von Finn ändern«, "
     "»wechsel auf mistral«) → sprachlicher Verweis OHNE Tool-Call OHNE "
     "Button (Anti-Redundanz-Grundregel bleibt).\n"
     f"kind_id-Wahl (HFE-3, E-HFE-6): Nennt die Mutter einen Namen ({_HSP_NAMEN_GUILL}), "
@@ -484,7 +484,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     # Inline-Button gefeuert hat (TASK-10c Form (b) `inline_button`). Der
     # Markdown-Strip-Filter im finalen reply_text-Pfad nutzt dieses Flag, um
     # parallele Markdown-Knopf-Halluzinationen extra aggressiv zu entfernen
-    # (Live-Befund 2026-06-22 chat 464143432, Refs #1075).
+    # (Live-Befund 2026-06-22 chat <chat-id>, Refs #1075).
     _inline_button_emitted = False
 
     for _ in range(max_iterations):

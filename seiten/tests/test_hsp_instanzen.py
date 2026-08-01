@@ -1,6 +1,6 @@
 """HSP-43 / #1263 / INST-1 (#1656) — Instanz-Liste im Player-Template-Kontext.
 
-Löst `test_hsp49_instanz_liste.py` ab: seit #1263 ist niclas als dritte Instanz
+Löst `test_hsp49_instanz_liste.py` ab: seit #1263 ist emil als dritte Instanz
 provisioniert (Backend-Deploy manuell, HSP-44). Seit #1656 (INST-1) ist die
 Quelle NICHT mehr eine Code-Konstante, sondern die Repo-Root-`instanzen.json`
 (tools.instanzen). `_hsp_instanzen()` in seiten/main.py mappt slug→kind_id,
@@ -8,7 +8,7 @@ display_name→name, foto_url=None und iteriert im Player-Template als
 window.__HSP_INSTANZEN__.
 
 Anker: specs/buddies/hoerspiel.md HSP-43/HSP-49, conventions/instanzen-config.md
-INST-1..6, conventions/ports.md PORT-2 (paula 5053, neko 5055, niclas 5056).
+INST-1..6, conventions/ports.md PORT-2 (mia 5053, finn 5055, emil 5056).
 
 Lauf: python3 -m pytest seiten/tests/test_hsp_instanzen.py -x -v
 """
@@ -30,16 +30,16 @@ from tools.initdata import session_cookie as sc  # noqa: E402
 _TEST_BOT_TOKEN = "testtoken-hsp43"
 _VALID_COOKIE = sc.sign_session("hsp-test-client-hsp43", _TEST_BOT_TOKEN)
 
-# INST-2-Form: drei Einträge inkl. niclas — spiegelt PORT-2. Wird pro Test über
+# INST-2-Form: drei Einträge inkl. emil — spiegelt PORT-2. Wird pro Test über
 # INSTANZEN_CONFIG_FILE injiziert (der Loader liest sonst die live-/fehlende
 # Repo-Root-Datei und fiele auf den kind1/kind2-Default zurück).
 _TEST_INSTANZEN = {
     "hoerspiel": [
-        {"slug": "paula", "port": 5053, "origin": "127.0.0.1:5053",
+        {"slug": "mia", "port": 5053, "origin": "127.0.0.1:5053",
          "display_name": "Kind Eins"},
-        {"slug": "neko", "port": 5055, "origin": "127.0.0.1:5055",
+        {"slug": "finn", "port": 5055, "origin": "127.0.0.1:5055",
          "display_name": "Kind Zwei"},
-        {"slug": "niclas", "port": 5056, "origin": "127.0.0.1:5056",
+        {"slug": "emil", "port": 5056, "origin": "127.0.0.1:5056",
          "display_name": "Kind Drei"},
     ]
 }
@@ -88,20 +88,20 @@ def _lese_instanzen(client):
     return json.loads(body[start:end].strip())
 
 
-def test_instanz_liste_traegt_paula_neko_und_niclas(client):
-    """HSP-43 / #1263: window.__HSP_INSTANZEN__ enthält paula, neko UND niclas."""
+def test_instanz_liste_traegt_mia_finn_und_emil(client):
+    """HSP-43 / #1263: window.__HSP_INSTANZEN__ enthält mia, finn UND emil."""
     kind_ids = {e["kind_id"] for e in _lese_instanzen(client)}
-    assert "paula" in kind_ids
-    assert "neko" in kind_ids
-    assert "niclas" in kind_ids, \
-        f"niclas muss ab #1263 in der Instanz-Liste sein: {kind_ids}"
+    assert "mia" in kind_ids
+    assert "finn" in kind_ids
+    assert "emil" in kind_ids, \
+        f"emil muss ab #1263 in der Instanz-Liste sein: {kind_ids}"
 
 
 def test_instanz_liste_genau_drei_eintraege(client):
-    """#1263: provisioniert drei Instanzen (paula + neko + niclas, PORT-2)."""
+    """#1263: provisioniert drei Instanzen (mia + finn + emil, PORT-2)."""
     instanzen = _lese_instanzen(client)
     assert len(instanzen) == 3, \
-        f"Erwartet 3 Instanzen (paula+neko+niclas), erhalten {len(instanzen)}: {instanzen}"
+        f"Erwartet 3 Instanzen (mia+finn+emil), erhalten {len(instanzen)}: {instanzen}"
 
 
 def test_instanz_liste_enthaelt_name_und_foto_url(client):
@@ -121,7 +121,7 @@ def test_hsp_instanzen_reader_ist_autoritative_liste():
     liste = seiten_main._hsp_instanzen()
     assert isinstance(liste, list)
     kind_ids = {e["kind_id"] for e in liste}
-    assert {"paula", "neko", "niclas"} <= kind_ids
+    assert {"mia", "finn", "emil"} <= kind_ids
     for entry in liste:
         assert isinstance(entry["kind_id"], str)
         assert entry["kind_id"]

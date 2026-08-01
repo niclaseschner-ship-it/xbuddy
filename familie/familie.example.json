@@ -2,47 +2,47 @@
   "_comment": "FAM-6 — Familien-Registry einer Instanz. Kopiere als familie.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'erwachsene' und 'kinder' sind die zwei Personen-Arten (FAM-2). Jede Person: id (Pflicht, stabil), name (Pflicht), ring (Pflicht, aus der Palette blue/orange/green/red/purple/teal/gray — FAM-4), foto (optional, Dateiname im Foto-Verzeichnis — FAM-5), email (optional, nur Erwachsene — FAM-3), telegram_id (optional, jede Person — FAM-3). 'settings' (FAM-9): familienspezifische Werte, die der Konsument sonst per Default belegt — Felder können weggelassen werden, dann gilt der Default (fotos/ neben dieser Datei; 1280 Pixel). Die Foto-Dateien liegen je Instanz im Foto-Verzeichnis und gehören wie diese Datei nicht ins Repo.",
   "erwachsene": [
     {
-      "id": "niclas",
-      "name": "Niclas",
+      "id": "emil",
+      "name": "Emil",
       "ring": "blue",
-      "foto": "niclas.png",
-      "email": "niclas@example.org",
+      "foto": "emil.png",
+      "email": "emil@example.org",
       "telegram_id": 100000001
     },
     {
-      "id": "sophia",
-      "name": "Sophia",
+      "id": "lena",
+      "name": "Lena",
       "ring": "red",
-      "foto": "sophia.png",
-      "email": "sophia@example.org"
+      "foto": "lena.png",
+      "email": "lena@example.org"
     },
     {
-      "id": "julian",
-      "name": "Julian",
+      "id": "jonas",
+      "name": "Jonas",
       "ring": "green",
-      "foto": "julian.png",
-      "email": "julian@example.org"
+      "foto": "jonas.png",
+      "email": "jonas@example.org"
     },
     {
-      "id": "vera",
-      "name": "Vera",
+      "id": "petra",
+      "name": "Petra",
       "ring": "orange",
-      "foto": "vera.png",
-      "email": "vera@example.org"
+      "foto": "petra.png",
+      "email": "petra@example.org"
     }
   ],
   "kinder": [
     {
-      "id": "paula",
-      "name": "Paula",
+      "id": "mia",
+      "name": "Mia",
       "ring": "purple",
-      "foto": "paula.png"
+      "foto": "mia.png"
     },
     {
-      "id": "neko",
-      "name": "Neko",
+      "id": "finn",
+      "name": "Finn",
       "ring": "teal",
-      "foto": "neko.png",
+      "foto": "finn.png",
       "telegram_id": 100000002
     }
   ],

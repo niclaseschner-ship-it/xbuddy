@@ -32,8 +32,8 @@ set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # Unit-Quellen-Map: systemd-Name → Repo-Pfad zur Vorlage (relativ zu SCRIPT_DIR/..)
-# Vollständige Liste (README-Schleife + 3 fehlende Units hoerspiel/hoerspiel-neko/kibuddy
-# + hoerspiel-niclas).
+# Vollständige Liste (README-Schleife + 3 fehlende Units hoerspiel/hoerspiel-finn/kibuddy
+# + hoerspiel-emil).
 # ---------------------------------------------------------------------------
 declare -A SVC_SRC=(
     [xbuddy-plan]=plan/plan.service
@@ -46,8 +46,8 @@ declare -A SVC_SRC=(
     [xbuddy-essen]=essen/essen.service
     [xbuddy-eltern-chat]=eltern-chat/eltern-chat.service
     [xbuddy-hoerspiel]=hoerspiel/hoerspiel.service
-    [xbuddy-hoerspiel-neko]=hoerspiel/hoerspiel-neko.service
-    [xbuddy-hoerspiel-niclas]=hoerspiel/hoerspiel-niclas.service
+    [xbuddy-hoerspiel-finn]=hoerspiel/hoerspiel-finn.service
+    [xbuddy-hoerspiel-emil]=hoerspiel/hoerspiel-emil.service
     [xbuddy-kibuddy]=kibuddy/kibuddy.service
 )
 
@@ -252,8 +252,8 @@ if [[ "${DRY_RUN}" -eq 0 ]]; then
     log "  sudo systemctl enable --now xbuddy-essen.service"
     log "  sudo systemctl enable --now xbuddy-eltern-chat.service"
     log "  sudo systemctl enable --now xbuddy-hoerspiel.service"
-    log "  sudo systemctl enable --now xbuddy-hoerspiel-neko.service"
-    log "  sudo systemctl enable --now xbuddy-hoerspiel-niclas.service"
+    log "  sudo systemctl enable --now xbuddy-hoerspiel-finn.service"
+    log "  sudo systemctl enable --now xbuddy-hoerspiel-emil.service"
     log "  sudo systemctl enable --now xbuddy-kibuddy.service"
     log ""
     log "nginx-Conf + FQDN-Fill: manueller sed-Schritt (deploy/nginx/README.md) —"

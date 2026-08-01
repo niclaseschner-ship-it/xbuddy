@@ -202,7 +202,7 @@ def test_PLAN_6_slots_come_from_config(demo_config):
     assert bring.icon == "37807"
     act1 = demo_config.slot("act1")
     assert act1.art == config_mod.SLOT_KALENDER_READ
-    assert act1.kind == "paula"
+    assert act1.kind == "mia"
 
 
 def test_PLAN_6_example_config_has_seven_handoff_slots():
@@ -236,14 +236,14 @@ def test_PLAN_8_zuteilung_persists(demo_config, demo_registry):
     client = make_client(demo_config, demo_registry, FakeTransport())
     r = client.put("/api/v1/plan/zuteilung", data=json.dumps({
         "week_start": "2026-08-03", "day": 2, "slot": "cook",
-        "person_id": "vera",
+        "person_id": "petra",
     }), content_type="application/json")
     assert r.status_code == 200
     # Erneuter Abruf: die Zuweisung ist da.
     conn = db_mod.connect(demo_config.db_datei)
     zuw = db_mod.assignments_for_weeks(conn, ["2026-08-03"])
     conn.close()
-    assert zuw[("2026-08-03", 2, "cook")] == "vera"
+    assert zuw[("2026-08-03", 2, "cook")] == "petra"
 
 
 def test_PLAN_7_zuteilung_only_erwachsenen_slots(demo_config, demo_registry):
@@ -252,7 +252,7 @@ def test_PLAN_7_zuteilung_only_erwachsenen_slots(demo_config, demo_registry):
     client = make_client(demo_config, demo_registry, FakeTransport())
     r = client.put("/api/v1/plan/zuteilung", data=json.dumps({
         "week_start": "2026-08-03", "day": 0, "slot": "act1",
-        "person_id": "vera",
+        "person_id": "petra",
     }), content_type="application/json")
     assert r.status_code == 400
 
@@ -271,7 +271,7 @@ def test_PLAN_7_zuteilung_null_clears_slot(demo_config, demo_registry):
     """person_id null leert den Slot — Teil des Cycles (… → leer → …)."""
     client = make_client(demo_config, demo_registry, FakeTransport())
     client.put("/api/v1/plan/zuteilung", data=json.dumps({
-        "week_start": "2026-08-03", "day": 0, "slot": "bring", "person_id": "vera",
+        "week_start": "2026-08-03", "day": 0, "slot": "bring", "person_id": "petra",
     }), content_type="application/json")
     r = client.put("/api/v1/plan/zuteilung", data=json.dumps({
         "week_start": "2026-08-03", "day": 0, "slot": "bring", "person_id": None,
@@ -318,9 +318,9 @@ def test_PLAN_10_first_view_of_week_prefills_defaults(demo_config, demo_registry
     db_mod.init_week(conn, "2026-08-03", demo_config.default_verantwortlichkeiten)
     zuw = db_mod.assignments_for_weeks(conn, ["2026-08-03"])
     conn.close()
-    # DEMO_CONFIG: bring Mo=niclas, Di=vera.
-    assert zuw[("2026-08-03", 0, "bring")] == "niclas"
-    assert zuw[("2026-08-03", 1, "bring")] == "vera"
+    # DEMO_CONFIG: bring Mo=emil, Di=petra.
+    assert zuw[("2026-08-03", 0, "bring")] == "emil"
+    assert zuw[("2026-08-03", 1, "bring")] == "petra"
 
 
 def test_PLAN_10_existing_week_not_overwritten(demo_config, demo_registry):
@@ -329,12 +329,12 @@ def test_PLAN_10_existing_week_not_overwritten(demo_config, demo_registry):
     conn = db_mod.connect(demo_config.db_datei)
     db_mod.init_week(conn, "2026-08-03", demo_config.default_verantwortlichkeiten)
     # Eine Zuweisung von Hand ändern.
-    db_mod.set_assignment(conn, "2026-08-03", 0, "bring", "vera")
+    db_mod.set_assignment(conn, "2026-08-03", 0, "bring", "petra")
     # Erneut init_week — darf die Hand-Änderung NICHT zurücksetzen.
     db_mod.init_week(conn, "2026-08-03", demo_config.default_verantwortlichkeiten)
     zuw = db_mod.assignments_for_weeks(conn, ["2026-08-03"])
     conn.close()
-    assert zuw[("2026-08-03", 0, "bring")] == "vera"
+    assert zuw[("2026-08-03", 0, "bring")] == "petra"
 
 
 def test_PLAN_10_window_spanning_two_weeks_reads_both(demo_config, demo_registry):
@@ -360,13 +360,13 @@ def test_PLAN_10_window_spanning_two_weeks_reads_both(demo_config, demo_registry
 def test_PLAN_12_event_with_child_name_becomes_activity(demo_config, demo_registry):
     """Ein Event mit Kindername im Titel landet im Aktivitäts-Slot."""
     heute = date(2026, 5, 20)
-    raw = [gcal_allday("e1", "Klettern Paula", heute.isoformat())]
+    raw = [gcal_allday("e1", "Klettern Mia", heute.isoformat())]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(demo_config.db_datei)
     view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
                                 heute, 7, True, heute=heute)
     conn.close()
-    zelle = view["schedule"][heute.isoformat()]["act1"]  # act1 = Paula
+    zelle = view["schedule"][heute.isoformat()]["act1"]  # act1 = Mia
     assert zelle is not None and zelle["type"] == "klettern"
     # Es ist KEIN Termin geworden.
     assert view["appointments"][heute.isoformat()] == []
@@ -383,7 +383,7 @@ def test_PLAN_12_aktivitaeten_katalog_round_trip():
     auseinanderlaufen."""
     for entry in aktivitaeten_mod.AKTIVITAETEN_V1:
         art = entry["art"]
-        titel = "%s Paula" % aktivitaeten_mod.label_fuer_art(art)
+        titel = "%s Mia" % aktivitaeten_mod.label_fuer_art(art)
         zurueck_gelesen = aktivitaeten_mod.art_aus_titel(titel)
         assert zurueck_gelesen == art, (
             "Round-Trip kaputt: %r geschrieben als %r, gelesen als %r"
@@ -407,7 +407,7 @@ def test_PLAN_12_aktivitaeten_katalog_single_source():
         keywords = entry["keywords"]
         assert plan_main._aktivitaet_label(art) == label
         for kw in keywords:
-            assert render_mod.aktivitaets_art("Test " + kw + " Paula") == art
+            assert render_mod.aktivitaets_art("Test " + kw + " Mia") == art
 
 
 def test_PLAN_12_event_without_child_name_becomes_termin(demo_config, demo_registry):
@@ -429,69 +429,69 @@ def test_1145_kind_mit_zwei_slots_event_in_beiden_zeilen(tmp_path, demo_registry
     """#1145: Hat ein Kind ZWEI kalender-read-Slots, erscheint sein Event in
     BEIDEN Slot-Zeilen (gleiche event_id) — nicht nur im letzten (Dict-Kollaps).
 
-    Config: Neko bekommt zwei kalender-read-Slots (neko1 + neko2), Paula einen.
-    Ein Klettern-Neko-Event muss schedule[iso]["neko1"] UND schedule[iso]["neko2"]
-    setzen; schedule[iso]["act_paula"] bleibt None.
+    Config: Finn bekommt zwei kalender-read-Slots (finn1 + finn2), Mia einen.
+    Ein Klettern-Finn-Event muss schedule[iso]["finn1"] UND schedule[iso]["finn2"]
+    setzen; schedule[iso]["act_mia"] bleibt None.
     """
     cfg = _config_mit_slots(tmp_path, [
-        {"schluessel": "act_paula", "art": "kalender-read", "icon": "3071",
-         "kind": "paula"},
-        {"schluessel": "neko1", "art": "kalender-read", "icon": "3071",
-         "kind": "neko"},
-        {"schluessel": "neko2", "art": "kalender-read", "icon": "3071",
-         "kind": "neko"},
+        {"schluessel": "act_mia", "art": "kalender-read", "icon": "3071",
+         "kind": "mia"},
+        {"schluessel": "finn1", "art": "kalender-read", "icon": "3071",
+         "kind": "finn"},
+        {"schluessel": "finn2", "art": "kalender-read", "icon": "3071",
+         "kind": "finn"},
     ])
     heute = date(2026, 5, 20)
-    raw = [gcal_allday("e_neko", "Klettern Neko", heute.isoformat())]
+    raw = [gcal_allday("e_finn", "Klettern Finn", heute.isoformat())]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(cfg.db_datei)
     view = render_mod.baue_view(cfg, conn, kalender, demo_registry,
                                 heute, 7, True, heute=heute)
     conn.close()
     iso = heute.isoformat()
-    chip1 = view["schedule"][iso]["neko1"]
-    chip2 = view["schedule"][iso]["neko2"]
-    assert chip1 is not None, "neko1-Slot bleibt leer — Dict-Kollaps nicht behoben"
-    assert chip2 is not None, "neko2-Slot bleibt leer — Dict-Kollaps nicht behoben"
-    assert chip1["event_id"] == chip2["event_id"] == "e_neko", (
+    chip1 = view["schedule"][iso]["finn1"]
+    chip2 = view["schedule"][iso]["finn2"]
+    assert chip1 is not None, "finn1-Slot bleibt leer — Dict-Kollaps nicht behoben"
+    assert chip2 is not None, "finn2-Slot bleibt leer — Dict-Kollaps nicht behoben"
+    assert chip1["event_id"] == chip2["event_id"] == "e_finn", (
         "Beide Slots sollen denselben Chip (gleiche event_id) tragen"
     )
-    # Paulas Slot darf nicht befüllt sein.
-    assert view["schedule"][iso]["act_paula"] is None, (
-        "Paulas Slot darf durch Nekos Event nicht befüllt werden"
+    # Mias Slot darf nicht befüllt sein.
+    assert view["schedule"][iso]["act_mia"] is None, (
+        "Mias Slot darf durch Finns Event nicht befüllt werden"
     )
 
 
 def test_1178_erwachsener_kalender_read_slot_bekommt_event(tmp_path, demo_registry):
-    """T1178 AC1: Ein kalender-read-Slot mit kind=<Erwachsener-ID> (niclas)
-    wird mit dessen Kalender-Terminen befüllt — ein Event 'Niclas Zahnarzt'
-    landet in schedule[iso][niclas_kal].
+    """T1178 AC1: Ein kalender-read-Slot mit kind=<Erwachsener-ID> (emil)
+    wird mit dessen Kalender-Terminen befüllt — ein Event 'Emil Zahnarzt'
+    landet in schedule[iso][emil_kal].
 
-    AC2-Regression: Paulas Kind-Slot bleibt leer; das Event ist kein Termin.
+    AC2-Regression: Mias Kind-Slot bleibt leer; das Event ist kein Termin.
     """
     cfg = _config_mit_slots(tmp_path, [
-        {"schluessel": "niclas_kal", "art": "kalender-read", "icon": "3071",
-         "kind": "niclas"},
-        {"schluessel": "paula_kal", "art": "kalender-read", "icon": "3071",
-         "kind": "paula"},
+        {"schluessel": "emil_kal", "art": "kalender-read", "icon": "3071",
+         "kind": "emil"},
+        {"schluessel": "mia_kal", "art": "kalender-read", "icon": "3071",
+         "kind": "mia"},
     ])
     heute = date(2026, 5, 20)
-    raw = [gcal_allday("e_niclas", "Niclas Zahnarzt", heute.isoformat())]
+    raw = [gcal_allday("e_emil", "Emil Zahnarzt", heute.isoformat())]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(cfg.db_datei)
     view = render_mod.baue_view(cfg, conn, kalender, demo_registry,
                                 heute, 7, True, heute=heute)
     conn.close()
     iso = heute.isoformat()
-    # AC1: Niclas-Slot befüllt.
-    zelle = view["schedule"][iso]["niclas_kal"]
+    # AC1: Emil-Slot befüllt.
+    zelle = view["schedule"][iso]["emil_kal"]
     assert zelle is not None, (
         "Erwachsenen-kalender-read-Slot bleibt leer — T1178 nicht greift"
     )
-    assert zelle["event_id"] == "e_niclas"
-    # AC2: Paulas Slot bleibt leer — kein Regress.
-    assert view["schedule"][iso]["paula_kal"] is None, (
-        "Paulas Slot darf durch Niclas-Event nicht befüllt werden"
+    assert zelle["event_id"] == "e_emil"
+    # AC2: Mias Slot bleibt leer — kein Regress.
+    assert view["schedule"][iso]["mia_kal"] is None, (
+        "Mias Slot darf durch Emil-Event nicht befüllt werden"
     )
     # Das Event ist KEIN Termin — es landet im Slot, nicht in der Leiste.
     assert view["appointments"][iso] == [], (
@@ -1207,21 +1207,21 @@ def test_cycle_iteriert_alle_personen(demo_config, demo_registry):
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data.decode("utf-8")
-    # Registry: niclas, vera (Erwachsene) + paula, neko (Kinder).
-    for pid in ("niclas", "vera", "paula", "neko"):
+    # Registry: emil, petra (Erwachsene) + mia, finn (Kinder).
+    for pid in ("emil", "petra", "mia", "finn"):
         assert ('"%s"' % pid) in html, (
             "Person %r fehlt im Cycle-ADULTS-Array — Kinder ausgeschlossen?" % pid
         )
     # Kinder-id muss im JS-Array stehen (nicht nur als data-child im Rail):
     # die id taucht hinter `{id:` im ADULTS-Literal auf.
-    assert "{id: \"paula\"" in html, "Kind paula nicht im ADULTS-Cycle-Literal"
-    assert "{id: \"neko\"" in html, "Kind neko nicht im ADULTS-Cycle-Literal"
+    assert "{id: \"mia\"" in html, "Kind mia nicht im ADULTS-Cycle-Literal"
+    assert "{id: \"finn\"" in html, "Kind finn nicht im ADULTS-Cycle-Literal"
 
 
 def test_termin_label_strippt_einzelne_person(demo_registry):
     """PLAN-24 V1.3: Trägt der Termin-Titel GENAU EINEN Personen-Namen, wird er
     aus dem Label gestrippt (Foto-im-Ring trägt die Identität)."""
-    label = render_mod.strip_person_name("Niclas Zahnarzt", demo_registry.alle())
+    label = render_mod.strip_person_name("Emil Zahnarzt", demo_registry.alle())
     assert label == "Zahnarzt", (
         "Eindeutiger n=1-Name muss gestrippt werden, bekam %r" % label
     )
@@ -1230,7 +1230,7 @@ def test_termin_label_strippt_einzelne_person(demo_registry):
 def test_termin_label_verbatim_bei_multi_person(demo_registry):
     """PLAN-24 V1.3: Bei ZWEI Namens-Treffern bleibt das Label verbatim — der
     Namens-Bezug trägt semantisch bei Mehrdeutigkeit."""
-    titel = "Sport mit Vera und Niclas"
+    titel = "Sport mit Petra und Emil"
     label = render_mod.strip_person_name(titel, demo_registry.alle())
     assert label == titel, (
         "Multi-Person-Titel muss verbatim bleiben, bekam %r" % label
@@ -1257,10 +1257,10 @@ def test_PLAN_6_slot_art_lese_toleranz(tmp_path, caplog):
     data["slots"] = [
         # ALT: sollen intern auf neue Strings migriert werden (Lese-Toleranz)
         {"schluessel": "alt-erw",  "art": "erwachsenen-slot", "icon": "3071"},
-        {"schluessel": "alt-akt",  "art": "aktivitaets-slot", "icon": "3071", "kind": "paula"},
+        {"schluessel": "alt-akt",  "art": "aktivitaets-slot", "icon": "3071", "kind": "mia"},
         # NEU: unverändert, kein WARN
         {"schluessel": "neu-ver",  "art": "verantwortlich",   "icon": "3071"},
-        {"schluessel": "neu-kal",  "art": "kalender-read",    "icon": "3071", "kind": "neko"},
+        {"schluessel": "neu-kal",  "art": "kalender-read",    "icon": "3071", "kind": "finn"},
     ]
     data["default_verantwortlichkeiten"] = {}
     data["db_datei"] = str(tmp_path / "plan.db")
@@ -1339,25 +1339,25 @@ def test_PLAN_17_raw_response_to_normalised_model(demo_registry):
 
 def test_PLAN_19_title_match_beats_creator_email(demo_registry):
     """Bei einem Titel-Treffer gewinnt dieser über die Creator-E-Mail."""
-    # Titel nennt Vera, Creator-E-Mail ist Niclas → Vera gewinnt.
+    # Titel nennt Petra, Creator-E-Mail ist Emil → Petra gewinnt.
     person = kalender_mod.resolve_person(
-        "Abendessen mit Vera", "niclas@example.org", demo_registry.alle())
-    assert person == "vera"
+        "Abendessen mit Petra", "emil@example.org", demo_registry.alle())
+    assert person == "petra"
 
 
 def test_PLAN_19_creator_email_when_no_title_match(demo_registry):
     """Ohne Titel-Treffer löst die Creator-E-Mail eines Erwachsenen auf."""
     person = kalender_mod.resolve_person(
-        "Großeinkauf", "niclas@example.org", demo_registry.alle())
-    assert person == "niclas"
+        "Großeinkauf", "emil@example.org", demo_registry.alle())
+    assert person == "emil"
 
 
 def test_PLAN_19_earliest_title_match_wins(demo_registry):
     """Kommen mehrere Personennamen im Titel vor, gewinnt der früheste."""
-    # "Vera" steht vor "Niclas" → Vera.
+    # "Petra" steht vor "Emil" → Petra.
     person = kalender_mod.resolve_person(
-        "Vera und Niclas Date", None, demo_registry.alle())
-    assert person == "vera"
+        "Petra und Emil Date", None, demo_registry.alle())
+    assert person == "petra"
 
 
 def test_PLAN_19_no_match_is_none(demo_registry):
@@ -1376,11 +1376,11 @@ def test_PLAN_18_create_change_delete_call_right_operation(demo_registry):
     transport = FakeTransport()
     kalender = kalender_mod.Kalender(transport, demo_registry.alle())
 
-    neue_id = kalender.event_anlegen("Klettern Paula", date(2026, 5, 20))
+    neue_id = kalender.event_anlegen("Klettern Mia", date(2026, 5, 20))
     assert transport.calls[-1][0] == "insert"
     assert neue_id == "neu-1"
 
-    kalender.event_aendern(neue_id, "Schwimmen Paula")
+    kalender.event_aendern(neue_id, "Schwimmen Mia")
     assert transport.calls[-1][0] == "patch"
     assert transport.calls[-1][1] == neue_id
 
@@ -1395,13 +1395,13 @@ def test_PLAN_18_aktivitaet_endpoint_creates_event(demo_config, demo_registry):
     transport = FakeTransport()
     client = make_client(demo_config, demo_registry, transport)
     r = client.put("/api/v1/plan/aktivitaet", data=json.dumps({
-        "datum": "2026-05-20", "kind": "paula", "type": "klettern",
+        "datum": "2026-05-20", "kind": "mia", "type": "klettern",
     }), content_type="application/json")
     assert r.status_code == 200
     assert r.get_json()["action"] == "created"
     # Der angelegte Event-Titel folgt der Konvention.
     insert_call = next(c for c in transport.calls if c[0] == "insert")
-    assert insert_call[1]["summary"] == "Klettern Paula"
+    assert insert_call[1]["summary"] == "Klettern Mia"
 
 
 # ============================================================
@@ -1411,7 +1411,7 @@ def test_PLAN_18_aktivitaet_endpoint_creates_event(demo_config, demo_registry):
 def test_PLAN_20_missing_credentials_empty_read(demo_registry):
     """Fehlen die OAuth-Daten, liefert eine Lese-Anfrage ein leeres Ergebnis."""
     kalender = kalender_mod.Kalender(
-        FakeTransport(raw_events=[gcal_allday("x", "Klettern Paula", "2026-05-20")],
+        FakeTransport(raw_events=[gcal_allday("x", "Klettern Mia", "2026-05-20")],
                       creds=False),
         demo_registry.alle())
     assert kalender.events(date(2026, 5, 20), 7) == []
@@ -1509,18 +1509,18 @@ def test_PLAN_24_no_person_names_in_rendered_view(demo_config, demo_registry):
     heute = date.today()
     ws = render_mod.wochenstart_von(heute, 0).isoformat()
     db_mod.init_week(conn, ws, demo_config.default_verantwortlichkeiten)
-    db_mod.set_assignment(conn, ws, heute.weekday(), "cook", "niclas")
+    db_mod.set_assignment(conn, ws, heute.weekday(), "cook", "emil")
     conn.close()
     client = make_client(demo_config, demo_registry, FakeTransport())
     r = client.get("/display/plan/woche")
     text = r.data.decode("utf-8")
     # Kein Personenname taucht als eigenständiges Wort auf — \b schließt
-    # Substring-Treffer wie "Vera" in "Verabredung" (Aktivitäts-Label) aus.
-    for name in ("Niclas", "Vera", "Paula", "Neko"):
+    # Substring-Treffer wie "Petra" in "Verabredung" (Aktivitäts-Label) aus.
+    for name in ("Emil", "Petra", "Mia", "Finn"):
         assert re.search(r"\b%s\b" % re.escape(name), text) is None, \
             "Personenname %r im UI (PLAN-24 verletzt)" % name
     # Aber die Ring-Klasse einer Person ist da — Identität nur über Foto/Ring.
-    assert "ring-blue" in text  # niclas
+    assert "ring-blue" in text  # emil
 
 
 # ============================================================
@@ -1678,7 +1678,7 @@ def test_PLAN_29_render_probe_neuer_eintrag_arasaac_icon(tmp_path, demo_registry
     """AC5 — PLAN-29 Render-Probe-Stolperdraht (#471):
 
     POST eine neue Aktivität yoga (ARASAAC 5301) in plan.json,
-    dann baue_view mit einem Kalender-Event 'Yoga Freitag' für Paula →
+    dann baue_view mit einem Kalender-Event 'Yoga Freitag' für Mia →
     das gerenderte HTML enthält /display/_shared/icons/arasaac/5301.png.
 
     Dieser Test fängt die T1-Befunde 1+2: Render-Pfad konsumiert Config nicht
@@ -1705,9 +1705,9 @@ def test_PLAN_29_render_probe_neuer_eintrag_arasaac_icon(tmp_path, demo_registry
     # Freitag im Fenster.
     freitag = date(2026, 5, 22)
 
-    # Kalender-Event 'Yoga Freitag Paula' (kein Kind-Name — wird zu Termin;
+    # Kalender-Event 'Yoga Freitag Mia' (kein Kind-Name — wird zu Termin;
     # aber wir wollen auch den Aktivitäts-Pfad prüfen, daher Kindname rein).
-    raw = [gcal_allday("yoga1", "Yoga Paula", freitag.isoformat())]
+    raw = [gcal_allday("yoga1", "Yoga Mia", freitag.isoformat())]
     transport.raw_events = raw
 
     r = client.get("/display/plan/woche?ab=%s" % freitag.isoformat())
@@ -1932,12 +1932,12 @@ def test_PLAN_11_activity_change_via_endpoint(demo_config, demo_registry):
     transport = FakeTransport()
     client = make_client(demo_config, demo_registry, transport)
     r = client.put("/api/v1/plan/aktivitaet", data=json.dumps({
-        "kind": "neko", "type": "schwimmen", "event_id": "vorhanden",
+        "kind": "finn", "type": "schwimmen", "event_id": "vorhanden",
     }), content_type="application/json")
     assert r.status_code == 200
     assert r.get_json()["action"] == "patched"
     patch_call = next(c for c in transport.calls if c[0] == "patch")
-    assert patch_call[2]["summary"] == "Schwimmen Neko"
+    assert patch_call[2]["summary"] == "Schwimmen Finn"
 
 
 # ============================================================
@@ -1947,7 +1947,7 @@ def test_PLAN_11_activity_change_via_endpoint(demo_config, demo_registry):
 def test_PLAN_13_appointment_carries_time_and_person(demo_config, demo_registry):
     """Ein zeitgebundener Termin trägt Uhrzeit und die Ring-Farbe der Person."""
     heute = date(2026, 5, 20)
-    raw = [gcal_timed("a1", "Sport mit Vera",
+    raw = [gcal_timed("a1", "Sport mit Petra",
                       heute.isoformat() + "T17:30:00+02:00",
                       heute.isoformat() + "T18:30:00+02:00")]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
@@ -1957,17 +1957,17 @@ def test_PLAN_13_appointment_carries_time_and_person(demo_config, demo_registry)
     conn.close()
     termin = view["appointments"][heute.isoformat()][0]
     assert termin["time"] == "17:30"
-    assert termin["ring"] == "orange"  # vera
+    assert termin["ring"] == "orange"  # petra
 
 
 def test_PLAN_13_child_named_timed_event_appears_in_both_views(
         demo_config, demo_registry):
     """AC1: Ein zeitgebundener Einzel-Termin mit Kindername (z. B.
-    „Klaviertermin Paula" 16–17 Uhr) erscheint in BEIDEN Ansichten — mit
+    „Klaviertermin Mia" 16–17 Uhr) erscheint in BEIDEN Ansichten — mit
     Uhrzeit in der Termin-Leiste UND im Kind-Aktivitäts-Slot — und beide
     Darstellungen tragen dieselbe Event-id (PLAN-13)."""
     heute = date(2026, 5, 20)
-    raw = [gcal_timed("kt1", "Klaviertermin Paula",
+    raw = [gcal_timed("kt1", "Klaviertermin Mia",
                       heute.isoformat() + "T16:00:00+02:00",
                       heute.isoformat() + "T17:00:00+02:00")]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
@@ -1979,7 +1979,7 @@ def test_PLAN_13_child_named_timed_event_appears_in_both_views(
     termine = view["appointments"][heute.isoformat()]
     assert len(termine) == 1
     assert termine[0]["time"] == "16:00"
-    # Kind-Slot (act1 = paula) ist gefüllt.
+    # Kind-Slot (act1 = mia) ist gefüllt.
     slot = view["schedule"][heute.isoformat()]["act1"]
     assert slot is not None
     # Beide zeigen denselben Kalender-Event.
@@ -1993,14 +1993,14 @@ def test_PLAN_12_child_named_without_keyword_has_fallback_symbol(
     Eintrag ist nie symbol-/typlos (PLAN-12, AC3-Regression)."""
     heute = date(2026, 5, 20)
     # „Turnen" ist kein Katalog-Keyword → art_aus_titel == None → Fallback.
-    assert aktivitaeten_mod.art_aus_titel("Turnen Paula") is None
-    raw = [gcal_allday("kf1", "Turnen Paula", heute.isoformat())]
+    assert aktivitaeten_mod.art_aus_titel("Turnen Mia") is None
+    raw = [gcal_allday("kf1", "Turnen Mia", heute.isoformat())]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(demo_config.db_datei)
     view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
                                 heute, 7, True, heute=heute)
     conn.close()
-    slot = view["schedule"][heute.isoformat()]["act1"]  # act1 = paula
+    slot = view["schedule"][heute.isoformat()]["act1"]  # act1 = mia
     assert slot is not None
     assert slot["type"] is not None
     assert slot["type"] == render_mod.GENERIC_ACT_FALLBACK
@@ -2012,22 +2012,22 @@ def test_PLAN_12_musik_synonyme_klavier_geige_gitarre(demo_config, demo_registry
     E-PLAN-8). Alle drei Synonyme kommen aus EINER Katalog-Quelle (AC2).
     Render-Pfad wird für Klavier über den Flask-Testclient geprüft (AC1-Entry-Path)."""
     # Katalog-Ebene: alle drei Synonyme → art "musik".
-    assert aktivitaeten_mod.art_aus_titel("Klavier Paula") == "musik"
-    assert aktivitaeten_mod.art_aus_titel("Geige Neko") == "musik"
-    assert aktivitaeten_mod.art_aus_titel("Gitarre Paula") == "musik"
+    assert aktivitaeten_mod.art_aus_titel("Klavier Mia") == "musik"
+    assert aktivitaeten_mod.art_aus_titel("Geige Finn") == "musik"
+    assert aktivitaeten_mod.art_aus_titel("Gitarre Mia") == "musik"
     # Über render.aktivitaets_art (Lese-Pfad im Produktivpfad, Refs #101).
-    assert render_mod.aktivitaets_art("Klavier Paula") == "musik"
-    assert render_mod.aktivitaets_art("Geige Neko") == "musik"
-    assert render_mod.aktivitaets_art("Gitarre Paula") == "musik"
-    # Render-Integration: "Klavier Paula" landet im Kind-Slot mit type=="musik".
+    assert render_mod.aktivitaets_art("Klavier Mia") == "musik"
+    assert render_mod.aktivitaets_art("Geige Finn") == "musik"
+    assert render_mod.aktivitaets_art("Gitarre Mia") == "musik"
+    # Render-Integration: "Klavier Mia" landet im Kind-Slot mit type=="musik".
     heute = date(2026, 5, 20)
-    raw = [gcal_allday("mu1", "Klavier Paula", heute.isoformat())]
+    raw = [gcal_allday("mu1", "Klavier Mia", heute.isoformat())]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(demo_config.db_datei)
     view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
                                 heute, 7, True, heute=heute)
     conn.close()
-    slot = view["schedule"][heute.isoformat()]["act1"]  # act1 = paula
+    slot = view["schedule"][heute.isoformat()]["act1"]  # act1 = mia
     assert slot is not None
     assert slot["type"] == "musik"
 
@@ -2143,7 +2143,7 @@ def test_PLAN_13_praefix_termin_icon_kletterhalle_kreativworkshop(
 
 def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
     """AC1-Entry-Path (T302, #471): GET /display/plan/woche rendert einen
-    „Klavier Paula"-Event mit ARASAAC-Piktogramm 2746 (Musik) im act1-Slot —
+    „Klavier Mia"-Event mit ARASAAC-Piktogramm 2746 (Musik) im act1-Slot —
     der Render-Pfad plan/render.py → template ist durchgängig geprüft.
 
     E-PLAN-5 V1.2: Icon-Quelle wechselt auf ARASAAC. Erkennungs-Artefakt ist
@@ -2152,11 +2152,11 @@ def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
     wurde — einmal im act1-Activity-Chip und einmal in der Picker-Kachel.
     Ist die Klassifizierung defekt, erscheint die URL nur einmal (nur Picker).
 
-    Negativ-Kontrolle: mit „Turnen Paula" (kein Katalog-Keyword → Fallback
+    Negativ-Kontrolle: mit „Turnen Mia" (kein Katalog-Keyword → Fallback
     3071) erscheint die Musik-URL nur einmal (Picker) — nicht im Chip."""
-    # ── Positiv-Probe: Klavier Paula → Musik-ARASAAC im Chip ───────────
+    # ── Positiv-Probe: Klavier Mia → Musik-ARASAAC im Chip ───────────
     MUSIK_ARASAAC_URL = b"arasaac/2746.png"
-    raw = [gcal_allday("mu2", "Klavier Paula", "2026-05-20")]
+    raw = [gcal_allday("mu2", "Klavier Mia", "2026-05-20")]
     client = make_client(demo_config, demo_registry, FakeTransport(raw))
     r = client.get("/display/plan/woche?ab=2026-05-20")
     assert r.status_code == 200
@@ -2165,19 +2165,19 @@ def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
     anzahl_positiv = r.data.count(MUSIK_ARASAAC_URL)
     assert anzahl_positiv == 2, (
         "Musik-ARASAAC (2746) erwartet 2× im HTML (Chip + Picker), gefunden: %d — "
-        "act1-Slot hat 'Klavier Paula' nicht als 'musik' klassifiziert?"
+        "act1-Slot hat 'Klavier Mia' nicht als 'musik' klassifiziert?"
         % anzahl_positiv
     )
 
-    # ── Negativ-Kontrolle: Turnen Paula → Fallback-Piktogramm, kein Musik ─
-    raw_negativ = [gcal_allday("tu1", "Turnen Paula", "2026-05-20")]
+    # ── Negativ-Kontrolle: Turnen Mia → Fallback-Piktogramm, kein Musik ─
+    raw_negativ = [gcal_allday("tu1", "Turnen Mia", "2026-05-20")]
     client_neg = make_client(demo_config, demo_registry, FakeTransport(raw_negativ))
     r_neg = client_neg.get("/display/plan/woche?ab=2026-05-20")
     assert r_neg.status_code == 200
     # Nur 1× — allein aus dem Picker; kein Musik-Chip.
     anzahl_negativ = r_neg.data.count(MUSIK_ARASAAC_URL)
     assert anzahl_negativ == 1, (
-        "Negativ-Kontrolle: mit 'Turnen Paula' (kein musik) Musik-ARASAAC (2746) "
+        "Negativ-Kontrolle: mit 'Turnen Mia' (kein musik) Musik-ARASAAC (2746) "
         "nur 1× erwartet (Picker), gefunden: %d" % anzahl_negativ
     )
 
@@ -2186,7 +2186,7 @@ def test_PLAN_13_child_named_allday_only_in_kid_slot(demo_config, demo_registry)
     """AC3: Eine ganztägige Kind-Aktivität erscheint NUR im Aktivitäts-Slot,
     nicht in der Termin-Leiste und nicht als Spanne (PLAN-13)."""
     heute = date(2026, 5, 20)
-    raw = [gcal_allday("ka1", "Klettern Paula", heute.isoformat())]
+    raw = [gcal_allday("ka1", "Klettern Mia", heute.isoformat())]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(demo_config.db_datei)
     view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
@@ -2206,7 +2206,7 @@ def test_PLAN_13_child_named_timed_event_board_html_shows_time(
     Stufe) zeigt die Uhrzeit eines child-named zeitgebundenen Termins in der
     Termin-Leiste — die untere Schicht live über den Flask-Testclient."""
     # Anker auf den Event-Tag legen (?ab=), damit das Fenster ihn enthält.
-    raw = [gcal_timed("kt2", "Klaviertermin Paula",
+    raw = [gcal_timed("kt2", "Klaviertermin Mia",
                       "2026-05-20T16:00:00+02:00",
                       "2026-05-20T17:00:00+02:00")]
     client = make_client(demo_config, demo_registry, FakeTransport(raw))
@@ -2267,7 +2267,7 @@ def test_PLAN_19_render_reflects_external_registry_mutation(demo_config):
     Restart in der Wochen-View. Fix (DCOMP-1, #214): die Familie wird ueber
     HTTP angesprochen (`FamilieClient.snapshot()`), pro Request frisch."""
     transport = _MutableFamilieTransport([
-        {"id": "niclas", "name": "Niclas", "ring": "blue", "art": "erwachsene"},
+        {"id": "emil", "name": "Emil", "ring": "blue", "art": "erwachsene"},
     ])
     client_obj = familie_client_mod.FamilieClient(
         "http://127.0.0.1:5010", transport=transport)
@@ -2276,21 +2276,21 @@ def test_PLAN_19_render_reflects_external_registry_mutation(demo_config):
     plan_main.app.testing = True
     client = plan_main.app.test_client()
 
-    # Erst-Render: Niclas ist drin.
+    # Erst-Render: Emil ist drin.
     r1 = client.get("/display/plan/woche")
     assert r1.status_code == 200
-    assert b"niclas" in r1.data
+    assert b"emil" in r1.data
 
-    # Extern mutieren: Vera dazu (Familie-Komponente wuerde das ueber FAM-12
+    # Extern mutieren: Petra dazu (Familie-Komponente wuerde das ueber FAM-12
     # tun — wir simulieren das durch Anhaengen ans Transport-Inventar).
     transport.personen.append({
-        "id": "vera", "name": "Vera", "ring": "orange", "art": "erwachsene",
-        "email": "vera@example.org"})
+        "id": "petra", "name": "Petra", "ring": "orange", "art": "erwachsene",
+        "email": "petra@example.org"})
 
-    # Ohne Restart: Vera ist im neuen Render sichtbar (HTTP-Snapshot pro Request).
+    # Ohne Restart: Petra ist im neuen Render sichtbar (HTTP-Snapshot pro Request).
     r2 = client.get("/display/plan/woche")
     assert r2.status_code == 200
-    assert b"vera" in r2.data
+    assert b"petra" in r2.data
 
 
 def test_PLAN_19_zuteilung_validates_against_fresh_registry(demo_config):
@@ -2298,7 +2298,7 @@ def test_PLAN_19_zuteilung_validates_against_fresh_registry(demo_config):
     Zuteilungs-API benutzt werden (DCOMP-1: Plan fragt die Familie pro
     Request via HTTP)."""
     transport = _MutableFamilieTransport([
-        {"id": "niclas", "name": "Niclas", "ring": "blue", "art": "erwachsene"},
+        {"id": "emil", "name": "Emil", "ring": "blue", "art": "erwachsene"},
     ])
     client_obj = familie_client_mod.FamilieClient(
         "http://127.0.0.1:5010", transport=transport)
@@ -2307,21 +2307,21 @@ def test_PLAN_19_zuteilung_validates_against_fresh_registry(demo_config):
     plan_main.app.testing = True
     client = plan_main.app.test_client()
 
-    # Vor der externen Mutation: 'vera' unbekannt → 400.
+    # Vor der externen Mutation: 'petra' unbekannt → 400.
     r0 = client.put("/api/v1/plan/zuteilung", json={
         "week_start": "2026-05-25", "day": 0, "slot": "bring",
-        "person_id": "vera"})
+        "person_id": "petra"})
     assert r0.status_code == 400
 
-    # Extern Vera anlegen.
+    # Extern Petra anlegen.
     transport.personen.append({
-        "id": "vera", "name": "Vera", "ring": "orange", "art": "erwachsene",
-        "email": "vera@example.org"})
+        "id": "petra", "name": "Petra", "ring": "orange", "art": "erwachsene",
+        "email": "petra@example.org"})
 
-    # Ohne Restart: Vera ist eine gueltige Zuteilung.
+    # Ohne Restart: Petra ist eine gueltige Zuteilung.
     r1 = client.put("/api/v1/plan/zuteilung", json={
         "week_start": "2026-05-25", "day": 0, "slot": "bring",
-        "person_id": "vera"})
+        "person_id": "petra"})
     assert r1.status_code == 200
 
 
@@ -2578,7 +2578,7 @@ def test_DCOMP_2_zuteilung_validiert_gegen_frische_slots(reload_client,
     # Vor dem Skill-Schreibvorgang: 'wash' kennt der Plan-Buddy nicht → 400.
     r0 = client.put("/api/v1/plan/zuteilung", json={
         "week_start": "2026-05-25", "day": 0, "slot": "wash",
-        "person_id": "niclas"})
+        "person_id": "emil"})
     assert r0.status_code == 400
 
     # Skill ergänzt den 'wash'-Slot (Erwachsenen-Slot) — kein Admin-Reload.
@@ -2587,7 +2587,7 @@ def test_DCOMP_2_zuteilung_validiert_gegen_frische_slots(reload_client,
     # Ohne Restart: 'wash' ist eine gültige Slot-ID.
     r1 = client.put("/api/v1/plan/zuteilung", json={
         "week_start": "2026-05-25", "day": 0, "slot": "wash",
-        "person_id": "niclas"})
+        "person_id": "emil"})
     assert r1.status_code == 200
 
 
@@ -2681,7 +2681,7 @@ def test_DCOMP_2_db_datei_wechsel_wirksam_ohne_restart(tmp_path, demo_registry):
     conn_a = db_mod.connect(str(db_a))
     conn_a.execute(
         "INSERT INTO week_assignments (week_start, day, slot, person_id) "
-        "VALUES ('alt-db', 0, 'bring', 'niclas')")
+        "VALUES ('alt-db', 0, 'bring', 'emil')")
     conn_a.commit()
     conn_a.close()
 
@@ -2689,7 +2689,7 @@ def test_DCOMP_2_db_datei_wechsel_wirksam_ohne_restart(tmp_path, demo_registry):
     conn_b = db_mod.connect(str(db_b))
     conn_b.execute(
         "INSERT INTO week_assignments (week_start, day, slot, person_id) "
-        "VALUES ('neu-db', 0, 'bring', 'vera')")
+        "VALUES ('neu-db', 0, 'bring', 'petra')")
     conn_b.commit()
     conn_b.close()
 
@@ -2734,7 +2734,7 @@ def test_DCOMP_2_db_datei_wechsel_wirksam_ohne_restart(tmp_path, demo_registry):
 def test_PLAN_30_zuteilung_get_empty_week_returns_defaults_or_empty(
         demo_config, demo_registry):
     """Eine noch nicht beruehrte Woche → HTTP 200 + Slots-Liste. Mit den
-    Default-Verantwortlichkeiten aus DEMO_CONFIG (`bring` Mo niclas, Di vera).
+    Default-Verantwortlichkeiten aus DEMO_CONFIG (`bring` Mo emil, Di petra).
     Slots, die in den Defaults nicht stehen, kommen mit person_id=null
     zurueck — eine vollstaendige Erwachsenen-Slot-x-Wochentag-Matrix."""
     client = make_client(demo_config, demo_registry, FakeTransport())
@@ -2746,12 +2746,12 @@ def test_PLAN_30_zuteilung_get_empty_week_returns_defaults_or_empty(
     # DEMO_CONFIG: bring + pick + cook + bed1 + bed2 = 5 Erwachsenen-Slots.
     erwachsenen_keys = [s.schluessel for s in demo_config.erwachsenen_slots()]
     assert len(body["slots"]) == 7 * len(erwachsenen_keys)
-    # Mo bring → niclas (aus den Defaults), Di bring → vera, Rest leer.
+    # Mo bring → emil (aus den Defaults), Di bring → petra, Rest leer.
     mo_bring = next(s for s in body["slots"] if s["day"] == 0 and s["slot"] == "bring")
     di_bring = next(s for s in body["slots"] if s["day"] == 1 and s["slot"] == "bring")
     mo_pick = next(s for s in body["slots"] if s["day"] == 0 and s["slot"] == "pick")
-    assert mo_bring["person_id"] == "niclas"
-    assert di_bring["person_id"] == "vera"
+    assert mo_bring["person_id"] == "emil"
+    assert di_bring["person_id"] == "petra"
     assert mo_pick["person_id"] is None
 
 
@@ -2759,10 +2759,10 @@ def test_PLAN_30_zuteilung_get_reflects_put_assignment(demo_config, demo_registr
     """Nach einem PUT auf einen Slot liefert der GET fuer dieselbe Woche
     die neue Zuteilung — Persistenz-Round-Trip (PLAN-8 + Lese-API)."""
     client = make_client(demo_config, demo_registry, FakeTransport())
-    # Vera am Mittwoch bringen (PLAN-7/PLAN-8).
+    # Petra am Mittwoch bringen (PLAN-7/PLAN-8).
     r_put = client.put("/api/v1/plan/zuteilung", json={
         "week_start": "2026-06-08", "day": 2, "slot": "pick",
-        "person_id": "vera"})
+        "person_id": "petra"})
     assert r_put.status_code == 200
 
     # GET sieht die Zuteilung.
@@ -2770,7 +2770,7 @@ def test_PLAN_30_zuteilung_get_reflects_put_assignment(demo_config, demo_registr
     assert r_get.status_code == 200
     eintrag = next(s for s in r_get.get_json()["slots"]
                    if s["day"] == 2 and s["slot"] == "pick")
-    assert eintrag["person_id"] == "vera"
+    assert eintrag["person_id"] == "petra"
 
 
 def test_PLAN_30_zuteilung_get_without_week_start_is_400(demo_config, demo_registry):
@@ -2801,7 +2801,7 @@ def test_PLAN_31_put_zuteilung_writes_and_get_reflects(demo_config, demo_registr
     client = make_client(demo_config, demo_registry, FakeTransport())
     r_put = client.put("/api/v1/plan/zuteilung", data=json.dumps({
         "week_start": "2026-09-07", "day": 3, "slot": "bring",
-        "person_id": "niclas",
+        "person_id": "emil",
     }), content_type="application/json")
     assert r_put.status_code == 200
     assert r_put.get_json()["ok"] is True
@@ -2813,7 +2813,7 @@ def test_PLAN_31_put_zuteilung_writes_and_get_reflects(demo_config, demo_registr
         s for s in r_get.get_json()["slots"]
         if s["day"] == 3 and s["slot"] == "bring"
     )
-    assert eintrag["person_id"] == "niclas"
+    assert eintrag["person_id"] == "emil"
 
 
 # ============================================================
@@ -2839,9 +2839,9 @@ def test_DCOMP_1_familie_client_parses_fam7_response():
     `RegistryView` mit Person-Objekten in der Form, die `render.baue_view`
     und `kalender.Kalender` brauchen."""
     payload = json.dumps([
-        {"id": "niclas", "name": "Niclas", "ring": "blue", "art": "erwachsene",
-         "email": "niclas@example.org"},
-        {"id": "paula", "name": "Paula", "ring": "purple", "art": "kinder"},
+        {"id": "emil", "name": "Emil", "ring": "blue", "art": "erwachsene",
+         "email": "emil@example.org"},
+        {"id": "mia", "name": "Mia", "ring": "purple", "art": "kinder"},
     ]).encode("utf-8")
 
     transport_calls = []
@@ -2855,13 +2855,13 @@ def test_DCOMP_1_familie_client_parses_fam7_response():
     view = fc.snapshot()
     assert transport_calls == ["http://127.0.0.1:5010/api/v1/familie/personen"]
     namen = sorted(p.name for p in view.alle())
-    assert namen == ["Niclas", "Paula"]
-    niclas = view.get("niclas")
-    assert niclas is not None
-    assert niclas.is_erwachsene()
-    assert niclas.email == "niclas@example.org"
-    paula = view.get("paula")
-    assert paula.is_kind()
+    assert namen == ["Emil", "Mia"]
+    emil = view.get("emil")
+    assert emil is not None
+    assert emil.is_erwachsene()
+    assert emil.email == "emil@example.org"
+    mia = view.get("mia")
+    assert mia.is_kind()
 
 
 def test_DCOMP_1_familie_client_unreachable_returns_empty_and_logs(caplog):
@@ -4231,13 +4231,13 @@ def test_PLAN_19_resolve_personen_max_zwei_treffer(demo_registry):
 
     AC1: resolve_personen liefert max 2 Treffer; weitere werden ignoriert.
     """
-    # Demo-Registry: Niclas, Vera (Erwachsene), Paula, Neko (Kinder)
-    # Titel nennt drei: Vera, Paula, Neko — nur Vera + Paula (erste zwei).
+    # Demo-Registry: Emil, Petra (Erwachsene), Mia, Finn (Kinder)
+    # Titel nennt drei: Petra, Mia, Finn — nur Petra + Mia (erste zwei).
     result = kalender_mod.resolve_personen(
-        "Vera Paula Neko Ausflug", None, demo_registry.alle())
+        "Petra Mia Finn Ausflug", None, demo_registry.alle())
     assert len(result) == 2, "Mehr als 2 Personen zurückgegeben: %r" % result
-    assert result[0] == "vera"
-    assert result[1] == "paula"
+    assert result[0] == "petra"
+    assert result[1] == "mia"
 
 
 def test_PLAN_19_resolve_personen_reihenfolge(demo_registry):
@@ -4245,11 +4245,11 @@ def test_PLAN_19_resolve_personen_reihenfolge(demo_registry):
 
     AC1: Auflöse-Reihenfolge nach Erwähnung im Titel.
     """
-    # Neko steht vor Paula im Titel → [neko, paula]
+    # Finn steht vor Mia im Titel → [finn, mia]
     result = kalender_mod.resolve_personen(
-        "Neko und Paula Schwimmkurs", None, demo_registry.alle())
-    assert result == ["neko", "paula"], (
-        "Falsche Reihenfolge: erwartet ['neko', 'paula'], bekam %r" % result)
+        "Finn und Mia Schwimmkurs", None, demo_registry.alle())
+    assert result == ["finn", "mia"], (
+        "Falsche Reihenfolge: erwartet ['finn', 'mia'], bekam %r" % result)
 
 
 def test_PLAN_19_resolve_personen_single_kompatibel(demo_registry):
@@ -4258,8 +4258,8 @@ def test_PLAN_19_resolve_personen_single_kompatibel(demo_registry):
     AC1 + AC4: Single-Person → 1-Element-Liste, Backward-Compat.
     """
     result = kalender_mod.resolve_personen(
-        "Klettern Paula", None, demo_registry.alle())
-    assert result == ["paula"], "Erwartet ['paula'], bekam %r" % result
+        "Klettern Mia", None, demo_registry.alle())
+    assert result == ["mia"], "Erwartet ['mia'], bekam %r" % result
 
 
 def test_PLAN_19_resolve_personen_empty(demo_registry):
@@ -4278,8 +4278,8 @@ def test_PLAN_19_resolve_personen_creator_fallback(demo_registry):
     AC1: Creator-E-Mail-Fallback liefert 1-Element-Liste.
     """
     result = kalender_mod.resolve_personen(
-        "Großeinkauf", "niclas@example.org", demo_registry.alle())
-    assert result == ["niclas"], "Erwartet ['niclas'], bekam %r" % result
+        "Großeinkauf", "emil@example.org", demo_registry.alle())
+    assert result == ["emil"], "Erwartet ['emil'], bekam %r" % result
 
 
 # ============================================================
@@ -4292,16 +4292,16 @@ def test_PLAN_17_event_modell_personen_liste(demo_registry):
     AC2: Single-Person-Event → 1-Element-Liste; leeres Event → leere Liste.
     """
     # Single-Person-Event.
-    raw_single = [gcal_allday("g1", "Klettern Paula", "2026-05-20")]
+    raw_single = [gcal_allday("g1", "Klettern Mia", "2026-05-20")]
     kalender = kalender_mod.Kalender(FakeTransport(raw_single), demo_registry.alle())
     events = kalender.events(date(2026, 5, 20), 1)
     assert len(events) == 1
     ev = events[0]
     assert hasattr(ev, "personen"), "Event hat kein 'personen'-Attribut"
     assert isinstance(ev.personen, list), "personen muss eine Liste sein"
-    assert ev.personen == ["paula"], "Single-Person → ['paula'], bekam %r" % ev.personen
+    assert ev.personen == ["mia"], "Single-Person → ['mia'], bekam %r" % ev.personen
     # Backward-Compat: person-Property liefert ersten Eintrag.
-    assert ev.person == "paula"
+    assert ev.person == "mia"
 
     # Event ohne Personenzuordnung → leere Liste.
     raw_empty = [gcal_allday("g2", "Müllabfuhr", "2026-05-20")]
@@ -4318,11 +4318,11 @@ def test_PLAN_17_event_modell_multi_person(demo_registry):
 
     AC2: Translator (Google-Roh → neutral) liefert korrekte personen-Liste.
     """
-    raw = [gcal_allday("g1", "Paula Neko Schwimmkurs", "2026-05-20")]
+    raw = [gcal_allday("g1", "Mia Finn Schwimmkurs", "2026-05-20")]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     events = kalender.events(date(2026, 5, 20), 1)
     ev = events[0]
-    assert ev.personen == ["paula", "neko"], (
+    assert ev.personen == ["mia", "finn"], (
         "Multi-Person-Reihenfolge falsch: %r" % ev.personen)
 
 
@@ -4333,13 +4333,13 @@ def test_PLAN_17_event_to_dict_enthaelt_personen():
     """
     ev = kalender_mod.Event(
         id="x1", titel="Test", beginn=date(2026, 5, 20), ende=None,
-        ganztags=True, personen=["paula", "neko"])
+        ganztags=True, personen=["mia", "finn"])
     d = ev.to_dict()
     assert "personen" in d, "to_dict() hat kein 'personen'-Feld"
-    assert d["personen"] == ["paula", "neko"]
+    assert d["personen"] == ["mia", "finn"]
     # Backward-Compat: person-Feld bleibt erhalten.
     assert "person" in d
-    assert d["person"] == "paula"
+    assert d["person"] == "mia"
 
 
 # ============================================================
@@ -4352,7 +4352,7 @@ def test_PLAN_19_render_zwei_avatare(demo_registry, demo_config):
     Termin-Leiste rendert zwei face-Divs für Multi-Person-Event.
     """
     heute = date(2026, 5, 20)
-    raw = [gcal_timed("g1", "Paula Neko Schwimmkurs",
+    raw = [gcal_timed("g1", "Mia Finn Schwimmkurs",
                       "2026-05-20T09:00:00+02:00", "2026-05-20T10:00:00+02:00")]
     transport = FakeTransport(raw)
     conn = db_mod.connect(demo_config.db_datei)
@@ -4373,7 +4373,7 @@ def test_PLAN_19_render_zwei_avatare(demo_registry, demo_config):
     assert len(a["personen"]) == 2, (
         "Erwartet 2 Personen im Termin-Eintrag, bekam %d: %r" % (len(a["personen"]), a["personen"]))
     person_ids = [pr["person"] for pr in a["personen"]]
-    assert "paula" in person_ids and "neko" in person_ids
+    assert "mia" in person_ids and "finn" in person_ids
 
 
 def test_PLAN_19_render_single_person_bleibt_kompatibel(demo_registry, demo_config):
@@ -4383,7 +4383,7 @@ def test_PLAN_19_render_single_person_bleibt_kompatibel(demo_registry, demo_conf
     Person-Pfad.
     """
     heute = date(2026, 5, 20)
-    raw = [gcal_timed("g1", "Klettern Paula",
+    raw = [gcal_timed("g1", "Klettern Mia",
                       "2026-05-20T09:00:00+02:00", "2026-05-20T10:00:00+02:00")]
     conn = db_mod.connect(demo_config.db_datei)
     try:
@@ -4395,28 +4395,28 @@ def test_PLAN_19_render_single_person_bleibt_kompatibel(demo_registry, demo_conf
         conn.close()
 
     heute_iso = heute.isoformat()
-    # Paula ist ein Kind → Aktivitäts-Slot + Termin-Leiste (zeitgebunden)
+    # Mia ist ein Kind → Aktivitäts-Slot + Termin-Leiste (zeitgebunden)
     appts = view["appointments"][heute_iso]
     assert len(appts) == 1
     a = appts[0]
     assert "personen" in a
     assert len(a["personen"]) == 1, (
         "Single-Person → 1 Eintrag in personen, bekam %d" % len(a["personen"]))
-    assert a["personen"][0]["person"] == "paula"
+    assert a["personen"][0]["person"] == "mia"
 
 
 # ============================================================
-#  PLAN-19 V1.1 — AC5 Entry-Path-Probe: Schwimmkurs Paula Neko
+#  PLAN-19 V1.1 — AC5 Entry-Path-Probe: Schwimmkurs Mia Finn
 # ============================================================
 
 def test_PLAN_19_render_probe_multi_person_event_zwei_avatare(demo_registry, demo_config):
-    """AC5: baue_view mit 'Schwimmkurs Paula Neko' → zwei Avatar-Elements im HTML.
+    """AC5: baue_view mit 'Schwimmkurs Mia Finn' → zwei Avatar-Elements im HTML.
 
     Full entry-path-Probe: Google-Roh → normalise → baue_view → Template →
     HTML mit zwei face-Divs in der Termin-Leiste.
     """
     heute = date(2026, 5, 20)
-    raw = [gcal_timed("schwimm1", "Schwimmkurs Paula Neko",
+    raw = [gcal_timed("schwimm1", "Schwimmkurs Mia Finn",
                       "2026-05-20T10:00:00+02:00", "2026-05-20T11:00:00+02:00")]
     transport = FakeTransport(raw)
     client = make_client(demo_config, demo_registry, transport)
@@ -4425,12 +4425,12 @@ def test_PLAN_19_render_probe_multi_person_event_zwei_avatare(demo_registry, dem
     assert r.status_code == 200, "View gab %d zurück" % r.status_code
     html = r.data.decode("utf-8")
 
-    # Zähle face-Divs in der Termin-Leiste — zwei Avatare für Paula + Neko.
+    # Zähle face-Divs in der Termin-Leiste — zwei Avatare für Mia + Finn.
     # Ein face-Div der Termin-Leiste hat class="face size-24 ring-..."
     import re
     face_24 = re.findall(r'class="face size-24 ring-\w+"', html)
     assert len(face_24) >= 2, (
-        "Erwartet >= 2 size-24-Avatar-Divs für 'Schwimmkurs Paula Neko', "
+        "Erwartet >= 2 size-24-Avatar-Divs für 'Schwimmkurs Mia Finn', "
         "gefunden: %d\nHTML-Ausschnitt (erste 3000 Zeichen):\n%s" % (len(face_24), html[:3000])
     )
 
@@ -4442,12 +4442,12 @@ def test_PLAN_19_render_probe_multi_person_event_zwei_avatare(demo_registry, dem
 def test_PLAN_19_render_probe_multi_person_event_in_beiden_slot_zeilen(demo_registry, demo_config):
     """AC-FIX-1 / AC-FIX-2 (T473-S2): PLAN-19 V1.2 Aktivitäts-Slot-Replikation.
 
-    Ein zeitgebundenes 'Schwimmkurs Paula Neko'-Event landet in BEIDEN
-    Kind-Aktivitäts-Slots (act1 für Paula, act2 für Neko) mit derselben
+    Ein zeitgebundenes 'Schwimmkurs Mia Finn'-Event landet in BEIDEN
+    Kind-Aktivitäts-Slots (act1 für Mia, act2 für Finn) mit derselben
     event_id — die Personen-Identität ist durch die Zeile gegeben.
     """
     heute = date(2026, 5, 20)
-    raw = [gcal_timed("schwimm1", "Schwimmkurs Paula Neko",
+    raw = [gcal_timed("schwimm1", "Schwimmkurs Mia Finn",
                       "2026-05-20T10:00:00+02:00", "2026-05-20T11:00:00+02:00")]
     transport = FakeTransport(raw)
     conn = db_mod.connect(demo_config.db_datei)
@@ -4460,21 +4460,21 @@ def test_PLAN_19_render_probe_multi_person_event_in_beiden_slot_zeilen(demo_regi
         conn.close()
 
     heute_iso = heute.isoformat()
-    slot_paula = view["schedule"][heute_iso].get("act1")
-    slot_neko = view["schedule"][heute_iso].get("act2")
+    slot_mia = view["schedule"][heute_iso].get("act1")
+    slot_finn = view["schedule"][heute_iso].get("act2")
 
-    assert slot_paula is not None, (
-        "act1 (Paula) ist leer — Multi-Person-Event nicht in Paula-Slot repliziert")
-    assert slot_neko is not None, (
-        "act2 (Neko) ist leer — Multi-Person-Event nicht in Neko-Slot repliziert")
-    assert slot_paula["event_id"] == "schwimm1", (
-        "act1-Slot trägt falsche event_id: %r" % slot_paula["event_id"])
-    assert slot_neko["event_id"] == "schwimm1", (
-        "act2-Slot trägt falsche event_id: %r" % slot_neko["event_id"])
+    assert slot_mia is not None, (
+        "act1 (Mia) ist leer — Multi-Person-Event nicht in Mia-Slot repliziert")
+    assert slot_finn is not None, (
+        "act2 (Finn) ist leer — Multi-Person-Event nicht in Finn-Slot repliziert")
+    assert slot_mia["event_id"] == "schwimm1", (
+        "act1-Slot trägt falsche event_id: %r" % slot_mia["event_id"])
+    assert slot_finn["event_id"] == "schwimm1", (
+        "act2-Slot trägt falsche event_id: %r" % slot_finn["event_id"])
     # Beide Slots tragen denselben Chip (gleiche event_id, gleicher Typ).
-    assert slot_paula["event_id"] == slot_neko["event_id"], (
+    assert slot_mia["event_id"] == slot_finn["event_id"], (
         "act1 und act2 tragen unterschiedliche event_ids: %r vs %r"
-        % (slot_paula["event_id"], slot_neko["event_id"]))
+        % (slot_mia["event_id"], slot_finn["event_id"]))
 
 
 # ============================================================
@@ -4591,7 +4591,7 @@ def test_PLAN_12_leerer_kinder_aktivitaets_slot_plus_symbol(
     """AC5/AC2 — Leerer Kinder-Aktivitäts-Slot zeigt Plus-Symbol; voller Slot zeigt Chip.
 
     Ohne Kalender-Event → act1-Slot ist leer → Plus-SVG im HTML.
-    Mit Klettern-Paula → act1-Slot ist gefüllt → activity-chip im HTML, kein Plus mehr.
+    Mit Klettern-Mia → act1-Slot ist gefüllt → activity-chip im HTML, kein Plus mehr.
     """
     # ── Leerer Kinder-Slot: Plus-Symbol erwartet ──────────────
     client_leer = make_client(demo_config, demo_registry, FakeTransport())
@@ -4604,7 +4604,7 @@ def test_PLAN_12_leerer_kinder_aktivitaets_slot_plus_symbol(
     )
     # ── Voller Kinder-Slot: activity-chip statt Plus ───────────
     heute = date(2026, 5, 20)
-    raw = [gcal_allday("k1", "Klettern Paula", heute.isoformat())]
+    raw = [gcal_allday("k1", "Klettern Mia", heute.isoformat())]
     client_voll = make_client(demo_config, demo_registry, FakeTransport(raw))
     r_voll = client_voll.get("/display/plan/woche?ab=%s" % heute.isoformat())
     assert r_voll.status_code == 200
@@ -4693,8 +4693,8 @@ def test_PLAN_36_get_defaults_form(settings_client):
     bring = body["defaults"]["bring"]
     # Alle Wochentag-Keys 0..6 als Strings vorhanden.
     assert set(bring.keys()) == {str(i) for i in range(7)}
-    assert bring["0"] == "niclas"  # Mo
-    assert bring["1"] == "vera"    # Di
+    assert bring["0"] == "emil"  # Mo
+    assert bring["1"] == "petra"    # Di
     assert bring["5"] is None      # Sa
 
 
@@ -4702,7 +4702,7 @@ def test_PLAN_36_put_defaults_roundtrip(settings_client):
     """AC1/Roundtrip: PUT defaults=X → load_config + GET liefern X; persistiert
     unter dem Datei-Schlüssel default_verantwortlichkeiten in Listen-Form."""
     client, cfg_path = settings_client
-    neu = {"defaults": {"pick": {"0": "vera", "2": "niclas", "4": None}}}
+    neu = {"defaults": {"pick": {"0": "petra", "2": "emil", "4": None}}}
     r = client.put(DEFAULTS_URL, json=neu)
     assert r.status_code == 200, r.get_json()
     assert r.get_json() == {"ok": True}
@@ -4712,18 +4712,18 @@ def test_PLAN_36_put_defaults_roundtrip(settings_client):
     assert "default_verantwortlichkeiten" in obj
     liste = obj["default_verantwortlichkeiten"]["pick"]
     assert isinstance(liste, list) and len(liste) == 7
-    assert liste[0] == "vera"
-    assert liste[2] == "niclas"
+    assert liste[0] == "petra"
+    assert liste[2] == "emil"
     assert liste[4] is None
 
     # load_config sieht den neuen Stand.
     cfg = config_mod.resolve(str(cfg_path))
-    assert cfg.default_verantwortlichkeiten["pick"][0] == "vera"
+    assert cfg.default_verantwortlichkeiten["pick"][0] == "petra"
 
     # GET (Reload-on-Read) spiegelt den PUT.
     g = client.get(DEFAULTS_URL).get_json()
-    assert g["defaults"]["pick"]["0"] == "vera"
-    assert g["defaults"]["pick"]["2"] == "niclas"
+    assert g["defaults"]["pick"]["0"] == "petra"
+    assert g["defaults"]["pick"]["2"] == "emil"
 
 
 def test_PLAN_36_put_defaults_unbekannte_person_400_nichts_geschrieben(settings_client):
@@ -4741,7 +4741,7 @@ def test_PLAN_36_put_defaults_kein_verantwortlich_slot_400(settings_client):
     """PUT auf einen kalender-read-Slot (act1) → 400, nichts geschrieben."""
     client, cfg_path = settings_client
     vorher = open(str(cfg_path), encoding="utf-8").read()
-    r = client.put(DEFAULTS_URL, json={"defaults": {"act1": {"0": "niclas"}}})
+    r = client.put(DEFAULTS_URL, json={"defaults": {"act1": {"0": "emil"}}})
     assert r.status_code == 400
     assert open(str(cfg_path), encoding="utf-8").read() == vorher
 
@@ -4750,7 +4750,7 @@ def test_PLAN_36_put_defaults_wochentag_ausser_bereich_400(settings_client):
     """PUT mit Wochentag 7 (außerhalb 0..6) → 400, nichts geschrieben."""
     client, cfg_path = settings_client
     vorher = open(str(cfg_path), encoding="utf-8").read()
-    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"7": "niclas"}}})
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"7": "emil"}}})
     assert r.status_code == 400
     assert open(str(cfg_path), encoding="utf-8").read() == vorher
 
@@ -4767,7 +4767,7 @@ def test_PLAN_36_AC_PUBLIC_kein_initdata_kein_auth(settings_client):
     Telegram-Header durch (200), nicht 401/403."""
     client, _ = settings_client
     assert client.get(DEFAULTS_URL).status_code == 200
-    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": "niclas"}}})
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": "emil"}}})
     assert r.status_code == 200
 
 
@@ -4776,7 +4776,7 @@ def test_PLAN_36_AC_WRITER_MERGE_bewahrt_rest(settings_client):
     slots und _-Kommentar-Keys — nur default_verantwortlichkeiten ändert sich."""
     client, cfg_path = settings_client
     vorher = _read_json_file(cfg_path)
-    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": "vera"}}})
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": "petra"}}})
     assert r.status_code == 200
     nachher = _read_json_file(cfg_path)
     assert nachher["aktivitaeten"] == vorher["aktivitaeten"]
@@ -4784,7 +4784,7 @@ def test_PLAN_36_AC_WRITER_MERGE_bewahrt_rest(settings_client):
     assert nachher["slots"] == vorher["slots"]
     assert nachher["_kommentar"] == vorher["_kommentar"]
     # Die Ziel-Sektion IST geändert.
-    assert nachher["default_verantwortlichkeiten"]["bring"][0] == "vera"
+    assert nachher["default_verantwortlichkeiten"]["bring"][0] == "petra"
 
 
 # ── PLAN-37: GET/PUT slot-modell ───────────────────────────────────────────
@@ -4799,7 +4799,7 @@ def test_PLAN_37_get_slot_modell_form(settings_client):
     assert "bring" in keys and "act1" in keys
     act1 = next(s for s in slots if s["schluessel"] == "act1")
     assert act1["art"] == "kalender-read"
-    assert act1["kind"] == "paula"
+    assert act1["kind"] == "mia"
 
 
 def _slots_aus_config():
@@ -4987,12 +4987,12 @@ def test_PLAN_37_put_slot_modell_art_wechsel_bereinigt_defaults(settings_client)
     # Vorher: bring ist verantwortlich und trägt Defaults (DEMO_CONFIG).
     assert "bring" in config_mod.resolve(str(cfg_path)).default_verantwortlichkeiten
 
-    # bring auf kalender-read umschalten (kind=paula ist in DEMO_REGISTRY).
+    # bring auf kalender-read umschalten (kind=mia ist in DEMO_REGISTRY).
     slots = _slots_aus_config()
     for slot in slots:
         if slot["schluessel"] == "bring":
             slot["art"] = "kalender-read"
-            slot["kind"] = "paula"
+            slot["kind"] = "mia"
             break
 
     r = client.put(SLOT_MODELL_URL, json={"slots": slots})
@@ -5015,7 +5015,7 @@ def test_PLAN_36_put_defaults_null_erlaubt(settings_client):
     """AC-NULL: PUT {"defaults": {"bring": {"0": null}}} → 200; danach zeigt GET
     an Tag 0 null (explizites Löschen eines Tages-Defaults ist erlaubt, PLAN-36)."""
     client, cfg_path = settings_client
-    # bring-Mo auf null setzen (vorher: niclas laut DEMO_CONFIG).
+    # bring-Mo auf null setzen (vorher: emil laut DEMO_CONFIG).
     r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": None}}})
     assert r.status_code == 200, r.get_json()
 
@@ -5181,8 +5181,8 @@ def test_T1149_FX3_defaults_und_slot_modell_betreten_write_lock(settings_client,
     # ── PUT defaults ──────────────────────────────────────────────────────────
     r_defaults = client.put(
         DEFAULTS_URL,
-        json={"defaults": {"bring": {"0": "vera", "1": "vera", "2": "vera",
-                                     "3": "vera", "4": "vera", "5": None, "6": None}}},
+        json={"defaults": {"bring": {"0": "petra", "1": "petra", "2": "petra",
+                                     "3": "petra", "4": "petra", "5": None, "6": None}}},
     )
     assert r_defaults.status_code == 200, r_defaults.get_json()
     assert enter_count, (

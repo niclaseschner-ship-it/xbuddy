@@ -3,7 +3,7 @@
 Die Welle 2a (Commit 3a908ce) ersetzt in `controller/app-panel/index.html` das
 Token `__HSP_INSTANZEN_JSON__` durch die HSP-Slug-Liste aus `instanzen.json`
 (`seiten/main.py:_render_app_panel_index`); `app.js` liest `window.__HSP_INSTANZEN__`
-statt der früher hartkodierten HSP_KIND_IDS-Konstante (Drift-Fix: niclas erscheint).
+statt der früher hartkodierten HSP_KIND_IDS-Konstante (Drift-Fix: emil erscheint).
 
 **Dieser Render-Pfad hatte keinen Test.** Bricht die Substitution, entsteht
 `window.__HSP_INSTANZEN__ = __HSP_INSTANZEN_JSON__;` (JS-SyntaxError) — die übrigen
@@ -12,11 +12,11 @@ Token schreibt. Dieser Test rendert bewusst die ECHTE
 `controller/app-panel/index.html` (kein runtime['app_panel_dir']-Override) und
 prüft den Entry-Path Ende-zu-Ende:
   (a) window.__HSP_INSTANZEN__ steht als JSON-String-Array (Slugs) im Body,
-  (b) enthält niclas,
+  (b) enthält emil,
   (c) KEIN Rest-Token __HSP_INSTANZEN_JSON__ ist übrig.
 
 Test-Naht: INSTANZEN_CONFIG_FILE (ENV) injiziert eine Test-instanzen.json mit drei
-Slugs inkl. niclas (Muster test_hsp_instanzen.py). Auth: die App-Panel-Routen tragen
+Slugs inkl. emil (Muster test_hsp_instanzen.py). Auth: die App-Panel-Routen tragen
 require_dual_gate(mode=_AUTH_MODE); im Test läuft _AUTH_MODE default = 'observe'
 (200 ohne Cookie, AUTH-3.a-Grace, wie test_app_panel_serving.py).
 
@@ -42,16 +42,16 @@ from tools import instanzen as _instanzen_mod  # noqa: E402
 _PANEL_ID = "test-panel-hsp-instanzen-77"
 _PREFIX = "/controller/app-panel/" + _PANEL_ID
 
-# INST-2-Form: drei Einträge inkl. niclas (spiegelt PORT-2). Wird über
+# INST-2-Form: drei Einträge inkl. emil (spiegelt PORT-2). Wird über
 # INSTANZEN_CONFIG_FILE injiziert, sonst fiele der Loader auf den
 # kind1/kind2-Default zurück (live-/fehlende Repo-Root-Datei, INST-6).
 _TEST_INSTANZEN = {
     "hoerspiel": [
-        {"slug": "paula", "port": 5053, "origin": "127.0.0.1:5053",
+        {"slug": "mia", "port": 5053, "origin": "127.0.0.1:5053",
          "display_name": "Kind Eins"},
-        {"slug": "neko", "port": 5055, "origin": "127.0.0.1:5055",
+        {"slug": "finn", "port": 5055, "origin": "127.0.0.1:5055",
          "display_name": "Kind Zwei"},
-        {"slug": "niclas", "port": 5056, "origin": "127.0.0.1:5056",
+        {"slug": "emil", "port": 5056, "origin": "127.0.0.1:5056",
          "display_name": "Kind Drei"},
     ]
 }
@@ -82,7 +82,7 @@ def _hsp_instanzen_blob(body):
 
 def test_app_panel_index_injiziert_hsp_instanzen_slugs(client):
     """(a)/(b): GET /controller/app-panel/<id>/ rendert die ECHTE index.html;
-    window.__HSP_INSTANZEN__ ist ein JSON-String-Array der Slugs UND enthält niclas."""
+    window.__HSP_INSTANZEN__ ist ein JSON-String-Array der Slugs UND enthält emil."""
     resp = client.get(_PREFIX + "/")
     assert resp.status_code == 200, f"Unerwarteter Status: {resp.status_code}"
     body = resp.get_data(as_text=True)
@@ -91,10 +91,10 @@ def test_app_panel_index_injiziert_hsp_instanzen_slugs(client):
     assert isinstance(slugs, list), f"Erwartet JSON-Array, erhalten: {slugs!r}"
     assert all(isinstance(s, str) for s in slugs), \
         f"Slugs müssen Strings sein (INST-4, opak): {slugs!r}"
-    assert "niclas" in slugs, \
-        f"niclas muss ab #1263/INST-1 in der Slug-Liste sein: {slugs}"
-    assert {"paula", "neko", "niclas"} <= set(slugs), \
-        f"Erwartet paula+neko+niclas aus der Test-Config: {slugs}"
+    assert "emil" in slugs, \
+        f"emil muss ab #1263/INST-1 in der Slug-Liste sein: {slugs}"
+    assert {"mia", "finn", "emil"} <= set(slugs), \
+        f"Erwartet mia+finn+emil aus der Test-Config: {slugs}"
 
 
 def test_app_panel_index_kein_rest_token(client):

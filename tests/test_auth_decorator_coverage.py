@@ -339,7 +339,7 @@ def test_display_shared_bleibt_public_ungegatet():
     assert shared, "/display/_shared/*-Routen in seiten nicht gefunden — Test stale?"
     verletzer = [r["path"] for r in shared if r["auth"]]
     assert not verletzer, (
-        "AUTH-7:512-Verletzung — /display/_shared/* trägt den Dual-Gate "
+        "AUTH-7 (Zeile 512) verletzt — /display/_shared/* trägt den Dual-Gate "
         "(muss public bleiben): %s" % verletzer
     )
 

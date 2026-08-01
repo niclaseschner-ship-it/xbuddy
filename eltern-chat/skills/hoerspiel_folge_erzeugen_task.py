@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 # HSP-43 / #1263: HFE-enum + Prompt-Namen aus der EINEN eltern-chat-Instanz-Liste
-# (tasks.HOERSPIEL_INSTANZEN) abgeleitet — kein separater paula/neko-Hardcode mehr.
+# (tasks.HOERSPIEL_INSTANZEN) abgeleitet — kein separater mia/finn-Hardcode mehr.
 _HFE_KIND_IDS = [i["kind_id"] for i in HOERSPIEL_INSTANZEN]
 _HFE_NAMEN = [i["name"] for i in HOERSPIEL_INSTANZEN]
 
@@ -46,8 +46,8 @@ def _oder_liste(items) -> str:
     return "%s oder %s" % (", ".join(items[:-1]), items[-1])
 
 
-_HFE_NAMEN_ODER = _oder_liste(_HFE_NAMEN)       # z. B. "Paula, Neko oder Niclas"
-_HFE_IDS_ODER = _oder_liste(_HFE_KIND_IDS)      # z. B. "paula, neko oder niclas"
+_HFE_NAMEN_ODER = _oder_liste(_HFE_NAMEN)       # z. B. "Mia, Finn oder Emil"
+_HFE_IDS_ODER = _oder_liste(_HFE_KIND_IDS)      # z. B. "mia, finn oder emil"
 
 
 # ============================================================
@@ -124,8 +124,8 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                  family_group_chat_id_getter=None, is_member_fn=None,
                  mini_app_base_url: str = "",
                  hoerspiel_url_origin: str = "",
-                 hoerspiel_url_origin_neko: str = "",
-                 hoerspiel_url_origin_niclas: str = ""):
+                 hoerspiel_url_origin_finn: str = "",
+                 hoerspiel_url_origin_emil: str = ""):
         super().__init__(
             name="hoerspiel_folge_erzeugen",
             description=(
@@ -135,12 +135,12 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                 "vertont ihn als Album.\n\n"
                 "Aufrufen, wenn jemand sagt »Schreib eine Folge über …«, "
                 "»Neue Folge«, »Neues Hörbuch«, »Neues Hörspiel«, »Hörbuch "
-                "anlegen«, »Hörspiel machen«, »Mach Paula eine Folge«, "
-                "»Mach Neko eine Folge«, »Schreib eine Folge«, »Folge "
+                "anlegen«, »Hörspiel machen«, »Mach Mia eine Folge«, "
+                "»Mach Finn eine Folge«, »Schreib eine Folge«, »Folge "
                 "erzeugen« — auch OHNE konkreten Inhalt/Suffix. Plus mit "
-                "Inhalt: »Neue Folge über X«, »Mach Paula eine Folge zu Y«, "
+                "Inhalt: »Neue Folge über X«, »Mach Mia eine Folge zu Y«, "
                 "»Hörbuch über Z«. Plus Themen-Anfrage: »Welche Themen gibt "
-                "es?«, »Was könnte ich Paula erzählen?«, »Vorschläge?«.\n\n"
+                "es?«, »Was könnte ich Mia erzählen?«, »Vorschläge?«.\n\n"
                 "WICHTIG: bei JEDEM Hörspiel-/Hörbuch-/Folgen-Trigger SOFORT "
                 "diesen Skill aufrufen — KEINE eigenen Rückfragen stellen, "
                 "der Skill macht die Diskussion und holt Themen-Vorschläge "
@@ -184,8 +184,8 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                         "description": (
                             "Für welche Instanz die Folge erzeugt werden soll: "
                             f"{_HFE_IDS_ODER}. Wenn die Mutter einen Namen nennt "
-                            "(z. B. 'für Paula'), die passende kind_id setzen "
-                            "(paula/neko/niclas). Pflicht-Argument (HFE-3, E-HFE-6)."),
+                            "(z. B. 'für Mia'), die passende kind_id setzen "
+                            "(mia/finn/emil). Pflicht-Argument (HFE-3, E-HFE-6)."),
                     },
                     "idee": {
                         "type": "string",
@@ -215,13 +215,13 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         # HoerspielClient-Instanz. Ermöglicht dem Task, bei jedem propose()-Aufruf
         # den passenden Client anhand der kind_id zu wählen (Option A: je Client eine
         # Origin). Die kind_ids kommen aus der Instanz-Konstante (_HFE_KIND_IDS); die
-        # Origin je kind_id ist HANDVERDRAHTET (kein Registry-Dict): paula = 5053,
-        # neko = 5055, niclas = 5056. Leer → Paula-Client-Fallback (hoerspiel_client).
+        # Origin je kind_id ist HANDVERDRAHTET (kein Registry-Dict): mia = 5053,
+        # finn = 5055, emil = 5056. Leer → Mia-Client-Fallback (hoerspiel_client).
         from skills.hoerspiel_client import HoerspielClient as _HoerspielClient
         _origin_by_kind_id = {
-            "paula":  (hoerspiel_url_origin or "").rstrip("/"),
-            "neko":   (hoerspiel_url_origin_neko or "").rstrip("/"),
-            "niclas": (hoerspiel_url_origin_niclas or "").rstrip("/"),
+            "mia":  (hoerspiel_url_origin or "").rstrip("/"),
+            "finn":   (hoerspiel_url_origin_finn or "").rstrip("/"),
+            "emil": (hoerspiel_url_origin_emil or "").rstrip("/"),
         }
         self._client_by_kind_id: dict = {}
         for _kid in _HFE_KIND_IDS:
@@ -385,7 +385,7 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             return "Ich baue gerade noch eine Folge — bitte kurz warten."
 
         # E-HFE-6 / HFE-3: kind_id aus dem pending-Dict → passenden Client wählen
-        # (analog propose()). Verhindert den Paula-Default-Bug (T962-Befund).
+        # (analog propose()). Verhindert den Mia-Default-Bug (T962-Befund).
         kind_id = pending["kind_id"]
         active_client = self._client_by_kind_id.get(kind_id, self._hoerspiel_client)
 

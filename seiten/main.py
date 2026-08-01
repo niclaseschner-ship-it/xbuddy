@@ -1153,7 +1153,7 @@ def routine_anpassen_asset_view(asset):
 # ESB-4: eltern.css traegt kein body-overflow:hidden (scrollbar, nicht Kiosk-Sorte).
 #
 # scope-Entscheidung (T1681): /seiten/hoerspiel/ deckt ALLE kind_id-Instanzen;
-# start_url ist /seiten/hoerspiel/paula/eltern (repraesentativer kanonischer Pfad).
+# start_url ist /seiten/hoerspiel/mia/eltern (repraesentativer kanonischer Pfad).
 # eltern.js laedt kind_id aus location.pathname — kein Mantel-Fork pro Kind.
 # Auth: HTML-Shell public (MAD-7: ensureAuth() im JS). SW/manifest: credential-los.
 #
@@ -1477,7 +1477,7 @@ def hoerspiel_player_asset_view(asset):
 
 
 # ============================================================
-#  SHELL-1..11 / SHELL-PWA — Heim-Shell PWA (Split-Layout, Pilot Paula, #1182)
+#  SHELL-1..11 / SHELL-PWA — Heim-Shell PWA (Split-Layout, Pilot Mia, #1182)
 # ============================================================
 #
 # Spec-Anker: specs/platform/heim-shell.md (SHELL-1..11 + SHELL-PWA, RAT-25).
@@ -1536,11 +1536,11 @@ _HARD_RESET_HTML = """<!doctype html>
 # + no-store. Der xbuddy_session-Cookie bleibt unberuehrt (separater Speicher).
 # (#1461 — "wirklich echtes, hartes Neu-Laden von allem")
 def hard_reset_purge():
-    to = request.args.get("to", "/shell/paulas-panel-01")
+    to = request.args.get("to", "/shell/mias-panel-01")
     # Open-Redirect-Schutz: nur eigene relative Pfade, Zeichen-Allowlist.
     to = "".join(c for c in to if c.isalnum() or c in "/_-")
     if not to.startswith("/") or to.startswith("//"):
-        to = "/shell/paulas-panel-01"
+        to = "/shell/mias-panel-01"
     resp = make_response(_HARD_RESET_HTML.replace("__TO__", to))
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -1736,7 +1736,7 @@ def _apply_shell_end(sid):
 
 
 @app.route("/shell/<panel_id>/events", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Paula-LAN) — hard enforced, wie /shell/<panel_id>.
+@require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Mia-LAN) — hard enforced, wie /shell/<panel_id>.
 def shell_events(panel_id):
     """SHELL-4 (RAT-31 E2 / RAT-35): SSE-Zustands-Stream des Shell-Panes, gekeyed
     per ephemerer `sid` (Query-Param `?sid=`, client crypto.randomUUID()).
@@ -1788,7 +1788,7 @@ def shell_ingest(panel_id):
 
 
 @app.route("/shell/<panel_id>", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Paula-LAN) — hard enforced (T1448).
+@require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Mia-LAN) — hard enforced (T1448).
 def heim_shell(panel_id):
     """SHELL-1: Heim-Shell Split-Layout — GET /shell/<panel_id> liefert HTML.
 
@@ -2166,7 +2166,7 @@ def _render_app_panel_index(panel_id):
 
     INST-1 (#1656): __HSP_INSTANZEN_JSON__ wird durch die HSP-Slug-Liste aus
     instanzen.json ersetzt (window.__HSP_INSTANZEN__), damit app.js die Liste
-    liest statt sie hartzukodieren (Drift-Fix: niclas erscheint). Nur slugs —
+    liest statt sie hartzukodieren (Drift-Fix: emil erscheint). Nur slugs —
     keine Ports/Origins (INST-3)."""
     index_path = os.path.join(_app_panel_dir(), "index.html")
     with open(index_path, encoding="utf-8") as fh:
@@ -2553,7 +2553,7 @@ def parse_args(argv):
                    help="DEPRECATED/IGNORIERT seit #1458 (Funnel-only, SREG-7)")
     p.add_argument("--seiten-funnel-origin", dest="seiten_funnel_origin",
                    help="Funnel-FQDN-Origin für Familien-User-Geräte (SREG-7 dritte Origin,"
-                        " AUTH-7b, RAT-27; z.B. https://buddyboard.taile235cf.ts.net)")
+                        " AUTH-7b, RAT-27; z.B. https://buddyboard.<tailscale-id>.ts.net)")
     # SREG-17 / RAT-31 E6b (#1564): Origin des panel-Service, an den seiten
     # config.json/tiles.json/bearbeiten* der App-Panel-Instanzen proxyt (DCOMP-1).
     # ENV PANEL_SERVICE_URL ueberschreibt Default; CLI-Flag schlaegt ENV.

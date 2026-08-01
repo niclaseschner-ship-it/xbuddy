@@ -1,13 +1,13 @@
-# RAT-17 — #907 Hörbuchbuddy: zwei explizite Instanzen Paula + Neko (handverdrahtet, keine Registry)
+# RAT-17 — #907 Hörbuchbuddy: zwei explizite Instanzen Mia + Finn (handverdrahtet, keine Registry)
 
 - **Entschieden:** 2026-06-15 (Architektur-Runde „Hörbuchbuddy-n-Instanzen",
   Berater + Codex-Antiberater, zwei Runden + Nach-R2-Verifikation per Live-Grep),
   **ratifiziert** 2026-06-15 (Nic: alle fünf Empfehlungen + Realitäts-Setzung).
-- **Betrifft:** `specs/buddies/hoerspiel.md` (Paula → `<kind>`-Refactor, HSP-25/26
+- **Betrifft:** `specs/buddies/hoerspiel.md` (Mia → `<kind>`-Refactor, HSP-25/26
   mit `<kind_id>`-Owner, HSP-27 erweitert um `instance.json`-Schema, HSP-28a neu
   für zwei explizite Instanzen), `conventions/urls.md` (URL-3a dritte Zeile für
   HSP-25/26), `specs/platform/hoerspiel-folge-erzeugen.md` (HFE-3 `kind_id`-
-  Lookup statt `PAULA_ALTER`), `xbuddy-data/hoerspiel/<kind_id>/`-Daten-Layout,
+  Lookup statt `MIA_ALTER`), `xbuddy-data/hoerspiel/<kind_id>/`-Daten-Layout,
   zweite systemd-Unit + zweiter Port + zweiter nginx-Origin + zweite Eltern-
   Chat-Origin. Keystone-Ticket **#907**; Sequenz-Tickets #908, #909, #910, #911,
   #912.
@@ -18,7 +18,7 @@
 
 ## Beschluss
 
-Der Hörbuchbuddy bekommt zwei explizite Instanzen Paula + Neko, **handverdrahtet**
+Der Hörbuchbuddy bekommt zwei explizite Instanzen Mia + Finn, **handverdrahtet**
 über zwei systemd-Units, zwei Ports, zwei nginx-Origins und zwei Eltern-Chat-
 Origins. **Keine** Instanz-Registry, **kein** Port-Offset-Algorithmus, **keine**
 generische „Buddy-mit-n-Instanzen"-Konvention — die wäre antizipative
@@ -30,17 +30,17 @@ Punkte für Per-Kind, nicht gebaut).
 1. **Routing-Form (URL-3a):** Identität UNTER dem Klassen-Slug —
    `/api/v1/hoerspiel/<kind_id>/<resource>` und
    `/display/hoerspiel/<kind_id>/<view>`. Eingetragen als dritte URL-3a-Zeile
-   neben ROU-20 und PANEL-2. Slug-Suffix-Form (`/display/hoerspiel-paula/…`)
+   neben ROU-20 und PANEL-2. Slug-Suffix-Form (`/display/hoerspiel-mia/…`)
    verworfen — sie würde BUD-1 (ein Buddy, ein stabiler Slug) brechen.
-2. **Generik-Grad:** Option A handverdrahtet (Paula + Neko explizit überall),
+2. **Generik-Grad:** Option A handverdrahtet (Mia + Finn explizit überall),
    Option B (Registry mit erzeugtem Routing + Eltern-Chat-Auswahl) verworfen
    bis zur dritten Instanz oder zweiten Buddy-Klasse mit n Instanzen.
    **[AMENDIERT 2026-07-31 — Weg C, #1656]** Der Reaktivierungs-Trigger „dritte
-   Instanz" **hat gefeuert** (niclas ist live: `deploy/nginx/xbuddy-origin.conf`
+   Instanz" **hat gefeuert** (emil ist live: `deploy/nginx/xbuddy-origin.conf`
    dritter Origin, `conventions/ports.md` Port 5056, `eltern-chat/config.py`
-   `hoerspiel_url_origin_niclas`). Die Wiederaufnahme ist aber **eng gescopet**:
+   `hoerspiel_url_origin_emil`). Die Wiederaufnahme ist aber **eng gescopet**:
    config-out betrifft **nur die read-only Instanz-LISTE + Klarnamen**, die heute
-   4× dupliziert driften (belegt: `controller/app-panel/app.js:795` kennt niclas
+   4× dupliziert driften (belegt: `controller/app-panel/app.js:795` kennt emil
    NICHT, obwohl live) → EINE gitignored `instanzen.json` + generische
    `instanzen.example.json`, aus der die Backends **lesen**. Das von Option B
    verworfene **„erzeugte Routing"** (Port-Offset-Algorithmus, generierte
@@ -57,13 +57,13 @@ Punkte für Per-Kind, nicht gebaut).
    `_parse_person`/`save` ignorieren unbekannte Felder → würden still beim
    nächsten FAA-Schreibvorgang verschwinden). FAM-3-Erweiterung um
    `geburtsdatum` ist eigene Runde, eigener zweiter Konsument.
-4. **Migration SVC-5-konform:** `cp -a` Paula-Daten nach
-   `xbuddy-data/hoerspiel/paula/`, Drop-In `20-data-path.conf` umstellen,
-   Smoke-Test, **dann erst** Neko, **dann erst** alten Pfad entfernen.
+4. **Migration SVC-5-konform:** `cp -a` Mia-Daten nach
+   `xbuddy-data/hoerspiel/mia/`, Drop-In `20-data-path.conf` umstellen,
+   Smoke-Test, **dann erst** Finn, **dann erst** alten Pfad entfernen.
    `mv`+Restic-Restore-Rollback verworfen — Restic ist Gürtel, nicht
    Rollback-Mechanismus.
 5. **Bibel-V1 von Nic-Hand:** Kein LLM-Bible-Buddy-Flow in V1. Bible ist
-   kreative Wurzel der Welt — Paula-Bibel hat Nic selbst aufgebaut, Neko-
+   kreative Wurzel der Welt — Mia-Bibel hat Nic selbst aufgebaut, Finn-
    Bibel geht denselben Pfad. Bible-Buddy-Prompt-Flow ist V2-Verschönerung.
 
 **Realitäts-Setzung (vorgelagerte Arbeiten, vom Antiberater aufgedeckt):**
@@ -73,12 +73,12 @@ Punkte für Per-Kind, nicht gebaut).
   am Repo-Root (`xbuddy-hoerspiel.service`), brach BUD-1a wörtlich
   („Service-Vorlage neben dem Code"). Pattern-Bruch teilte sich mit Kibuddy
   (11 von 13 Buddies folgten der Konvention, 2 nicht). **Separater /watchdog-
-  Befund**, kein Blocker hier — Neko-Service folgt dem bestehenden Pattern.
+  Befund**, kein Blocker hier — Finn-Service folgt dem bestehenden Pattern.
   **Aufgelöst durch #1014 (SVC-2-Move, 2026-06-21).**
-- `deploy/hoerspiel/bootstrap.sh` ist Paula-hart — pro Instanz manuell
+- `deploy/hoerspiel/bootstrap.sh` ist Mia-hart — pro Instanz manuell
   initialisieren, **keine** Bootstrap-Verallgemeinerung jetzt.
 - Eltern-Chat-Skill `eltern-chat/skills/hoerspiel_folge_erzeugen.py:54`
-  trägt `PAULA_ALTER = 4` als Modul-Konstante (an drei Stellen verwendet).
+  trägt `MIA_ALTER = 4` als Modul-Konstante (an drei Stellen verwendet).
   Spec selbst dokumentiert das als „V1 hart". Cross-Service-Schnitt: muss
   durch `kind_id`-Lookup ersetzt werden (#910).
 
@@ -113,9 +113,9 @@ Filesystem ist Drop-In-Switch + `cp -a`, **kein** Code-Change. URL-Pfad
 ## Amendment 2026-07-31 — Weg C: Instanz-Liste + Klarnamen werden Config (#1656)
 
 **Reaktivierungs-Trigger gefeuert.** Der in Pkt.2 gesetzte Wiederaufnahme-Trigger
-„dritte Instanz" **hat gefeuert** — `niclas` ist live: dritter nginx-Origin in
+„dritte Instanz" **hat gefeuert** — `emil` ist live: dritter nginx-Origin in
 `deploy/nginx/xbuddy-origin.conf`, Port 5056 in `conventions/ports.md`,
-`hoerspiel_url_origin_niclas` in `eltern-chat/config.py`. Das ist eine
+`hoerspiel_url_origin_emil` in `eltern-chat/config.py`. Das ist eine
 **lizenzierte** Wiederaufnahme (RAT-17 Pkt.2 nennt genau diesen Trigger), **keine
 verbotene Re-Litigation**.
 
@@ -123,11 +123,11 @@ verbotene Re-Litigation**.
 aus dem Code in Config gehoben — sie driften heute 4× dupliziert
 (`eltern-chat/tasks.py:43`, `seiten/main.py:1106`, `hoerspiel/config.py`,
 `app.js`/`window.__HSP_INSTANZEN__`; belegt: `controller/app-panel/app.js` kennt
-`niclas` NICHT, obwohl live). Config-out geht in **eine gitignored
+`emil` NICHT, obwohl live). Config-out geht in **eine gitignored
 `instanzen.json`** (live) + eine getrackte generische **`instanzen.example.json`**,
 aus der die Backends **lesen**.
 
-**Technische Slugs BLEIBEN.** Kein Live-Rename von `paula`/`neko`/`niclas` — sie
+**Technische Slugs BLEIBEN.** Kein Live-Rename von `mia`/`finn`/`emil` — sie
 sind opake Strings, an nginx/systemd/URL/Cookie gekoppelt (atomar-oder-404). Der
 Antiberater brach den Slug-Rename-Weg (C3) als Live-Betriebs-Bruch; er ist
 verworfen.

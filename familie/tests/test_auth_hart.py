@@ -140,6 +140,6 @@ def test_foto_route_mit_cookie_ist_200_oder_404(app_client):
 
 def test_foto_route_ohne_quelle_ist_401(app_client):
     """Foto-Route ohne Auth-Quelle → 401 (schließt Funnel-Foto-PII-Leak)."""
-    r = app_client.get("/api/v1/familie/foto/niclas",
+    r = app_client.get("/api/v1/familie/foto/emil",
                        headers={"X-Forwarded-For": "1.2.3.4"})
     assert r.status_code == 401, "Foto-Route muss ohne Quelle 401 liefern (PII-Schutz)"

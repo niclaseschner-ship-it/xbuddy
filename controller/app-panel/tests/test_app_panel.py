@@ -972,24 +972,24 @@ def test_PANEL_11_eventsource_used_for_reconnect():
 
 def test_PANEL_11_find_active_tile_multi_segment_ac1():
     """AC2 / T1007-S2: findActiveTile matcht Multi-Segment-Views korrekt.
-    Kachel { app: 'hoerspiel', view: 'paula/alben' } muss bei URL
-    /display/hoerspiel/paula/alben als aktiv erkannt werden.
+    Kachel { app: 'hoerspiel', view: 'mia/alben' } muss bei URL
+    /display/hoerspiel/mia/alben als aktiv erkannt werden.
     Sichert den echten PANEL-11-Effekt-Pfad (parseDisplayUrl →
     tileMatchesUrl → findActiveTile → updateActiveMarker)."""
     out = run_node('''
         const tiles = [
-            { key: 'p', app: 'hoerspiel', view: 'paula/alben',
-              label: 'Paulas Hörspiele', icons: ['arasaac/5915.png'],
+            { key: 'p', app: 'hoerspiel', view: 'mia/alben',
+              label: 'Mias Hörspiele', icons: ['arasaac/5915.png'],
               sichtbar: true },
-            { key: 'n', app: 'hoerspiel', view: 'neko/alben',
-              label: 'Nekos Hörspiele', icons: ['arasaac/5915.png'],
+            { key: 'n', app: 'hoerspiel', view: 'finn/alben',
+              label: 'Finns Hörspiele', icons: ['arasaac/5915.png'],
               sichtbar: true },
         ];
-        const active = panelLib.findActiveTile(tiles, '/display/hoerspiel/paula/alben');
+        const active = panelLib.findActiveTile(tiles, '/display/hoerspiel/mia/alben');
         console.log(JSON.stringify({ key: active && active.key }));
     ''')
     assert out['key'] == 'p', (
-        'findActiveTile muss Multi-Segment-View paula/alben matchen — '
+        'findActiveTile muss Multi-Segment-View mia/alben matchen — '
         'bekommen: %r' % out.get('key'))
 
 
@@ -1998,18 +1998,18 @@ def test_PANEL_9_test_file_covers_panel_12():
 # ---------------------------------------------------------------------------
 
 def test_PANEL_11_parse_display_url_multi_segment_ac1():
-    """AC1 (T#1007): /display/hoerspiel/paula/alben → {app:'hoerspiel', view:'paula/alben'},
+    """AC1 (T#1007): /display/hoerspiel/mia/alben → {app:'hoerspiel', view:'mia/alben'},
     NICHT null (ROU-24 + URL-3a erlauben Mehr-Segment-View-Suffix)."""
     out = run_node('''
-        const result = panelLib.parseDisplayUrl('/display/hoerspiel/paula/alben');
+        const result = panelLib.parseDisplayUrl('/display/hoerspiel/mia/alben');
         console.log(JSON.stringify(result));
     ''')
     assert out is not None, (
         'parseDisplayUrl darf bei Mehr-Segment-URL nicht null zurückgeben (ROU-24 / URL-3a)')
     assert out.get('app') == 'hoerspiel', (
         'app-Feld falsch: erwartet "hoerspiel", bekommen %r' % out.get('app'))
-    assert out.get('view') == 'paula/alben', (
-        'view-Feld falsch: erwartet "paula/alben", bekommen %r' % out.get('view'))
+    assert out.get('view') == 'mia/alben', (
+        'view-Feld falsch: erwartet "mia/alben", bekommen %r' % out.get('view'))
 
 
 def test_PANEL_11_parse_display_url_two_segment_ac2():
@@ -2094,7 +2094,7 @@ def test_T1519_AC3_makeTileSelected_body_hat_pflichtfelder():
     out = run_node('''
         const tile = { key: 'k1', app: 'hoerspiel', view: 'player',
                        label: 'Musik', icons: ['arasaac/test.png'] };
-        const body = panelLib.makeTileSelected('app-panel:paulas-panel-01', tile);
+        const body = panelLib.makeTileSelected('app-panel:mias-panel-01', tile);
         console.log(JSON.stringify(body));
     ''')
     assert out.get('type') == 'tile_selected', "body.type muss 'tile_selected' sein"

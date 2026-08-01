@@ -3,7 +3,7 @@
  *
  * HSP-33: Tab-Hash-Reader + hashchange-Listener. Zwei Tabs: Einstellungen / Folgen.
  * HSP-34: Reiter Einstellungen (5 Steuer-Elemente + Speichern + Toast).
- * HSP-35: Reiter Folgen — aggregierte Liste über alle V1-kind_ids (paula+neko),
+ * HSP-35: Reiter Folgen — aggregierte Liste über alle V1-kind_ids (mia+finn),
  *          sortiert nach erstellt-am desc. Avatar (FAM-8) pro Eintrag.
  *          Player öffnet folge.kind_id-Manifest, nicht URL-KIND_ID. (#973)
  *          Wake-Lock, Auto-Play nächster Track, Resume-Stand.
@@ -16,11 +16,11 @@
 
 // ── KIND_ID aus URL (HSP-26, URL-3a, T970) ──────────────────────────────────
 // Pattern: /seiten/hoerspiel/<kind_id>/eltern → kind_id ist Segment 3 (0-basiert).
-// Fallback: 'paula' für Dev/Standalone (nie im Produktivbetrieb wirksam).
+// Fallback: 'mia' für Dev/Standalone (nie im Produktivbetrieb wirksam).
 // Settings-Tab (HSP-34) nutzt KIND_ID weiterhin für /config-Endpoint.
 const KIND_ID = (() => {
   const m = location.pathname.match(/^\/seiten\/hoerspiel\/([^/]+)\/eltern/);
-  return m ? m[1] : 'paula';
+  return m ? m[1] : 'mia';
 })();
 
 // ── KIND_IDS_V1: Instanz-Liste aus window.__HSP_INSTANZEN__ (INST-1, #1670) ──
@@ -28,11 +28,11 @@ const KIND_ID = (() => {
 // analog player.js HSP-49). Kein Hardcode mehr — letzte HSP-Slug-Kopie entfernt.
 // Shape: window.__HSP_INSTANZEN__ = [{kind_id, name, foto_url}] (volle Objekte,
 // gleiche Form wie player.js); eltern.js braucht nur Slugs → .map(e=>e.kind_id).
-// Fallback ["paula","neko","niclas"] greift wenn Injektion fehlt (Dev/Standalone).
+// Fallback ["mia","finn","emil"] greift wenn Injektion fehlt (Dev/Standalone).
 const KIND_IDS_V1 = (
   Array.isArray(window.__HSP_INSTANZEN__) && window.__HSP_INSTANZEN__.length > 0
     ? window.__HSP_INSTANZEN__.map(e => e.kind_id)
-    : ["paula", "neko", "niclas"]
+    : ["mia", "finn", "emil"]
 );
 
 // ── MAD-7 Auth-Header ────────────────────────────────────────────────────────

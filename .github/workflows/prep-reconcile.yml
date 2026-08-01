@@ -58,7 +58,7 @@ jobs:
       - name: Lotse-Harness auschecken (verdict_check)
         uses: actions/checkout@v4
         with:
-          repository: niclaseschner-ship-it/lotse
+          repository: <your-org>/lotse
           path: _lotse
 
       - name: status-ready validieren (State + Verdikt-Membran)

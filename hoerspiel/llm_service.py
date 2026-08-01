@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 HERE = os.path.dirname(os.path.abspath(__file__))
 # HSP-56: zwei zielgruppe-bewusste Prompt-Dateien. Die Kind-Datei ist die
 # byte-gleiche Umbenennung der früheren `geschichtenbuddy.md` (Golden/Diff-Guard
-# — paula/neko-Folgen bleiben identisch).
+# — mia/finn-Folgen bleiben identisch).
 PROMPT_KIND = os.path.join(HERE, "prompts", "geschichtenbuddy-kind.md")
 PROMPT_ERWACHSEN = os.path.join(HERE, "prompts", "geschichtenbuddy-erwachsen.md")
 # Rückwärtskompatibler Alias — Alt-Referenzen auf die Kind-Datei (Default).
@@ -36,13 +36,13 @@ PROMPT_GESCHICHTENBUDDY = PROMPT_KIND
 ZIELGRUPPE_ERWACHSEN = "erwachsen"
 
 # HSP-45 / #1263 / T1336 — Serien-Rahmung instanz-neutral (REGRESSION-GUARD).
-# geschichtenbuddy-kind.md ist entkernt (kein „Paula (4 Jahre)", kein fixer Serien-Name):
+# geschichtenbuddy-kind.md ist entkernt (kein „Mia (4 Jahre)", kein fixer Serien-Name):
 # die Instanz-Rahmung reicht `_build_user_context` als „# Instanz-Kontext"-Block nach.
 # T1336: DEFAULT_SERIEN_RAHMEN ist jetzt leer — `_build_user_context` lässt die
-# „Serie:"-Zeile bei leerem serien_name weg (minimal-neutral, kein Paula-Leak für neko).
-# Instanzen (paula/neko/niclas) tragen ihren serien_name ausschließlich via instance.json;
+# „Serie:"-Zeile bei leerem serien_name weg (minimal-neutral, kein Mia-Leak für finn).
+# Instanzen (mia/finn/emil) tragen ihren serien_name ausschließlich via instance.json;
 # der Orchestrator (T1336-Deploy) provisioniert die Datei-Werte.
-DEFAULT_SERIEN_RAHMEN = ""  # instanz-neutral seit T1336 (kein Paula-Leak)
+DEFAULT_SERIEN_RAHMEN = ""  # instanz-neutral seit T1336 (kein Mia-Leak)
 DEFAULT_TON = "warmherzig, ruhig, kindgerecht; kurze Sätze, konkrete Bilder"
 DEFAULT_PERSPEKTIVE = "auktorial, nah bei den Figuren"
 
@@ -82,7 +82,7 @@ FOLGEN_INPUT_SCHEMA = {
 # HSP-56/HSP-60: die Erwachsen-Variante ERGÄNZT das Kind-Schema um den
 # strukturierten META-Block (`these`/`schnitt`/`quellen[]`/`begriffe_neu[]`).
 # Das Kind-Schema (`FOLGEN_INPUT_SCHEMA`) bleibt BYTE-GLEICH — der Kind-Pfad
-# sieht nie das `meta`-Feld (paula/neko unverändert). Nur der erwachsen-Pfad
+# sieht nie das `meta`-Feld (mia/finn unverändert). Nur der erwachsen-Pfad
 # reicht dieses Schema in `complete_structured`.
 _META_SCHEMA = {
     "type": "object",
@@ -127,7 +127,7 @@ def _load_system_prompt(zielgruppe: str = "kind") -> str:
 
     `zielgruppe:erwachsen` → `geschichtenbuddy-erwachsen.md` (Dialog-Skript +
     düster + META); alles andere (Default `kind`) → `geschichtenbuddy-kind.md`
-    (byte-gleiche Umbenennung der alten Datei — paula/neko unverändert).
+    (byte-gleiche Umbenennung der alten Datei — mia/finn unverändert).
     """
     pfad = (PROMPT_ERWACHSEN
             if (zielgruppe or "").strip().lower() == ZIELGRUPPE_ERWACHSEN
@@ -145,16 +145,16 @@ def _build_user_context(idee: str, bible: str, historie: str,
     """Baut den User-Kontext (HSP-11) inkl. Instanz-Rahmung (HSP-45).
 
     Der „# Instanz-Kontext"-Block ersetzt die früher im Template hartkodierten
-    Angaben (Kind-Name, Alter, Serien-Name) — so nennt eine niclas-Folge nie
+    Angaben (Kind-Name, Alter, Serien-Name) — so nennt eine emil-Folge nie
     Leerer serien_name → keine „Serie:"-Zeile (DEFAULT_SERIEN_RAHMEN='' neutral, T1336/OPEN-HSP-W).
-    Die Idee-Rückfall-Zeile ist instanz-neutral; kein fester Paula-/Serien-Default.
+    Die Idee-Rückfall-Zeile ist instanz-neutral; kein fester Mia-/Serien-Default.
 
     `recherche_block` (HSP-57): der Fakten+Quellen-Block des Recherche-
     Vorschritts. Leer (Kind-Pfad / Degradation) → der Kontext ist BYTE-GLEICH
     zur früheren Form (kein Anhang), sonst wird der Block am Ende angefügt.
     """
     name = (name or "").strip()
-    # T1336: serien_name leer → „Serie:"-Zeile entfällt (minimal-neutral, kein Paula-Leak).
+    # T1336: serien_name leer → „Serie:"-Zeile entfällt (minimal-neutral, kein Mia-Leak).
     # Instanz muss serien_name via instance.json setzen; DEFAULT_SERIEN_RAHMEN = "" (neutral).
     serien_name = (serien_name or "").strip()
     ton = (ton or "").strip() or DEFAULT_TON
@@ -275,7 +275,7 @@ def erzeuge_folgen_vorschlag(*, idee: str, bible: str, historie: str,
 
     name/alter/ton/perspektive/serien_name (HSP-45, #1263): Instanz-Rahmung der
     AKTIVEN Instanz (aus `config.load_instance`). Fehlen sie (Alt-Aufrufer /
-    ungefüllte instance.json), greifen die transitionalen Defaults — paula/neko
+    ungefüllte instance.json), greifen die transitionalen Defaults — mia/finn
     bleiben byte-gleich zur alten Rahmung.
 
     zielgruppe (HSP-56): wählt den System-Prompt (kind/erwachsen). Nur bei

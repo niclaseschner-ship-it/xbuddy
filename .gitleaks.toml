@@ -56,6 +56,13 @@ regex = '''niclas[._]eschner@(gmail|gmx)'''
 id = "xbuddy-familien-mail-domain"
 description = "Familien-E-Mail-Domain @gmx.de (→ @example.de scrubben)"
 regex = '''@gmx\.de'''
+# Privacy-Gate-Detektor + Golden-Set führen @gmx.de als Detektions-Pattern
+# (Security-Feature). Bloße Provider-Domain = keine PII (#1719).
+[[rules.allowlists]]
+paths = [
+    '''privacy_gate\.py''',
+    '''test_eval_golden_set\.py''',
+]
 
 # ── Netz-/Instanz-Identifier ─────────────────────────────────────────────────
 [[rules]]
@@ -88,13 +95,15 @@ id = "xbuddy-ortsname"
 description = "Wohnort-Name (Dreisamtal)"
 regex = '''(?i)\bDreisamtal\b'''
 
-# ── Globale Allowlist ────────────────────────────────────────────────────────
-# Das Ruleset selbst trägt die Muster (naturgemäß) — es darf sich nicht selbst
-# als Leak melden. Ebenso der Mirror-/Scrub-Bau, der die Muster ratifiziert führt.
+# ── Globale Allowlist (EIN Block — gitleaks honoriert nur den ersten) ────────
+# Das Ruleset selbst trägt die Muster (naturgemäß) und darf sich nicht als Leak
+# melden. Plus curated #1719-Ausnahmen: Detektor-Fixtures + FP-Anker + Artefakte.
+# (Der Privacy-Gate-Detektor ist zusätzlich per-Rule an der familien-mail-domain
+# ausgenommen — hier nur die restlichen globalen Fälle.)
 [[allowlists]]
-description = "Ruleset + Scrub-/Mirror-Werkzeug führen die Muster ratifiziert"
+description = "Ruleset-Selbstreferenz + curated Detektor-/FP-/Artefakt-Ausnahmen (#1719)"
 paths = [
     '''(^|/)\.gitleaks\.toml$''',
-    '''(^|/)tools/mirror/build_public_mirror\.sh$''',
-    '''(^|/)tools/mirror/generate_name_map\.py$''',
+    '''test_auth_decorator_coverage\.py''',
+    '''\.pyc$''',
 ]

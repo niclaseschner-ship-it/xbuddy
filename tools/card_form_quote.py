@@ -48,7 +48,7 @@ import re
 import subprocess
 import sys
 
-REPO = "niclaseschner-ship-it/xbuddy"
+REPO = "<your-org>/xbuddy"
 
 PREFLIGHT_RE = re.compile(r"<!--\s*card_pre_flight\s+v1\b")
 PREP_VERDICT_RE = re.compile(r"prep_verdict")

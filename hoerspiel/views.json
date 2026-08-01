@@ -3,42 +3,42 @@
     {
       "slug": "hoerspiel-eltern",
       "typ": "pwa",
-      "pfad": "/seiten/hoerspiel/paula/eltern",
+      "pfad": "/seiten/hoerspiel/mia/eltern",
       "label": "Hörspiel verwalten",
       "synonyme": ["hörspiel", "einstellungen", "folgen", "alben verwalten", "hoerspiel verwalten"],
       "zeigt": "Hörspiel-Einstellungen und Folgen für ein Kind verwalten (Eltern-Ansicht).",
       "zielgruppe": "eltern",
       "pwa": {
-        "manifest": "/seiten/hoerspiel/paula/eltern/manifest.json",
-        "start_url": "/seiten/hoerspiel/paula/eltern",
-        "service_worker": "/seiten/hoerspiel/paula/eltern/sw.js"
+        "manifest": "/seiten/hoerspiel/mia/eltern/manifest.json",
+        "start_url": "/seiten/hoerspiel/mia/eltern",
+        "service_worker": "/seiten/hoerspiel/mia/eltern/sw.js"
       },
       "auth": "tma"
     },
     {
-      "slug": "alben-paula",
-      "pfad": "/display/hoerspiel/paula/alben",
-      "label": "Paulas Hörspiele",
-      "synonyme": ["paula", "stigi", "folgen", "alben", "hörspiel"],
-      "zeigt": "Album-Kacheln und Player für Paulas Hörspiel-Serie (Stigi & Co.).",
+      "slug": "alben-mia",
+      "pfad": "/display/hoerspiel/mia/alben",
+      "label": "Mias Hörspiele",
+      "synonyme": ["mia", "stigi", "folgen", "alben", "hörspiel"],
+      "zeigt": "Album-Kacheln und Player für Mias Hörspiel-Serie (Stigi & Co.).",
       "zielgruppe": "kind",
       "icons": ["arasaac/5915.png"]
     },
     {
-      "slug": "alben-neko",
-      "pfad": "/display/hoerspiel/neko/alben",
-      "label": "Nekos Hörspiele",
-      "synonyme": ["neko", "quasiluxi", "alpaki", "haski", "hörspiel"],
-      "zeigt": "Album-Kacheln und Player für Nekos Hörspiel-Serie (Quasiluxi, Alpaki & Haski).",
+      "slug": "alben-finn",
+      "pfad": "/display/hoerspiel/finn/alben",
+      "label": "Finns Hörspiele",
+      "synonyme": ["finn", "quasiluxi", "alpaki", "haski", "hörspiel"],
+      "zeigt": "Album-Kacheln und Player für Finns Hörspiel-Serie (Quasiluxi, Alpaki & Haski).",
       "zielgruppe": "kind",
       "icons": ["arasaac/5915.png"]
     },
     {
-      "slug": "alben-niclas",
-      "pfad": "/display/hoerspiel/niclas/alben",
-      "label": "Niclas' Hörspiele",
-      "synonyme": ["niclas", "hörspiel"],
-      "zeigt": "Album-Kacheln und Player für Niclas' Hörspiel-Serie.",
+      "slug": "alben-emil",
+      "pfad": "/display/hoerspiel/emil/alben",
+      "label": "Emil' Hörspiele",
+      "synonyme": ["emil", "hörspiel"],
+      "zeigt": "Album-Kacheln und Player für Emil' Hörspiel-Serie.",
       "zielgruppe": "erwachsen",
       "icons": ["arasaac/5915.png"]
     }

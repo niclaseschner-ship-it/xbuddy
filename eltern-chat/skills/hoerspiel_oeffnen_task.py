@@ -40,7 +40,7 @@ from skills import hoerspiel_oeffnen as hoe_mod
 logger = logging.getLogger(__name__)
 
 # HSP-47 / HSP-53: fester Pfad der Hörspiel-Player-PWA.
-# Löst /seiten/hoerspiel/paula/eltern (HSP-26, superseded) ab.
+# Löst /seiten/hoerspiel/mia/eltern (HSP-26, superseded) ab.
 _HOE_APP_PATH = "/seiten/hoerspiel/player"
 
 
@@ -88,7 +88,7 @@ class HoerspielOeffnenTask(ReadTask):
                 "der Inline-Knopf kommt automatisch über den Tool-Call dieses Skills, "
                 "nicht über Prosa. "
                 "Abgrenzung: Neue Folge erzeugen ('schreib eine Folge', "
-                "'mach Paula ein neues Hörspiel') → hoerspiel_folge_erzeugen."),
+                "'mach Mia ein neues Hörspiel') → hoerspiel_folge_erzeugen."),
             parameters={
                 "type": "object",
                 "properties": {},

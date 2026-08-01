@@ -1230,14 +1230,14 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # HFE-9 / #729: Origin des Hörspiel-Buddys. Leer/None → HFE NICHT im
         # Katalog (AND-Guard in tasks.py).
         hoerspiel_url_origin=cfg.hoerspiel_url_origin or None,
-        # RAT-17 / #910 / T954: Neko-Origin an build_catalog durchreichen,
-        # damit HoerspielFolgeErzeugenTask die Mini-Map mit echtem Neko-Client
-        # befüllt (kind_id="neko" → hoerspiel_url_origin_neko, AC-1).
-        hoerspiel_url_origin_neko=cfg.hoerspiel_url_origin_neko or "",
-        # HSP-43 / #1263: Niclas-Origin an build_catalog durchreichen, damit
-        # HoerspielFolgeErzeugenTask die Mini-Map mit echtem Niclas-Client befüllt
-        # (kind_id="niclas" → hoerspiel_url_origin_niclas, AC3).
-        hoerspiel_url_origin_niclas=cfg.hoerspiel_url_origin_niclas or "",
+        # RAT-17 / #910 / T954: Finn-Origin an build_catalog durchreichen,
+        # damit HoerspielFolgeErzeugenTask die Mini-Map mit echtem Finn-Client
+        # befüllt (kind_id="finn" → hoerspiel_url_origin_finn, AC-1).
+        hoerspiel_url_origin_finn=cfg.hoerspiel_url_origin_finn or "",
+        # HSP-43 / #1263: Emil-Origin an build_catalog durchreichen, damit
+        # HoerspielFolgeErzeugenTask die Mini-Map mit echtem Emil-Client befüllt
+        # (kind_id="emil" → hoerspiel_url_origin_emil, AC3).
+        hoerspiel_url_origin_emil=cfg.hoerspiel_url_origin_emil or "",
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts. Leer/None →
         # KibuddyAufnahmeQuelleSetzenTask NICHT im Katalog (AND-Guard KAQS-6).
         kibuddy_origin_url=cfg.kibuddy_origin_url or None,

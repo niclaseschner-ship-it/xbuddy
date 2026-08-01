@@ -33,7 +33,7 @@ ENV_DATA_ROOT = "HOERSPIEL_DATA_ROOT"
 DEFAULT_DATA_ROOT = os.path.join(HERE, "data")
 
 ENV_KIND_ID = "HOERSPIEL_KIND_ID"
-DEFAULT_KIND_ID = "paula"
+DEFAULT_KIND_ID = "mia"
 
 ENV_KIND_NAME = "HOERSPIEL_KIND_NAME"    # V1-Übergangs-ENV — bis instance.json je Kind angelegt
 ENV_KIND_ALTER = "HOERSPIEL_KIND_ALTER"  # V1-Übergangs-ENV — bis instance.json je Kind angelegt
@@ -49,7 +49,7 @@ VALID_VOICES = ("shimmer", "onyx")
 
 DEFAULT_LLM_MODEL = "claude-opus-4-7"
 DEFAULT_VOICE = "onyx"
-# T1382/OPEN-HSP-W/-X: kein Code-Default-Serien-Name mehr (Paula-Leak). serien_name
+# T1382/OPEN-HSP-W/-X: kein Code-Default-Serien-Name mehr (Mia-Leak). serien_name
 # ist rein instanz-getragen (instance.json, HSP-27); neutral leer wenn ungesetzt.
 
 # INST-1 (conventions/instanzen-config.md, #1656): die Instanz-Liste ist KEINE
@@ -95,7 +95,7 @@ class InstanceConfig:
 
     Felder:
     - kind_id   — Instanz-Identität (Pflicht-Feld in instance.json)
-    - name      — Anzeige-Name des Kindes (z. B. "Paula")
+    - name      — Anzeige-Name des Kindes (z. B. "Mia")
     - alter     — Alter als int (aus instance.json oder ENV HOERSPIEL_KIND_ALTER)
     - themen_je_alter — Map alter-str → list[str] (aus instance.json oder DataConfig)
     - zielgruppe   — deskriptiv "kind" | "erwachsen" — steuert Prompt-Schnitt + Recherche-Vorschritt (HSP-56/58)
@@ -140,7 +140,7 @@ def load_instance(data_root: str, kind_id: str,
     Ist weder instance.json noch ENV gesetzt, liefert `name` einen
     leeren String und `alter` 0. Die Themen-Endpoint-Route gibt dann
     422 zurück (Alter 0 ist nie in themen_je_alter — klare Fehlermeldung
-    statt Paula-Hardcode). Kein hardcoded Paula-Default.
+    statt Mia-Hardcode). Kein hardcoded Mia-Default.
     """
     if env is None:
         env = dict(os.environ)
@@ -170,7 +170,7 @@ def load_instance(data_root: str, kind_id: str,
         # HSP-45 / #1263: Erwachsenen-Achse + Name-Drift-Kontext rein aus Daten.
         # Leer → keine „Serie:"-Zeile (DEFAULT_SERIEN_RAHMEN='' neutral, T1336/OPEN-HSP-W).
 
-        # T1621: Sprecher→Voice-Map für Multi-Voice-TTS (optional, nur niclas-Instanz).
+        # T1621: Sprecher→Voice-Map für Multi-Voice-TTS (optional, nur emil-Instanz).
         # None/leer → Single-Voice-Pfad (Kind-Instanzen unverändert, byte-gleich).
         voices_raw = raw.get("voices")
         voices: dict[str, str] | None = None
@@ -393,8 +393,8 @@ def resolve_data(config_path: str | None = None,
         raise ConfigError(
             "default_voice %r ist V1 nicht unterstützt — erlaubt: %s (HSP-13)"
             % (default_voice, ", ".join(VALID_VOICES)))
-    # T1382/HSP-45: neutral leer statt 'Stigi & Co.' als Default — kein Paula-Leak
-    # auf Nicht-Paula-Instanzen. Instanz-spezifischer serien_name lebt in instance.json
+    # T1382/HSP-45: neutral leer statt 'Stigi & Co.' als Default — kein Mia-Leak
+    # auf Nicht-Mia-Instanzen. Instanz-spezifischer serien_name lebt in instance.json
     # (HSP-27); hoerspiel.json trägt nur PATCH-gesetzten Override (DEFAULT_SERIEN_RAHMEN='').
     serien_name = str(file_cfg.get("serien_name") or "")
 

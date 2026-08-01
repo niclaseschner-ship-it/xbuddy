@@ -39,7 +39,7 @@ Environment=SEITEN_TAILSCALE_ORIGIN=__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__
 # SREG-7 dritte Origin: Funnel-FQDN fuer Familien-User-Geraete (AUTH-7b,
 # RAT-27 RATIFIZIERT 2026-07-07). Leer = externer User-Geraete-Zugang nicht
 # angeboten (kein Auto-Fallback). Beispiel:
-# https://buddyboard.taile235cf.ts.net
+# https://buddyboard.<tailscale-id>.ts.net
 Environment=SEITEN_FUNNEL_ORIGIN=__XBUDDY_DISPLAY_ORIGIN_FUNNEL__
 # T948 / AUTH-2.a: derselbe geraete.json-Store wie geraete/main.py (GERAETE_REGISTRY,
 # GER-9, deploy/migrate-xbuddy-data.sh). /auth/pair schreibt hier den paired_at-Stempel

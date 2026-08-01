@@ -26,7 +26,7 @@ from seiten import main as seiten_main  # noqa: E402
 from seiten import render as seiten_render  # noqa: E402
 from tools.initdata import session_cookie as _sc  # noqa: E402
 
-PANEL_ID = "paulas-panel-01"
+PANEL_ID = "mias-panel-01"
 BOT_TOKEN = "123456:ABCdef_testtoken"
 
 
@@ -536,7 +536,7 @@ def test_ac3_adapt_shell_event_akzeptiert_tile_selected_body():
     seiten nimmt jedes valide tile_selected (ein Gerät = ein Ziel)."""
     # Repräsentativer Body wie makeTileSelected ihn erzeugt (PANEL-6):
     body = {
-        "source_id": "app-panel:paulas-panel-01",
+        "source_id": "app-panel:mias-panel-01",
         "ts": "2026-07-28T10:00:00.000Z",
         "type": "tile_selected",
         "app": "hoerspiel",
@@ -558,7 +558,7 @@ def test_ac3_adapt_shell_event_akzeptiert_body_mit_query():
     query-Dict (PANEL-6/PANEL-7 — flaches Objekt) — wie app.js makeTileSelected
     es sendet, wenn tile.query gesetzt ist."""
     body = {
-        "source_id": "app-panel:paulas-panel-01",
+        "source_id": "app-panel:mias-panel-01",
         "ts": "2026-07-28T10:00:00.000Z",
         "type": "tile_selected",
         "app": "essen",
@@ -577,7 +577,7 @@ def test_ac3_ingest_endpunkt_akzeptiert_tile_selected_body():
     Kompatibilitaet (Entry-Path-Probe ohne Tap auf echtem Tablet)."""
     c = _auth_client()
     body = {
-        "source_id": "app-panel:paulas-panel-01",
+        "source_id": "app-panel:mias-panel-01",
         "ts": "2026-07-28T10:00:00.000Z",
         "type": "tile_selected",
         "app": "hoerspiel",
@@ -634,7 +634,7 @@ def test_t1538_sw_events_pfad_nicht_als_html():
     """T1538 AC2: /shell/<pid>/events wird vom SW NICHT als Shell-HTML behandelt.
 
     Prueft direkt, ob der isShellHtml-Regex den SSE-Endpoint ausschliesst.
-    Der Regex ^/shell/[^/]+/?$ darf '/shell/paulas-panel-01/events' NICHT matchen
+    Der Regex ^/shell/[^/]+/?$ darf '/shell/mias-panel-01/events' NICHT matchen
     (events-Segment ist ein dritter Pfad-Teil). Schlaegt dieser Test fehl, wuerde der
     SSE-Stream durch networkFirst klon-backpressured und das rechte Pane blaese nie auf.
     """
@@ -642,20 +642,20 @@ def test_t1538_sw_events_pfad_nicht_als_html():
     # Den Regex aus der sw.js direkt in Python uebersetzen und Pfade pruefen.
     shell_nav_re = re.compile(r'^/shell/[^/]+/?$')
 
-    assert not shell_nav_re.match('/shell/paulas-panel-01/events'), (
+    assert not shell_nav_re.match('/shell/mias-panel-01/events'), (
         "isShellHtml-Regex darf /shell/<pid>/events NICHT matchen "
         "(SSE-Stream wuerde durch networkFirst erwuergt — T1538)"
     )
-    assert shell_nav_re.match('/shell/paulas-panel-01'), (
+    assert shell_nav_re.match('/shell/mias-panel-01'), (
         "isShellHtml-Regex muss /shell/<pid> matchen (bare Nav-Pfad — T1448)"
     )
-    assert shell_nav_re.match('/shell/paulas-panel-01/'), (
+    assert shell_nav_re.match('/shell/mias-panel-01/'), (
         "isShellHtml-Regex muss /shell/<pid>/ matchen (Trailing-Slash-Variante)"
     )
-    assert not shell_nav_re.match('/shell/paulas-panel-01/sw.js'), (
+    assert not shell_nav_re.match('/shell/mias-panel-01/sw.js'), (
         "isShellHtml-Regex darf /shell/<pid>/sw.js NICHT matchen"
     )
-    assert not shell_nav_re.match('/shell/paulas-panel-01/icon-192.png'), (
+    assert not shell_nav_re.match('/shell/mias-panel-01/icon-192.png'), (
         "isShellHtml-Regex darf /shell/<pid>/icon-192.png NICHT matchen"
     )
 

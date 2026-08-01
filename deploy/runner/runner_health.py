@@ -2,7 +2,7 @@
 """runner_health.py — self-hosted GitHub-Actions-Runner gezielt entstauen (#1113).
 
 Schmerz, der dieses Skript hervorgebracht hat (#1113): der self-hosted Runner
-`pi5-buddy` (`actions.runner.niclaseschner-ship-it-xbuddy.pi5-buddy.service`)
+`pi5-buddy` (`actions.runner.<your-org>-xbuddy.pi5-buddy.service`)
 meldet gelegentlich `status: online`, `busy: false` — nimmt aber KEINE Jobs an.
 Workflow-Runs stehen 8–18 Minuten in `queued`, bis ein Mensch den Service von
 Hand neustartet. Das blockiert die ganze CI (Claim-Flow, Auto-Merge).
@@ -43,8 +43,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 # --- Defaults (per-Instanz via ENV/Flag überschreibbar, nichts hartkodiert) --
-DEFAULT_REPO = "niclaseschner-ship-it/xbuddy"
-DEFAULT_SERVICE = "actions.runner.niclaseschner-ship-it-xbuddy.pi5-buddy.service"
+DEFAULT_REPO = "<your-org>/xbuddy"
+DEFAULT_SERVICE = "actions.runner.<your-org>-xbuddy.pi5-buddy.service"
 DEFAULT_RUNNER_NAME = "pi5-buddy"
 # Schwellwert N: ein idle-Runner greift einen queued Job in Sekunden. 5 Minuten
 # lässt kurze Registrierungs-/Pickup-Fenster (Runner-Neustart) unangetastet und

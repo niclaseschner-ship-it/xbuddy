@@ -1,8 +1,8 @@
 /**
  * test_eltern_js.test.js — KIND_ID-Fallback-Regressionstest für eltern.js.
  *
- * AC3 / T1027: Prüft positiv (/seiten/hoerspiel/neko/eltern → KIND_ID==='neko')
- * und negativ (Standalone-Dev-URL fällt auf 'paula').
+ * AC3 / T1027: Prüft positiv (/seiten/hoerspiel/finn/eltern → KIND_ID==='finn')
+ * und negativ (Standalone-Dev-URL fällt auf 'mia').
  *
  * Testet die IIFE-Logik aus eltern.js Z. 21-24 (HSP-26, URL-3a, T970).
  *
@@ -25,72 +25,72 @@ const { makeDom, makeFetchSpy } = require(
 
 function extractKindId(pathname) {
   const m = pathname.match(/^\/seiten\/hoerspiel\/([^/]+)\/eltern/);
-  return m ? m[1] : 'paula';
+  return m ? m[1] : 'mia';
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 /**
- * Test 1 (positiv) — /seiten/hoerspiel/neko/eltern → KIND_ID === 'neko'
+ * Test 1 (positiv) — /seiten/hoerspiel/finn/eltern → KIND_ID === 'finn'
  *
  * URL-3a / T970: kind_id wird aus pathname-Segment 3 (0-basiert) extrahiert.
- * Prüft, dass ein Neko-URL-Pfad korrekt zu kind_id='neko' führt.
+ * Prüft, dass ein Finn-URL-Pfad korrekt zu kind_id='finn' führt.
  */
-test("eltern.js KIND_ID: /seiten/hoerspiel/neko/eltern → 'neko'", () => {
-  const result = extractKindId("/seiten/hoerspiel/neko/eltern");
-  assert.equal(result, "neko", (
-    "KIND_ID muss 'neko' sein für Pfad '/seiten/hoerspiel/neko/eltern' " +
+test("eltern.js KIND_ID: /seiten/hoerspiel/finn/eltern → 'finn'", () => {
+  const result = extractKindId("/seiten/hoerspiel/finn/eltern");
+  assert.equal(result, "finn", (
+    "KIND_ID muss 'finn' sein für Pfad '/seiten/hoerspiel/finn/eltern' " +
     "(HSP-26, URL-3a, T970). Tatsächlicher Wert: " + result
   ));
 });
 
 /**
- * Test 2 (positiv) — /seiten/hoerspiel/paula/eltern → KIND_ID === 'paula'
+ * Test 2 (positiv) — /seiten/hoerspiel/mia/eltern → KIND_ID === 'mia'
  *
- * Symmetrietest: paula-Instanz muss aus URL ebenfalls korrekt erkannt werden.
+ * Symmetrietest: mia-Instanz muss aus URL ebenfalls korrekt erkannt werden.
  */
-test("eltern.js KIND_ID: /seiten/hoerspiel/paula/eltern → 'paula'", () => {
-  const result = extractKindId("/seiten/hoerspiel/paula/eltern");
-  assert.equal(result, "paula", (
-    "KIND_ID muss 'paula' sein für Pfad '/seiten/hoerspiel/paula/eltern'. " +
+test("eltern.js KIND_ID: /seiten/hoerspiel/mia/eltern → 'mia'", () => {
+  const result = extractKindId("/seiten/hoerspiel/mia/eltern");
+  assert.equal(result, "mia", (
+    "KIND_ID muss 'mia' sein für Pfad '/seiten/hoerspiel/mia/eltern'. " +
     "Tatsächlicher Wert: " + result
   ));
 });
 
 /**
- * Test 3 (negativ / Fallback) — Standalone-Dev-URL fällt auf 'paula'
+ * Test 3 (negativ / Fallback) — Standalone-Dev-URL fällt auf 'mia'
  *
  * Entwicklerlokal: eltern.js wird direkt als Datei oder über einen einfachen
  * HTTP-Server ohne den /seiten/hoerspiel/<kind_id>/eltern-Pfad geöffnet.
- * Das IIFE muss dann auf den Fallback 'paula' zurückfallen (Z. 23, "nie im
+ * Das IIFE muss dann auf den Fallback 'mia' zurückfallen (Z. 23, "nie im
  * Produktivbetrieb wirksam").
  */
-test("eltern.js KIND_ID: Dev-Standalone-URL (kein Match) → Fallback 'paula'", () => {
+test("eltern.js KIND_ID: Dev-Standalone-URL (kein Match) → Fallback 'mia'", () => {
   // Typischer Dev-Pfad: /eltern oder /hoerspiel/eltern (kein kind_id-Segment)
   const result1 = extractKindId("/eltern");
-  assert.equal(result1, "paula", "Pfad '/eltern' soll auf Fallback 'paula' treffen");
+  assert.equal(result1, "mia", "Pfad '/eltern' soll auf Fallback 'mia' treffen");
 
   const result2 = extractKindId("/hoerspiel/eltern");
-  assert.equal(result2, "paula", "Pfad '/hoerspiel/eltern' soll auf Fallback 'paula' treffen");
+  assert.equal(result2, "mia", "Pfad '/hoerspiel/eltern' soll auf Fallback 'mia' treffen");
 
   const result3 = extractKindId("/");
-  assert.equal(result3, "paula", "Root-Pfad '/' soll auf Fallback 'paula' treffen");
+  assert.equal(result3, "mia", "Root-Pfad '/' soll auf Fallback 'mia' treffen");
 });
 
 /**
- * Test 4 — exportiertes KIND_ID-Modul-Binding mit location.pathname='neko'
+ * Test 4 — exportiertes KIND_ID-Modul-Binding mit location.pathname='finn'
  *
- * Prüft das tatsächliche eltern.js-Modul: wenn location.pathname='/seiten/hoerspiel/neko/eltern'
- * beim Laden gesetzt ist, muss das exportierte KIND_ID 'neko' sein.
+ * Prüft das tatsächliche eltern.js-Modul: wenn location.pathname='/seiten/hoerspiel/finn/eltern'
+ * beim Laden gesetzt ist, muss das exportierte KIND_ID 'finn' sein.
  */
-test("eltern.js exports: KIND_ID === 'neko' wenn pathname = /seiten/hoerspiel/neko/eltern", () => {
+test("eltern.js exports: KIND_ID === 'finn' wenn pathname = /seiten/hoerspiel/finn/eltern", () => {
   // Stubs müssen VOR require() gesetzt werden (IIFE läuft beim Laden)
   const doc      = makeDom();
   const fetchSpy = makeFetchSpy({ alben: [] });
 
-  // pathname auf neko setzen
+  // pathname auf finn setzen
   global.location = {
-    pathname: "/seiten/hoerspiel/neko/eltern",
+    pathname: "/seiten/hoerspiel/finn/eltern",
     hash:     "",
   };
   global.window = {
@@ -134,8 +134,8 @@ test("eltern.js exports: KIND_ID === 'neko' wenn pathname = /seiten/hoerspiel/ne
   delete require.cache[modulePath];
   const eltern = require(path.join(__dirname, "../static/eltern.js"));
 
-  assert.equal(eltern.KIND_ID, "neko", (
-    "Exportiertes KIND_ID muss 'neko' sein wenn location.pathname='/seiten/hoerspiel/neko/eltern'. " +
+  assert.equal(eltern.KIND_ID, "finn", (
+    "Exportiertes KIND_ID muss 'finn' sein wenn location.pathname='/seiten/hoerspiel/finn/eltern'. " +
     "Tatsächlicher Wert: " + eltern.KIND_ID
   ));
 });

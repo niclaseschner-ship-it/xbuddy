@@ -26,7 +26,7 @@ from skills.hoerspiel_folge_erzeugen_task import (
 from tasks import TurnContext
 
 # Reuse Fakes aus den existierenden Tests — gleicher Stil. Bare-Modulname
-# (analog test_hoerspiel_folge_erzeugen_niclas.py): eltern-chat/tests/skills
+# (analog test_hoerspiel_folge_erzeugen_emil.py): eltern-chat/tests/skills
 # liegt im prepend-Importpfad; der ambige `tests.skills.`-Paketpfad kollidiert
 # im repo-weiten Lauf mit dem Wurzel-`tests`-Namespace (#52-Muster, T1310).
 from test_hoerspiel_folge_erzeugen import (
@@ -120,7 +120,7 @@ def test_execute_returns_before_album_built(monkeypatch):
     ctx = _ctx(chat_id=55)
 
     # Erst propose() um Session-State zu füllen.
-    task.propose({"kind_id": "paula", "idee": "Stigi und der Tunnel"}, ctx)
+    task.propose({"kind_id": "mia", "idee": "Stigi und der Tunnel"}, ctx)
 
     # Wall-Clock von task.execute() messen.
     t0 = time.monotonic()
@@ -164,7 +164,7 @@ def test_polling_loop_frei_waehrend_job(monkeypatch):
 
     # Familienmitglied A startet einen HFE-Job (lange laufend).
     ctx_a = _ctx(chat_id=100)
-    task.propose({"kind_id": "paula", "idee": "Stigi und das lange Werk"}, ctx_a)
+    task.propose({"kind_id": "mia", "idee": "Stigi und das lange Werk"}, ctx_a)
     t0 = time.monotonic()
     task.execute({}, ctx_a)
     dt_a = time.monotonic() - t0
@@ -173,7 +173,7 @@ def test_polling_loop_frei_waehrend_job(monkeypatch):
     # Familienmitglied B macht währenddessen einen propose() — muss sofort durch.
     ctx_b = _ctx(chat_id=200, from_user_id=8)
     t1 = time.monotonic()
-    task.propose({"kind_id": "paula", "idee": "Stigi und die schnelle Bitte"}, ctx_b)
+    task.propose({"kind_id": "mia", "idee": "Stigi und die schnelle Bitte"}, ctx_b)
     dt_b = time.monotonic() - t1
 
     assert dt_a < 0.1, "A.execute() blockiert (HFE-11 AC2 verletzt)"
@@ -208,7 +208,7 @@ def test_second_confirm_blocked(monkeypatch):
     ctx = _ctx(chat_id=55)
 
     # Erster propose+execute → Worker läuft.
-    task.propose({"kind_id": "paula", "idee": "Stigi und der Wind"}, ctx)
+    task.propose({"kind_id": "mia", "idee": "Stigi und der Wind"}, ctx)
     first_result = task.execute({}, ctx)
     assert "wird gebaut" in first_result.lower() or "melde mich" in first_result.lower()
 
@@ -219,7 +219,7 @@ def test_second_confirm_blocked(monkeypatch):
     assert call_count["n"] == 1, "Worker muss tatsächlich gestartet sein"
 
     # Zweites propose+execute für denselben chat_id.
-    task.propose({"kind_id": "paula", "idee": "Stigi und das Echo"}, ctx)
+    task.propose({"kind_id": "mia", "idee": "Stigi und das Echo"}, ctx)
     t0 = time.monotonic()
     second_result = task.execute({}, ctx)
     dt = time.monotonic() - t0
@@ -261,7 +261,7 @@ def test_crash_handler_releases_slot(monkeypatch):
     task = _make_task(tg=tg)
     ctx = _ctx(chat_id=88)
 
-    task.propose({"kind_id": "paula", "idee": "Stigi und der Sturm"}, ctx)
+    task.propose({"kind_id": "mia", "idee": "Stigi und der Sturm"}, ctx)
     task.execute({}, ctx)
 
     # Worker abwarten.

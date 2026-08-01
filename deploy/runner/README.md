@@ -3,7 +3,7 @@
 ## Der Schmerz
 
 Der self-hosted GitHub-Actions-Runner `pi5-buddy`
-(`actions.runner.niclaseschner-ship-it-xbuddy.pi5-buddy.service`) hängt
+(`actions.runner.<your-org>-xbuddy.pi5-buddy.service`) hängt
 gelegentlich: er meldet `status: online`, `busy: false`, nimmt aber KEINE Jobs
 an. Workflow-Runs stehen 8–18 Minuten in `queued`, bis jemand den Service von
 Hand neustartet. Das blockiert die ganze CI — Claim-Flow und Auto-Merge stehen
@@ -86,7 +86,7 @@ in `--runner-name` oder der Service-Unit. In diesem Fall wird immer `no_action`
 zurückgegeben (kein stiller Restart).
 
 Flags / ENV-Overrides (nichts hartkodiert):
-`--repo` (Default `niclaseschner-ship-it/xbuddy`), `--service`,
+`--repo` (Default `<your-org>/xbuddy`), `--service`,
 `--runner-name` (Default `pi5-buddy`), `--threshold-seconds` (Default `300`).
 
 ## Schwellwert N und Timer-Intervall
@@ -138,7 +138,7 @@ sudo sed \
   -e 's|__XBUDDY_PYTHON__|/home/buddy/apps/venv/bin/python|g' \
   -e 's|__XBUDDY_DATA__|/home/buddy/xbuddy-data|g' \
   -e 's|__XBUDDY_RUNNER_NAME__|pi5-buddy|g' \
-  -e 's|__XBUDDY_RUNNER_SERVICE__|actions.runner.niclaseschner-ship-it-xbuddy.pi5-buddy.service|g' \
+  -e 's|__XBUDDY_RUNNER_SERVICE__|actions.runner.<your-org>-xbuddy.pi5-buddy.service|g' \
   deploy/runner/xbuddy-runner-health.service \
   | sudo tee /etc/systemd/system/xbuddy-runner-health.service >/dev/null
 

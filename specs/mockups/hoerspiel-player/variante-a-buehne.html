@@ -31,14 +31,14 @@
 </style>
 </head>
 <body>
-<div class="mock-caption"><b>Variante A — „Bühne".</b> Der Player ist die ganze Startfläche: was zuletzt lief, groß und sofort weiterhörbar. Folgen-Wechsel über die Leiste unten. <i>Live-Daten (Paulas 13 / Nekos 8 Folgen), echtes Cover + Tokens; Kind-Foto = Initialen-Stand-in (FAM-8 real).</i></div>
+<div class="mock-caption"><b>Variante A — „Bühne".</b> Der Player ist die ganze Startfläche: was zuletzt lief, groß und sofort weiterhörbar. Folgen-Wechsel über die Leiste unten. <i>Live-Daten (Mias 13 / Finns 8 Folgen), echtes Cover + Tokens; Kind-Foto = Initialen-Stand-in (FAM-8 real).</i></div>
 <div class="phone">
   <div class="screen">
     <div class="statusbar"><span>9:41</span><span>◍ ▮▮▮</span></div>
     <div class="topbar">
       <div class="pille" id="pille" role="button" title="Kind wechseln">
         <span class="face" id="face">P</span>
-        <span class="who tag-caveat" id="who">Paula</span>
+        <span class="who tag-caveat" id="who">Mia</span>
         <span class="swap">↔ wechseln</span>
       </div>
       <div class="gear" title="Einstellungen (für Eltern)">
@@ -67,7 +67,7 @@
         <div class="weiterhint">↳ weiter ab Track 2 von 6</div>
       </div>
       <div class="strip">
-        <h3 id="stripH">Paulas Folgen</h3>
+        <h3 id="stripH">Mias Folgen</h3>
         <div class="rail" id="rail"></div>
       </div>
     </div>
@@ -105,7 +105,7 @@ function render(){
     rail.appendChild(c);
   });
 }
-document.getElementById('pille').addEventListener('click',()=>{HSP.setKind(HSP.current()==='paula'?'neko':'paula');render();});
+document.getElementById('pille').addEventListener('click',()=>{HSP.setKind(HSP.current()==='mia'?'finn':'mia');render();});
 HSP.load().then(()=>{ico();render();});
 </script>
 </body>

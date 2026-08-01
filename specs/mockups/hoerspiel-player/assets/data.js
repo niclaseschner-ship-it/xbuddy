@@ -1,27 +1,27 @@
 // Geteilte Daten-Schicht für die Hörspiel-Player-Mockups.
-// Lädt die LIVE-Snapshots (paula-alben.json / neko-alben.json / manifest)
+// Lädt die LIVE-Snapshots (mia-alben.json / finn-alben.json / manifest)
 // per fetch (über den Mockup-HTTP-Server, relative Pfade — Werft #532).
 window.HSP = (function () {
   const COVER = "./assets/cover-default.jpg";
-  const state = { kind: "paula", data: { paula: [], neko: [] }, manifest: null };
+  const state = { kind: "mia", data: { mia: [], finn: [] }, manifest: null };
 
   // Umschalter-Kinder — Foto liefert 404 (FAM-8 real in der App),
   // Mockup nutzt Initialen-Fallback, Ring-Farbe je Kind.
   const KINDER = {
-    paula: { name: "Paula", initiale: "P", ring: "var(--kids-ring-orange, #E58E3F)" },
-    neko:  { name: "Neko",  initiale: "N", ring: "#7E6BB0" },
+    mia: { name: "Mia", initiale: "P", ring: "var(--kids-ring-orange, #E58E3F)" },
+    finn:  { name: "Finn",  initiale: "N", ring: "#7E6BB0" },
   };
 
   async function load() {
     const [p, n, m] = await Promise.all([
-      fetch("./assets/paula-alben.json").then((r) => r.json()),
-      fetch("./assets/neko-alben.json").then((r) => r.json()),
-      fetch("./assets/paula-latest-manifest.json").then((r) => r.json()),
+      fetch("./assets/mia-alben.json").then((r) => r.json()),
+      fetch("./assets/finn-alben.json").then((r) => r.json()),
+      fetch("./assets/mia-latest-manifest.json").then((r) => r.json()),
     ]);
     // Sortierung: neueste Folge zuerst (Mockup-Default; OPEN-HSP-I offen).
     const byNumDesc = (a, b) => b.nummer - a.nummer;
-    state.data.paula = p.sort(byNumDesc);
-    state.data.neko = n.sort(byNumDesc);
+    state.data.mia = p.sort(byNumDesc);
+    state.data.finn = n.sort(byNumDesc);
     state.manifest = m;
     return state;
   }

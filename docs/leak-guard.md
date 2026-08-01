@@ -33,8 +33,8 @@ gitleaks-Binary (falls nicht vorhanden): Release von
 
 Bis **#1719** den Baum auf generische Werte (`kind1/kind2/kind3`, `<tailscale-id>`
 etc.) scrubbt, trägt HEAD ~2143 Treffer — überwiegend die **funktionalen Slugs**
-`paula/neko/niclas` (Buddy-IDs im Live-Code), plus die echten Secrets
-(`taile235cf`, Heim-IP, Chat-ID). Der CI-Job ist bis dahin **bewusst rot** als
+`mia/finn/emil` (Buddy-IDs im Live-Code), plus die echten Secrets
+(`<tailscale-id>`, Heim-IP, Chat-ID). Der CI-Job ist bis dahin **bewusst rot** als
 Fortschritts-Anzeige des Clean.
 
 **Erst NACH #1719 (gitleaks detect grün auf HEAD)** den `leak-guard`-Job in die

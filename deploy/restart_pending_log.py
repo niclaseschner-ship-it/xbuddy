@@ -36,10 +36,10 @@ GIT_PULL_RE = re.compile(
 )
 # SHA-Range aus stdout: "abc1234..def5678  main       -> origin/main"
 SHA_RANGE_RE = re.compile(r"\b([0-9a-f]{7,40})\.\.([0-9a-f]{7,40})\b")
-# Repo-Indikator aus stdout: "From github.com:niclaseschner-ship-it/xbuddy"
+# Repo-Indikator aus stdout: "From github.com:<your-org>/xbuddy"
 # (Codex-Pass-2-Fix: arbeitstag-Cleanup laeuft im xbuddy-CWD ohne -C, ohne
 # Pfad-im-Command — Repo-Indikator muss aus Pull-Output kommen.)
-XBUDDY_REMOTE_RE = re.compile(r"From\s+github\.com[:/]niclaseschner-ship-it/xbuddy\b")
+XBUDDY_REMOTE_RE = re.compile(r"From\s+github\.com[:/]<your-org>/xbuddy\b")
 # Markdown-Tabellen-Zeile: | `pfad/` ... | `sudo systemctl restart svc` |
 # Wir extrahieren nur den ersten Backtick-Pfad und den restart-Befehl.
 MAPPING_ROW_RE = re.compile(
@@ -73,7 +73,7 @@ def services_for_paths(changed_paths, mapping):
     Ein `git pull` sieht Kind-Daten nie — alle `hoerspiel/`-Repo-Touches sind
     Shared-Code und brauchen BEIDE Services. Der frueher gedachte
     'kind_id im Pfad'-Discriminator funktioniert nicht (Test-/CSS-/Mock-
-    Dateien koennen 'paula'/'neko' im Namen tragen ohne kind-spezifisch zu
+    Dateien koennen 'mia'/'finn' im Namen tragen ohne kind-spezifisch zu
     sein) und wird hier weggelassen.
     """
     services = set()
@@ -81,12 +81,12 @@ def services_for_paths(changed_paths, mapping):
         if path.startswith("hoerspiel/"):
             # Shared-Code: BEIDE Services (Kind-Daten leben nicht im Repo).
             services.add("sudo systemctl restart xbuddy-hoerspiel")
-            services.add("sudo systemctl restart xbuddy-hoerspiel-neko")
+            services.add("sudo systemctl restart xbuddy-hoerspiel-finn")
             continue
         for path_token, cmd in mapping:
             # path_token kann "router/" oder "deploy/nginx/xbuddy-origin.conf"
             # oder mit Sonderfall-Suffix sein. Wir matchen Prefix.
-            clean_token = path_token.split(" ")[0]  # "hoerspiel/" aus "hoerspiel/ (Paula-Daten..."
+            clean_token = path_token.split(" ")[0]  # "hoerspiel/" aus "hoerspiel/ (Mia-Daten..."
             if path == clean_token or path.startswith(clean_token):
                 services.add(cmd)
                 break

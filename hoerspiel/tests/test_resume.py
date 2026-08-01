@@ -17,7 +17,7 @@ def test_tracks_in_position_reihenfolge_sortiert(data_root, fake_llm, fake_tts, 
     text = "\n\n".join(["A. " * 30, "B. " * 30, "C. " * 30, "D. " * 30])
     ergebnis = album_builder.baue_album(
         titel="T", text=text, voice="shimmer", idee="x",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
     )
     with open(ergebnis.manifest_pfad) as f:
         manifest = json.load(f)
@@ -36,11 +36,11 @@ def test_now_injection_steuert_erstellt_am_und_konfigurierbar(data_root, fake_ll
 
     e1 = album_builder.baue_album(
         titel="A", text="X.\n\nY.", voice="shimmer", idee="x",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=now_a,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=now_a,
     )
     e2 = album_builder.baue_album(
         titel="B", text="P.\n\nQ.", voice="onyx", idee="y",
-        data_root=data_root, kind_id="paula", llm=fake_llm, tts_engine=fake_tts, now=now_b,
+        data_root=data_root, kind_id="mia", llm=fake_llm, tts_engine=fake_tts, now=now_b,
     )
     with open(e1.manifest_pfad) as f:
         m1 = json.load(f)

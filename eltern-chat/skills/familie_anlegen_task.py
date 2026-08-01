@@ -2,7 +2,7 @@
 familie-anlegen.md FAA-12 + E-FAA-4 und eltern-chat.md EC-8/EC-10 (Refs #60).
 
 Diese Aufgabe ist der V1-Trigger der `familie_anlegen`-Funktion (FAA-1):
-versteht der Agent eine natürlichsprachige Bitte („leg mir Paula als Kind
+versteht der Agent eine natürlichsprachige Bitte („leg mir Mia als Kind
 an"), schlägt er die Anlage vor — nach EC-10-Bestätigung startet der Task die
 Funktion im Privatchat des Aufrufers.
 

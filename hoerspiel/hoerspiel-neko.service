@@ -1,16 +1,16 @@
-# XBuddy Hörspiel-Buddy — systemd-Service-Vorlage Neko-Instanz (RAT-17, HSP-28a).
+# XBuddy Hörspiel-Buddy — systemd-Service-Vorlage Finn-Instanz (RAT-17, HSP-28a).
 #
-# Zweite explizite Hörspiel-Instanz (Kind: Neko). Handverdrahtet gemäß
+# Zweite explizite Hörspiel-Instanz (Kind: Finn). Handverdrahtet gemäß
 # RAT-17 Entscheidung Option A — KEINE Instanz-Registry, KEIN Port-Offset-
 # Algorithmus, KEINE generische Mehr-Instanz-Konvention. HSP-28a verlangt
-# zwei explizite Einträge (Paula + Neko) an vier Stellen; dies ist der
-# systemd-Eintrag für Neko.
+# zwei explizite Einträge (Mia + Finn) an vier Stellen; dies ist der
+# systemd-Eintrag für Finn.
 #
 # Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
 # (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
 #
-# Port 5055 (PORT-2, `xbuddy-hoerspiel-neko`, HSP-28a).
-# Daten-Bereich liegt außerhalb des Checkouts (SVC-5): __XBUDDY_DATA__/hoerspiel/neko.
+# Port 5055 (PORT-2, `xbuddy-hoerspiel-finn`, HSP-28a).
+# Daten-Bereich liegt außerhalb des Checkouts (SVC-5): __XBUDDY_DATA__/hoerspiel/finn.
 # Geheimnisse (Anthropic-/Azure-Keys) kommen aus einer ENV-Datei außerhalb
 # des Repos (CONFIG-3, HSP-27); die EnvironmentFile-Zeile zeigt den
 # Standard-Pfad — der Installer ersetzt __XBUDDY_HOME__.
@@ -19,7 +19,7 @@
 # (verschoben mit #1014).
 
 [Unit]
-Description=XBuddy Hörspiel-Buddy-App (Neko-Instanz)
+Description=XBuddy Hörspiel-Buddy-App (Finn-Instanz)
 After=network-online.target
 Wants=network-online.target
 
@@ -28,9 +28,9 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-Environment=HOERSPIEL_DATA_ROOT=__XBUDDY_DATA__/hoerspiel/neko
-Environment=HOERSPIEL_KIND_ID=neko
-EnvironmentFile=-__XBUDDY_HOME__/xbuddy-hoerspiel-neko.env
+Environment=HOERSPIEL_DATA_ROOT=__XBUDDY_DATA__/hoerspiel/finn
+Environment=HOERSPIEL_KIND_ID=finn
+EnvironmentFile=-__XBUDDY_HOME__/xbuddy-hoerspiel-finn.env
 ExecStart=__XBUDDY_PYTHON__ -m hoerspiel.main --host 127.0.0.1 --port 5055
 Restart=on-failure
 RestartSec=10

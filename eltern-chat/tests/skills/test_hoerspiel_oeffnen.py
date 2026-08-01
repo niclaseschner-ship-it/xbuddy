@@ -97,7 +97,7 @@ _MINI_APP_URL = _MINI_APP_BASE + _HOE_APP_PATH
 
 def test_HOE5_player_pwa_url():
     """AC3/HOE-5: HOE-Aufruf → url zeigt auf Player-PWA, kein Hash."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Paulas erstes Abenteuer")])
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Mias erstes Abenteuer")])
     result = hoerspiel_oeffnen(
         chat_id=42,
         from_user_id=7,

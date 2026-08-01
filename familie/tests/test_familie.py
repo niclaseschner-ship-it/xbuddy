@@ -31,17 +31,17 @@ from familie import registry as registry_mod  # noqa: E402
 # ============================================================
 
 # Eine gültige Registry-Datei: zwei Erwachsene, ein Kind.
-# `vera` trägt absichtlich kein Foto (FAM-5/FAM-8: Person ohne Foto).
+# `petra` trägt absichtlich kein Foto (FAM-5/FAM-8: Person ohne Foto).
 DEMO_REGISTRY = {
     "erwachsene": [
-        {"id": "niclas", "name": "Niclas", "ring": "blue",
-         "foto": "niclas.png", "email": "niclas@example.org",
+        {"id": "emil", "name": "Emil", "ring": "blue",
+         "foto": "emil.png", "email": "emil@example.org",
          "telegram_id": 100000001},
-        {"id": "vera", "name": "Vera", "ring": "orange",
-         "email": "vera@example.org"},
+        {"id": "petra", "name": "Petra", "ring": "orange",
+         "email": "petra@example.org"},
     ],
     "kinder": [
-        {"id": "paula", "name": "Paula", "ring": "purple", "foto": "paula.png"},
+        {"id": "mia", "name": "Mia", "ring": "purple", "foto": "mia.png"},
     ],
 }
 
@@ -63,14 +63,14 @@ def _png_bytes():
 def demo_instanz(tmp_path):
     """Schreibt DEMO_REGISTRY + ein Foto-Verzeichnis und liefert die Pfade.
 
-    Nur `niclas` und `paula` haben eine Foto-Datei; `vera` hat keine.
+    Nur `emil` und `mia` haben eine Foto-Datei; `petra` hat keine.
     """
     reg_path = tmp_path / "familie.json"
     reg_path.write_text(json.dumps(DEMO_REGISTRY))
     fotos = tmp_path / "fotos"
     fotos.mkdir()
-    (fotos / "niclas.png").write_bytes(_png_bytes())
-    (fotos / "paula.png").write_bytes(_png_bytes())
+    (fotos / "emil.png").write_bytes(_png_bytes())
+    (fotos / "mia.png").write_bytes(_png_bytes())
     return {"registry": str(reg_path), "fotos": str(fotos)}
 
 
@@ -93,7 +93,7 @@ def test_FAM_1_registry_describes_exactly_one_family(demo_instanz):
     reg = registry_mod.load(demo_instanz["registry"])
     assert isinstance(reg, registry_mod.Registry)
     # Alle Personen aus erwachsene + kinder in einer Liste.
-    assert {p.id for p in reg.alle()} == {"niclas", "vera", "paula"}
+    assert {p.id for p in reg.alle()} == {"emil", "petra", "mia"}
 
 
 # ============================================================
@@ -105,12 +105,12 @@ def test_FAM_2_two_kinds_of_persons(demo_instanz):
     reg = registry_mod.load(demo_instanz["registry"])
     arten = {p.id: p.art for p in reg.alle()}
     assert arten == {
-        "niclas": registry_mod.KIND_ERWACHSENE,
-        "vera":   registry_mod.KIND_ERWACHSENE,
-        "paula":  registry_mod.KIND_KINDER,
+        "emil": registry_mod.KIND_ERWACHSENE,
+        "petra":   registry_mod.KIND_ERWACHSENE,
+        "mia":  registry_mod.KIND_KINDER,
     }
-    assert reg.get("niclas").is_erwachsene()
-    assert reg.get("paula").is_kind()
+    assert reg.get("emil").is_erwachsene()
+    assert reg.get("mia").is_kind()
 
 
 # ============================================================
@@ -121,15 +121,15 @@ def test_FAM_3_person_fields_required_and_optional(demo_instanz):
     """Pflichtfelder id/name/ring; optionale Merkmale foto/email/telegram_id.
     Ein fehlendes optionales Merkmal ist kein Fehler."""
     reg = registry_mod.load(demo_instanz["registry"])
-    niclas = reg.get("niclas")
-    assert (niclas.id, niclas.name, niclas.ring) == ("niclas", "Niclas", "blue")
-    assert niclas.foto == "niclas.png"
-    assert niclas.email == "niclas@example.org"
-    assert niclas.telegram_id == 100000001
-    # vera: Erwachsene ohne Foto und ohne telegram_id — optionale Felder None.
-    vera = reg.get("vera")
-    assert vera.foto is None and vera.telegram_id is None
-    assert vera.email == "vera@example.org"
+    emil = reg.get("emil")
+    assert (emil.id, emil.name, emil.ring) == ("emil", "Emil", "blue")
+    assert emil.foto == "emil.png"
+    assert emil.email == "emil@example.org"
+    assert emil.telegram_id == 100000001
+    # petra: Erwachsene ohne Foto und ohne telegram_id — optionale Felder None.
+    petra = reg.get("petra")
+    assert petra.foto is None and petra.telegram_id is None
+    assert petra.email == "petra@example.org"
 
 
 def test_FAM_3_missing_required_field_is_error(tmp_path):
@@ -176,21 +176,21 @@ def test_FAM_4_ring_outside_palette_is_error(tmp_path):
 def test_FAM_5_person_may_or_may_not_have_a_photo(demo_instanz):
     """Eine Person kann ein Foto haben oder nicht — beides ist gültig."""
     reg = registry_mod.load(demo_instanz["registry"])
-    assert reg.get("niclas").foto == "niclas.png"   # mit Foto
-    assert reg.get("vera").foto is None             # ohne Foto, kein Fehler
+    assert reg.get("emil").foto == "emil.png"   # mit Foto
+    assert reg.get("petra").foto is None             # ohne Foto, kein Fehler
 
 
 def test_FAM_5_foto_pfad_resolves_only_existing_files(demo_instanz):
     """foto_pfad liefert nur einen Pfad, wenn die Bilddatei wirklich existiert.
-    paula hat foto='paula.png', aber keine Datei wird hier extra entfernt —
-    niclas hat Datei, paula hat Datei, vera hat kein foto."""
+    mia hat foto='mia.png', aber keine Datei wird hier extra entfernt —
+    emil hat Datei, mia hat Datei, petra hat kein foto."""
     reg = registry_mod.load(demo_instanz["registry"])
     fotos = demo_instanz["fotos"]
-    assert registry_mod.foto_pfad(reg, fotos, "niclas") is not None
-    assert registry_mod.foto_pfad(reg, fotos, "vera") is None  # Person ohne Foto
+    assert registry_mod.foto_pfad(reg, fotos, "emil") is not None
+    assert registry_mod.foto_pfad(reg, fotos, "petra") is None  # Person ohne Foto
     # Foto-Dateiname gesetzt, aber Datei fehlt → None.
-    os.remove(os.path.join(fotos, "paula.png"))
-    assert registry_mod.foto_pfad(reg, fotos, "paula") is None
+    os.remove(os.path.join(fotos, "mia.png"))
+    assert registry_mod.foto_pfad(reg, fotos, "mia") is None
 
 
 # ============================================================
@@ -243,19 +243,19 @@ def test_FAM_7_all_persons(client):
     r = client.get("/api/v1/familie/personen")
     assert r.status_code == 200
     body = r.get_json()
-    assert {p["id"] for p in body} == {"niclas", "vera", "paula"}
+    assert {p["id"] for p in body} == {"emil", "petra", "mia"}
     # foto ist nur der Dateiname, kein Binär.
-    niclas = next(p for p in body if p["id"] == "niclas")
-    assert niclas["foto"] == "niclas.png"
-    assert niclas["ring"] == "blue"
+    emil = next(p for p in body if p["id"] == "emil")
+    assert emil["foto"] == "emil.png"
+    assert emil["ring"] == "blue"
 
 
 def test_FAM_7_one_person_by_id(client):
     """Schnittstelle: eine Person je id."""
-    r = client.get("/api/v1/familie/personen/paula")
+    r = client.get("/api/v1/familie/personen/mia")
     assert r.status_code == 200
     body = r.get_json()
-    assert body["id"] == "paula"
+    assert body["id"] == "mia"
     assert body["art"] == registry_mod.KIND_KINDER
     # Kind ohne email → Feld fehlt im Schnittstellen-Objekt.
     assert "email" not in body
@@ -274,7 +274,7 @@ def test_FAM_7_unknown_id_returns_404(client):
 
 def test_FAM_8_known_id_with_photo_returns_200_image(client):
     """Bekannte id mit Foto: 200 mit der Bilddatei."""
-    r = client.get("/api/v1/familie/foto/niclas")
+    r = client.get("/api/v1/familie/foto/emil")
     assert r.status_code == 200
     # Die ausgelieferten Bytes sind das PNG.
     assert r.data.startswith(b"\x89PNG")
@@ -282,7 +282,7 @@ def test_FAM_8_known_id_with_photo_returns_200_image(client):
 
 def test_FAM_8_known_id_without_photo_returns_404(client):
     """Bekannte id ohne Foto: 404."""
-    r = client.get("/api/v1/familie/foto/vera")
+    r = client.get("/api/v1/familie/foto/petra")
     assert r.status_code == 404
 
 
@@ -705,18 +705,18 @@ def test_FAM_7_endpoint_reflects_external_mutation_without_restart(demo_instanz)
     # (a) Erst-Lesung — DEMO-Stand: drei Personen.
     r1 = client.get("/api/v1/familie/personen")
     assert r1.status_code == 200
-    assert {p["id"] for p in r1.get_json()} == {"niclas", "vera", "paula"}
+    assert {p["id"] for p in r1.get_json()} == {"emil", "petra", "mia"}
 
     # (b) Extern mutieren: eine vierte Person über die Schreib-Schnittstelle.
     extern = registry_mod.load(demo_instanz["registry"])
     extern.add_person(registry_mod.Person(
-        "neko", "Neko", "teal", registry_mod.KIND_KINDER))
+        "finn", "Finn", "teal", registry_mod.KIND_KINDER))
     registry_mod.save(extern, demo_instanz["registry"])
 
     # (c) Ohne Service-Restart: die neue Person ist da.
     r2 = client.get("/api/v1/familie/personen")
     assert r2.status_code == 200
-    assert {p["id"] for p in r2.get_json()} == {"niclas", "vera", "paula", "neko"}
+    assert {p["id"] for p in r2.get_json()} == {"emil", "petra", "mia", "finn"}
 
 
 def test_FAM_7_in_memory_mode_unchanged_when_no_registry_path(demo_instanz):
@@ -730,11 +730,11 @@ def test_FAM_7_in_memory_mode_unchanged_when_no_registry_path(demo_instanz):
     # Extern mutieren — sollte NICHT sichtbar werden, weil kein Disk-Reload.
     extern = registry_mod.load(demo_instanz["registry"])
     extern.add_person(registry_mod.Person(
-        "neko", "Neko", "teal", registry_mod.KIND_KINDER))
+        "finn", "Finn", "teal", registry_mod.KIND_KINDER))
     registry_mod.save(extern, demo_instanz["registry"])
 
     r = client.get("/api/v1/familie/personen")
-    assert {p["id"] for p in r.get_json()} == {"niclas", "vera", "paula"}
+    assert {p["id"] for p in r.get_json()} == {"emil", "petra", "mia"}
 
 
 # ============================================================
@@ -819,7 +819,7 @@ def test_FAM_12_post_duplicate_telegram_id_returns_400(write_client):
     """Bereits vergebene `telegram_id` → 400 (FAA-10/FAM-3 — eine ID,
     eine Person)."""
     client, _ = write_client
-    # niclas hat telegram_id 100000001 in DEMO_REGISTRY.
+    # emil hat telegram_id 100000001 in DEMO_REGISTRY.
     r = client.post("/api/v1/familie/personen", json={
         "name": "Doppelt", "telegram_id": 100000001})
     assert r.status_code == 400
@@ -846,7 +846,7 @@ def test_FAM_12_post_persists_atomically_to_registry(write_client):
     # Bestand byte-konsistent (DEMO drei Personen + neue → vier).
     r_get = client.get("/api/v1/familie/personen")
     ids = {p["id"] for p in r_get.get_json()}
-    assert {"niclas", "vera", "paula", neue_id} == ids
+    assert {"emil", "petra", "mia", neue_id} == ids
 
 
 def test_FAM_12_parallel_posts_yield_two_distinct_ids(write_client):

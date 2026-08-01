@@ -108,7 +108,7 @@ def test_resolve_data_defaults(tmp_path):
     cfg = config_mod.resolve_data(str(tmp_path / "fehlt.json"), env={})
     # #995: Default-Voice ist onyx (war shimmer bis 2026-06-18, Familien-Setzung).
     assert cfg.default_voice == "onyx"
-    assert cfg.serien_name == ""  # T1382: neutral default, kein 'Stigi & Co.'-Paula-Leak
+    assert cfg.serien_name == ""  # T1382: neutral default, kein 'Stigi & Co.'-Mia-Leak
     assert cfg.pause_absatz_sek == 0.55
     assert cfg.pause_titel_sek == 1.8
     assert cfg.playback_tempo == 1.0

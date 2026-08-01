@@ -11,7 +11,7 @@
 # Der Hook liest automatisch die repo-eigene .gitleaks.toml (Custom-Ruleset).
 #
 # HINWEIS (Übergang bis #1719-Scrub): der Klarnamen-Teil des Rulesets feuert
-# noch auf die funktionalen Slugs (paula/neko/niclas) im Live-Code — bis #1719
+# noch auf die funktionalen Slugs (mia/finn/emil) im Live-Code — bis #1719
 # den Baum auf kind1/kind2/kind3 scrubbt, kann `pre-commit run --all-files`
 # darauf anschlagen. Der Hook prüft aber per Default nur die GESTAGEDEN Änderungen
 # (nur neu eingeführte Treffer), nicht den ganzen Baum — normale Commits, die

@@ -6,7 +6,7 @@
 set -euo pipefail
 
 DATA_ROOT="/home/buddy/xbuddy-data/hoerspiel/data"
-BRAINSTORM_DIR="/home/buddy/brainstorm/ideas/paula-hoerspiel-app"
+BRAINSTORM_DIR="/home/buddy/brainstorm/ideas/mia-hoerspiel-app"
 PHOTO_SRC="/home/buddy/xbuddy-data/photo/medien/foto-01.jpg"
 
 # -- Verzeichnisstruktur anlegen (idempotent) ----------------------------

@@ -4,7 +4,7 @@ Durabler Gate-B-Beleg (PW-54) für `specs/platform/heim-shell.md` (SHELL).
 Ratifiziert 2026-06-30 (Gate B): **Rail 280px, einspaltig** (siehe RAT-25).
 
 - `picker.html` — interaktiver Rail-Breiten-Picker (280 / 320 / 600), gegen
-  **echte Daten** gebaut: linke Hälfte = echtes Render von `paulas-panel-01`
+  **echte Daten** gebaut: linke Hälfte = echtes Render von `mias-panel-01`
   (8 echte Tiles + echte ARASAAC-Icons), rechte Hälfte = echtes Render der
   Wochenplan-View (`/display/plan/woche`). Lokal öffnen oder via
   `python3 -m http.server` servieren.

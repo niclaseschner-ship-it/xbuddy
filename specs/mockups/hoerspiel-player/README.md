@@ -5,7 +5,7 @@ Durables Gate-B-Artefakt (PW-54) der Hörspiel-Player-Werft. Gewählte Richtung:
 `player-full.html` → `settings.html`). A/C sind die verworfenen Vergleichs-
 Richtungen. Lokal ansehen: `python3 -m http.server 8770 --directory .`
 
-Live-geerdet: echte Folgen-Titel (Paula 13 / Neko 8), echtes Default-Cover +
+Live-geerdet: echte Folgen-Titel (Mia 13 / Finn 8), echtes Default-Cover +
 Design-Tokens, echtes Manifest (6 Kapitel) im vollen Player, echte Config-Werte
 in den Settings. Kind-Foto in der Pille = Initialen-Stand-in (App liest FAM-8).
 Spec: `specs/buddies/hoerspiel.md` HSP-47..55.

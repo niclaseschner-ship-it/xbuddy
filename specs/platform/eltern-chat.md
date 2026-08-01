@@ -1352,7 +1352,7 @@ Verarbeitung im sequenziellen `poll_loop`.
 **Akzeptanz-Begründung (Codex-Brüche in beiden Pässen):** Eine
 optimistische Variante hätte mehrere Updates in einer unbounded Queue
 puffern und den Offset sofort erhöhen können — dann wäre Telegrams
-24-h-Retention bei Crash wertlos und Sophias Nachricht ginge verloren.
+24-h-Retention bei Crash wertlos und Lenas Nachricht ginge verloren.
 Eine bloß-bounded-Variante (`Queue(maxsize=1)` ohne explizites ACK)
 hätte einen subtilen Edge-Case offengelassen: Processor entnimmt U1
 (Slot frei), Reader legt U2 ab und erhöht Offset auf U2+1 — bei Crash
@@ -1398,7 +1398,7 @@ Aktivitäts-Leak. Akzeptanz-Begründung: (a) Intra-Familie-1 ist Privatchat
 zwischen Bot und bekannten Familienmitgliedern — fremder Spammer findet
 den Bot-Token selten; (b) Inter-Familie-Trennung läuft via eigener
 Bot-Instanz pro Familie (Multi-Tenancy-Setzung 2026-06-15,
-`project_familie_2_3_eigener_bot.md`); (c) der UX-Gewinn (Sophia sieht
+`project_familie_2_3_eigener_bot.md`); (c) der UX-Gewinn (Lena sieht
 „beschäftigt" statt 90 s Stille) wiegt das Aktivitäts-Leak auf.
 Falls dieses Trade-off später kippt: EC-39 nach Auth verschieben =
 Sofort-Typing erst nach Live-Mitgliedschaftsprüfung (`is_authorized`-
@@ -1410,7 +1410,7 @@ und geloggt.
 
 **Wirkung für die Familie:** Während Nic eine Hörspiel-Folge anstößt
 (HFE.propose() 20–90 s, Polling-Loop blockiert für `dispatch`) sieht
-Sophia binnen 1–2 s nach ihrer Nachricht einen Typing-Indikator
+Lena binnen 1–2 s nach ihrer Nachricht einen Typing-Indikator
 („Bot tippt"), der durch den Renewer alle 4 s erneuert wird, bis ihr
 Update verarbeitet ist und der Bot antwortet. Statt 90 s Stille:
 durchgehendes „beschäftigt"-Signal. Quer-Verweis: EC-25 deckt Typing
@@ -1486,7 +1486,7 @@ mir die <X> einstellungen«, »<X> app öffnen«, »<X>-Optionen«."
 explizite Achsen-Kreuzungs-Phrase robust geroutet (Claude robuster
 gegenüber generischen Settings-Triggern). Nach Mistral-Switch
 (`mistral-medium-2508`) zeigten Familien-Live-Repros (Refs #1075,
-conversations.db chat 464143432, seq 600/602/604 am 2026-06-22):
+conversations.db chat <chat-id>, seq 600/602/604 am 2026-06-22):
 „Schick mir die Hörbuch settings", „Schick mir die settings", „Gib
 mir die Routine settings" wurden **nicht** zu Tool-Calls, sondern
 halluzinierten Markdown-Knöpfen im Antwort-Text (siehe EC-41). EC-40
@@ -1567,7 +1567,7 @@ App-spezifischer Reflex bestehen, ist aber redundant zu EC-41 und
 gilt mechanisch über EC-41 auch für EZG / RAO / MAU.
 
 **Begründung.** Live-Repro 2026-06-22 (Refs #1075,
-conversations.db chat 464143432, seq 601/603/605): unter
+conversations.db chat <chat-id>, seq 601/603/605): unter
 `mistral-medium-2508` halluzinierte der Agent statt eines Tool-Calls
 literale Markdown-Knöpfe in den Antwort-Text — z. B. *„👉 **Öffne
 die App mit diesem Knopf:** [**Routine-Anpassen-Mini-App öffnen**]"*.

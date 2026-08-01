@@ -1,25 +1,25 @@
-# XBuddy Hörspiel-Buddy — systemd-Service-Vorlage niclas-Instanz (RAT-17, T1347).
+# XBuddy Hörspiel-Buddy — systemd-Service-Vorlage emil-Instanz (RAT-17, T1347).
 #
-# Dritte explizite Hörspiel-Instanz (Kind: niclas). Handverdrahtet gemäß
+# Dritte explizite Hörspiel-Instanz (Kind: emil). Handverdrahtet gemäß
 # RAT-17 Entscheidung Option A — KEINE Instanz-Registry, KEIN Port-Offset-
 # Algorithmus, KEINE generische Mehr-Instanz-Konvention. HSP-28a verlangt
-# zwei explizite Einträge (Paula + Neko) an vier Stellen; T1347 ergänzt niclas
-# als dritten Eintrag an vier Stellen; dies ist der systemd-Eintrag für niclas.
+# zwei explizite Einträge (Mia + Finn) an vier Stellen; T1347 ergänzt emil
+# als dritten Eintrag an vier Stellen; dies ist der systemd-Eintrag für emil.
 #
 # Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
 # (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
 #
-# Port 5056 (PORT-2, `xbuddy-hoerspiel-niclas`, T1347).
-# Daten-Bereich liegt außerhalb des Checkouts (SVC-5): __XBUDDY_DATA__/hoerspiel/niclas.
+# Port 5056 (PORT-2, `xbuddy-hoerspiel-emil`, T1347).
+# Daten-Bereich liegt außerhalb des Checkouts (SVC-5): __XBUDDY_DATA__/hoerspiel/emil.
 # Geheimnisse (Anthropic-/Azure-Keys) kommen aus einer ENV-Datei außerhalb
 # des Repos (CONFIG-3, HSP-27); die EnvironmentFile-Zeile zeigt den
 # Standard-Pfad — der Installer ersetzt __XBUDDY_HOME__.
 #
 # Ablage: liegt gemäß SVC-2/BUD-1a neben dem Code unter `hoerspiel/`
-# (analoges Muster zu hoerspiel-neko.service).
+# (analoges Muster zu hoerspiel-finn.service).
 
 [Unit]
-Description=XBuddy Hörspiel-Buddy-App (niclas-Instanz)
+Description=XBuddy Hörspiel-Buddy-App (emil-Instanz)
 After=network-online.target
 Wants=network-online.target
 
@@ -28,9 +28,9 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-Environment=HOERSPIEL_DATA_ROOT=__XBUDDY_DATA__/hoerspiel/niclas
-Environment=HOERSPIEL_KIND_ID=niclas
-EnvironmentFile=-__XBUDDY_HOME__/xbuddy-hoerspiel-niclas.env
+Environment=HOERSPIEL_DATA_ROOT=__XBUDDY_DATA__/hoerspiel/emil
+Environment=HOERSPIEL_KIND_ID=emil
+EnvironmentFile=-__XBUDDY_HOME__/xbuddy-hoerspiel-emil.env
 ExecStart=__XBUDDY_PYTHON__ -m hoerspiel.main --host 127.0.0.1 --port 5056
 Restart=on-failure
 RestartSec=10

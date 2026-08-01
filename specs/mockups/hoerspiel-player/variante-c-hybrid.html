@@ -39,7 +39,7 @@
     <div class="topbar">
       <div class="pille" id="pille" role="button" title="Kind wechseln">
         <span class="face" id="face">P</span>
-        <span class="who tag-caveat" id="who">Paula</span>
+        <span class="who tag-caveat" id="who">Mia</span>
         <span class="swap">↔ wechseln</span>
       </div>
       <div class="gear" title="Einstellungen (für Eltern)">
@@ -56,7 +56,7 @@
           <button class="go"><span class="i-play"></span> Weiter ab Track 2</button>
         </div>
       </div>
-      <div class="sectionlabel" id="secLabel">Alle Folgen von Paula</div>
+      <div class="sectionlabel" id="secLabel">Alle Folgen von Mia</div>
       <div class="grid" id="grid"></div>
     </div>
   </div>
@@ -88,7 +88,7 @@ function render(){
     grid.appendChild(t);
   });
 }
-document.getElementById('pille').addEventListener('click',()=>{HSP.setKind(HSP.current()==='paula'?'neko':'paula');render();});
+document.getElementById('pille').addEventListener('click',()=>{HSP.setKind(HSP.current()==='mia'?'finn':'mia');render();});
 HSP.load().then(()=>{ico();render();});
 </script>
 </body>
