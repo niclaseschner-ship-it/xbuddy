@@ -1090,5 +1090,7 @@ def test_EC_44_skill_descriptions_nennen_das_angebot():
     from skills import cookie_nachschicken_task, geraet_anlegen_task
     cns = inspect.getsource(cookie_nachschicken_task)
     gaa = inspect.getsource(geraet_anlegen_task)
-    assert "EC-44" in cns and "proaktive" in cns
-    assert "EC-44" in gaa and "proaktive" in gaa
+    assert "EC-44" in cns
+    assert "proaktive" in cns
+    assert "EC-44" in gaa
+    assert "proaktive" in gaa
