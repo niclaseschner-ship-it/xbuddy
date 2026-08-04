@@ -5,7 +5,7 @@
       "id": "emil",
       "name": "Emil",
       "ring": "blue",
-      "foto": "emil.png",
+      "foto": "emil.jpg",
       "email": "emil@example.org",
       "telegram_id": 100000001
     },
@@ -13,21 +13,21 @@
       "id": "lena",
       "name": "Lena",
       "ring": "red",
-      "foto": "lena.png",
+      "foto": "lena.jpg",
       "email": "lena@example.org"
     },
     {
       "id": "jonas",
       "name": "Jonas",
       "ring": "green",
-      "foto": "jonas.png",
+      "foto": "jonas.jpg",
       "email": "jonas@example.org"
     },
     {
       "id": "petra",
       "name": "Petra",
       "ring": "orange",
-      "foto": "petra.png",
+      "foto": "petra.jpg",
       "email": "petra@example.org"
     }
   ],
@@ -36,13 +36,13 @@
       "id": "mia",
       "name": "Mia",
       "ring": "purple",
-      "foto": "mia.png"
+      "foto": "mia.jpg"
     },
     {
       "id": "finn",
       "name": "Finn",
       "ring": "teal",
-      "foto": "finn.png",
+      "foto": "finn.jpg",
       "telegram_id": 100000002
     }
   ],
