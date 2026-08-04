@@ -1,0 +1,7 @@
+# Per-Instanz-Dateien des KIBuddy-Buddys, je Instanz separat gepflegt,
+# niemals im Repo. Formate sind in den committeten *.example.json dokumentiert.
+#
+# Runtime-Konfig (Bind, Log, Provider, Modell) — Per-Instanz, gitignored
+# wie hoerspiel (#1749: Leak-Fläche über alle Services vereinheitlicht).
+# Format: config.example.json
+config.json
