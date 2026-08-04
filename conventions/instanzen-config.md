@@ -23,8 +23,10 @@ wie heißen sie". Die heute duplizierten Code-Listen
 Ort mehr trägt seine eigene Kopie.
 
 Eine getrackte `instanzen.example.json` liegt daneben und dokumentiert das
-Format mit generischen Beispiel-Instanzen (`kind1`/`kind2`, generische
-Namen). Sie enthält **niemals** echte Namen oder E-Mails.
+Format mit den generischen Beispiel-Instanzen der Demo-Familie »Sonntag«
+(Slugs `mia`/`finn`/`emil`, #1725/#1748 — deckungsgleich mit
+`conventions/ports.md` und den `hoerspiel/hoerspiel-<slug>.service`-Vorlagen).
+Sie enthält **niemals** echte Namen oder E-Mails.
 
 ### INST-2 — Format je Eintrag: genau vier Felder
 Jeder Instanz-Eintrag hat genau diese vier Felder:
@@ -73,7 +75,8 @@ Mirror-Snapshot. Der Slug bleibt opak und wird **nicht live umbenannt** — der
 laufende Betrieb behält seine echten Slugs, sie stehen nur nicht mehr im
 **getrackten** Code. Neutralisierung für public:
 - Der getrackte Code trägt die generische **Demo-/Template-Familie**
-  („Familie Sonntag": Slugs `mia`/`ben`, #1725) als kanonische Beispiel-Werte
+  („Familie Sonntag": Kind-Slugs `mia`/`finn` in `familie.example.json`; die
+  Hörspiel-Instanzen ergänzen `emil`, #1725/#1748) als kanonische Beispiel-Werte
   in `*.example.json` und getrackten Template-Deploy-Configs.
 - Die **echte** Familie (Slugs/Klarnamen, Chat-ID, Mail) lebt ausschließlich in
   **gitignored** Live-Config (`instanzen.json`/`familie.json`, INST-1) und
