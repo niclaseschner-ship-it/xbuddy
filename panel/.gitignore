@@ -6,3 +6,7 @@
 # (familienprivate Display-Bindungen + Tile-Configs).
 # Format: panel/panels.example.json
 panels.json
+
+# Runtime-Konfig (Bind, Log, Provider, Modell) — Per-Instanz, gitignored
+# wie hoerspiel (#1749: Leak-Fläche über alle Services vereinheitlicht).
+config.json
