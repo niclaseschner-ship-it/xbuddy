@@ -26,7 +26,7 @@ tools/demo/seed_demo.sh --env
 #    ALTERNATIVEN Port (nicht dem Live-Port), z. B. plan:
 XBUDDY_DEMO_DIR=$PWD/xbuddy-data-demo \
   PLAN_CONFIG_FILE=$PWD/xbuddy-data-demo/plan/plan.json \
-  python3 plan/main.py --listen-port 5150     # Live-plan bleibt auf seinem Port
+  python3 plan/main.py --port 5150     # Live-plan bleibt auf seinem Port
 
 # 4. Screenshots ziehen: http://127.0.0.1:5150/... zeigt die Familie-Sonntag-Daten.
 ```
