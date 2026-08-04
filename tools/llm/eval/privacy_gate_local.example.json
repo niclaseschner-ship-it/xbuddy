@@ -1,0 +1,4 @@
+{
+  "_comment": "VORLAGE für privacy_gate_local.json (gitignored, #1759). Kopieren als privacy_gate_local.json und die echten Familien-E-Mail-Domains eintragen. Der Privacy-Gate-Detektor flaggt dann Fixtures, die eine dieser Domains enthalten (Security-Feature). Fehlt die Datei, entfällt nur das domain-spezifische Muster.",
+  "email_domains": ["example.de"]
+}

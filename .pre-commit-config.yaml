@@ -22,4 +22,10 @@ repos:
     rev: v8.21.2
     hooks:
       - id: gitleaks
-        name: gitleaks (Custom-PII-Ruleset)
+        name: gitleaks (Custom-PII-Ruleset + lokales Supplement)
+        # Nutzt das gitignored .gitleaks-local.toml (#1759): es extendet die
+        # public .gitleaks.toml und ergänzt die familien-spezifischen Detektoren
+        # (Wohnort + private Mail) → pre-commit ist auf dem Betreiber-Rechner
+        # voll scharf, die public Config bleibt PII-frei. Fresh-Install:
+        #   cp .gitleaks-local.example.toml .gitleaks-local.toml
+        args: ["--config", ".gitleaks-local.toml"]

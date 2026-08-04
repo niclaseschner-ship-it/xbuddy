@@ -1,0 +1,41 @@
+title = "xbuddy Leak-Guard — lokales PII-Supplement (VORLAGE, #1759)"
+#
+# VORLAGE für das gitignored `.gitleaks-local.toml`. Es trägt die familien-
+# SPEZIFISCHEN Detektoren (Wohnort + private Mail/Domain), die NICHT in die
+# public `.gitleaks.toml` gehören. Fresh-Install:
+#
+#   cp .gitleaks-local.example.toml .gitleaks-local.toml
+#   # dann die <PLATZHALTER> durch die echten Familien-Werte ersetzen
+#
+# `.gitleaks-local.toml` ist gitignored und wird NIEMALS committet. Es extendet
+# die public `.gitleaks.toml` (deren useDefault-Standard-Secrets + generische
+# PII-Regeln werden geerbt). pre-commit auf dem Betreiber-Rechner nutzt dieses
+# Supplement und ist damit voll scharf; CI läuft nur gegen die generische
+# public Config (Nic-Setzung #1759 Weg A — die 2 Werte sind bereits gescrubbt,
+# pre-commit verhindert die Re-Introduktion).
+
+[extend]
+path = ".gitleaks.toml"
+
+[[rules]]
+id = "xbuddy-private-mail"
+description = "Private Mail-Adresse (vorname.nachname@…)"
+regex = '''vorname[._]nachname@(provider1|provider2)'''
+
+[[rules]]
+id = "xbuddy-familien-mail-domain"
+description = "Familien-E-Mail-Domain @example.de"
+regex = '''@example\.de'''
+# Der Privacy-Gate-Detektor + Golden-Set führen die Domain als Detektions-
+# Pattern (Security-Feature, kein Leak) → per-Rule ausgenommen.
+[[rules.allowlists]]
+paths = [
+    '''privacy_gate\.py''',
+    '''test_eval_golden_set\.py''',
+]
+
+# ── Netz-/Instanz-Identifier ─────────────────────────────────────────────────
+[[rules]]
+id = "xbuddy-ortsname"
+description = "Wohnort-Name (<PLATZHALTER>)"
+regex = '''(?i)\bMusterstadt\b'''

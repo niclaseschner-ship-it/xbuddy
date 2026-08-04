@@ -51,3 +51,12 @@ uv.lock
 
 # Demo-Modus (#1725): Wegwerf-Dir mit den generischen Demo-Seeds — nie committen.
 xbuddy-data-demo/
+
+# Leak-Guard-Supplement mit den familien-spezifischen PII-Detektoren (#1759).
+# Extendet die public .gitleaks.toml; trägt Wohnort + private Mail als Regex.
+# NIEMALS committen — die public Config bleibt PII-frei.
+.gitleaks-local.toml
+
+# Familien-spezifische Domains fürs Privacy-Gate (#1759) — gitignored, PII-frei
+# bleibt der getrackte Code. Vorlage: privacy_gate_local.example.json.
+tools/llm/eval/privacy_gate_local.json
