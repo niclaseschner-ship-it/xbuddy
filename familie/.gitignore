@@ -6,3 +6,7 @@
 familie.json
 # Profilfotos — Per-Instanz-Mediendaten.
 fotos/
+
+# Runtime-Konfig (Bind, Log, Provider, Modell) — Per-Instanz, gitignored
+# wie hoerspiel (#1749: Leak-Fläche über alle Services vereinheitlicht).
+config.json
