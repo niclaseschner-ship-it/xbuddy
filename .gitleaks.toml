@@ -26,7 +26,14 @@ description = "Familienname Eschner (Klarname)"
 regex = '''(?i)\beschner\b'''
 # LICENSE ratifiziert ausgenommen — der Copyright-Name bleibt (2026-07-30).
 [[rules.allowlists]]
-paths = ['''(^|/)LICENSE$''']
+# LICENSE trägt den echten Autor-Namen (by-design, Apache-Copyright); die
+# Detektor-Dateien tragen den Namen als Erkennungs-Regex (#1759, kein Leak).
+paths = [
+    '''(^|/)LICENSE$''',
+    '''(^|/)\.gitleaks\.toml$''',
+    '''(^|/)\.gitleaks-local\.toml$''',
+    '''(^|/)\.gitleaks-local\.example\.toml$''',
+]
 
 [[rules]]
 id = "xbuddy-vornamen-erwachsene"
@@ -44,27 +51,16 @@ description = "Slug niclas (Klarname)"
 regex = '''(?i)\bniclas\b'''
 # LICENSE ausgenommen wie eschner (Copyright-Name ratifiziert behalten).
 [[rules.allowlists]]
-paths = ['''(^|/)LICENSE$''']
-
-# ── Private Kontaktdaten ─────────────────────────────────────────────────────
-[[rules]]
-id = "xbuddy-private-mail"
-description = "Private Mail-Adresse (niclas.eschner@…)"
-regex = '''niclas[._]eschner@(gmail|gmx)'''
-
-[[rules]]
-id = "xbuddy-familien-mail-domain"
-description = "Familien-E-Mail-Domain @gmx.de (→ @example.de scrubben)"
-regex = '''@gmx\.de'''
-# Privacy-Gate-Detektor + Golden-Set führen @gmx.de als Detektions-Pattern
-# (Security-Feature). Bloße Provider-Domain = keine PII (#1719).
-[[rules.allowlists]]
+# LICENSE trägt den echten Autor-Namen (by-design, Apache-Copyright); die
+# Detektor-Dateien tragen den Namen als Erkennungs-Regex (#1759, kein Leak).
 paths = [
-    '''privacy_gate\.py''',
-    '''test_eval_golden_set\.py''',
+    '''(^|/)LICENSE$''',
+    '''(^|/)\.gitleaks\.toml$''',
+    '''(^|/)\.gitleaks-local\.toml$''',
+    '''(^|/)\.gitleaks-local\.example\.toml$''',
 ]
 
-# ── Netz-/Instanz-Identifier ─────────────────────────────────────────────────
+# ── Private Kontaktdaten ─────────────────────────────────────────────────────
 [[rules]]
 id = "xbuddy-github-org"
 description = "GitHub-Org (enthält echten Benutzernamen)"
@@ -90,20 +86,21 @@ id = "xbuddy-telegram-chat-id"
 description = "Bekannte Telegram-Chat-ID"
 regex = '''\b464143432\b'''
 
-[[rules]]
-id = "xbuddy-ortsname"
-description = "Wohnort-Name (Dreisamtal)"
-regex = '''(?i)\bDreisamtal\b'''
 
-# ── Globale Allowlist (EIN Block — gitleaks honoriert nur den ersten) ────────
-# Das Ruleset selbst trägt die Muster (naturgemäß) und darf sich nicht als Leak
-# melden. Plus curated #1719-Ausnahmen: Detektor-Fixtures + FP-Anker + Artefakte.
-# (Der Privacy-Gate-Detektor ist zusätzlich per-Rule an der familien-mail-domain
-# ausgenommen — hier nur die restlichen globalen Fälle.)
+# ── Familien-spezifische PII (Wohnort + private Mail) ────────────────────────
+# Die Regeln xbuddy-ortsname / xbuddy-private-mail / xbuddy-familien-mail-domain
+# leben seit #1759 im gitignored .gitleaks-local.toml (extendet diese Datei).
+# Diese public Config bleibt PII-frei; pre-commit auf dem Pi nutzt das Supplement
+# und ist damit voll scharf. Format-Vorlage: .gitleaks-local.example.toml.
+
 [[allowlists]]
-description = "Ruleset-Selbstreferenz + curated Detektor-/FP-/Artefakt-Ausnahmen (#1719)"
+description = "Ruleset-Selbstreferenz + curated Detektor-/FP-/Artefakt-Ausnahmen (#1719, #1759)"
 paths = [
+    # Detektor-Dateien selbst (Muster sind Absicht, kein Leak): public Config,
+    # das gitignored PII-Supplement und dessen Beispiel-Vorlage (#1759).
     '''(^|/)\.gitleaks\.toml$''',
+    '''(^|/)\.gitleaks-local\.toml$''',
+    '''(^|/)\.gitleaks-local\.example\.toml$''',
     '''test_auth_decorator_coverage\.py''',
     '''\.pyc$''',
 ]

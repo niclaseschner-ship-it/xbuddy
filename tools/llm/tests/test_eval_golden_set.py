@@ -18,7 +18,12 @@ from pathlib import Path
 import pytest
 
 from tools.llm.eval.fixtures import GOLDEN_FIXTURES, GREEN_FIXTURES, RED_FIXTURES
-from tools.llm.eval.privacy_gate import SYNTHETIC_MARKER, scan_dir, scan_file
+from tools.llm.eval.privacy_gate import (
+    SYNTHETIC_MARKER,
+    load_family_email_domains,
+    scan_dir,
+    scan_file,
+)
 from tools.llm.eval.runner import run_fixture
 
 # ===========================================================================
@@ -103,18 +108,29 @@ def test_privacy_gate_eval_dir_is_clean() -> None:
 
 
 def test_privacy_gate_blocks_real_email(tmp_path: Path) -> None:
-    """AC3: Gate erkennt echte @gmx.de-Adresse in Fixture-Datei."""
+    """AC3: Gate erkennt eine echte Familien-Domain-Adresse in einer Fixture.
+
+    Die konkrete Familien-Domain steht seit #1759 nicht mehr im getrackten Code,
+    sondern in der gitignored `privacy_gate_local.json`. Fehlt die (z. B. in CI),
+    entfällt das domain-spezifische Muster → der Test skippt sauber.
+    """
+    domains = load_family_email_domains()
+    if not domains:
+        pytest.skip(
+            "keine lokale Familien-Domain-Config (privacy_gate_local.json) — "
+            "das domain-spezifische Muster ist inaktiv (#1759, CI-Fall)."
+        )
     bad_fixture = tmp_path / "fixture_with_real_email.py"
     bad_fixture.write_text(
         f"{SYNTHETIC_MARKER}\n"
         "# Synthetisches Fixture\n"
-        'TEXT = "Schreib an erfundene.familie@gmx.de"\n',
+        f'TEXT = "Schreib an erfundene.familie@{domains[0]}"\n',
         encoding="utf-8",
     )
     vs = scan_file(bad_fixture)
     labels = {v.label for v in vs}
-    assert "real-email-gmx" in labels or "real-email-addr" in labels, (
-        f"Gate hätte real-email erkennen sollen; gefundene Labels: {labels}"
+    assert "real-email-addr" in labels, (
+        f"Gate hätte real-email-addr erkennen sollen; gefundene Labels: {labels}"
     )
 
 

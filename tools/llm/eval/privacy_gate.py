@@ -16,7 +16,8 @@ ist eine Ein-Weg-Tür). Das Gate läuft in zwei Kontexten:
 
   Familientext-Verbote (FORBIDDEN_PATTERNS): Strings, die in synthetischen
   Fixtures nie auftreten sollten:
-    - E-Mail-Adressen mit bekannten Familien-Domains (@gmx.de)
+    - E-Mail-Adressen mit bekannten Familien-Domains (aus der gitignored
+      `privacy_gate_local.json`, #1759 — nie im getrackten Code)
     - Telefonnummer-Muster (+49 + 10+ Ziffern)
     - Interne ZD-Slot-Namen mit echten Zugangsdaten-Schlüsseln
     - Bekannte Real-Datei-Pfade aus xbuddy-data (kein synthetischer Text)
@@ -28,7 +29,8 @@ ist eine Ein-Weg-Tür). Das Gate läuft in zwei Kontexten:
 
 ## Dokumentation der Gate-Entscheidungen
 
-  - `@gmx.de`: bekannte Familien-Domain; alle Adressen dieser Domain sind real
+  - konfigurierte Familien-Domain(s) aus `privacy_gate_local.json` (gitignored,
+    #1759): alle Adressen einer solchen Domain sind real, nie synthetisch
   - `+49` + Ziffernkette: echte Telefonnummer-Form
   - `/home/buddy/xbuddy-data`: echter Pi-Pfad, nie in Fixture-Texten
   - `xbuddy-data/`: echter Datenpfad-Präfix
@@ -38,6 +40,7 @@ ist eine Ein-Weg-Tür). Das Gate läuft in zwei Kontexten:
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -49,18 +52,49 @@ from typing import NamedTuple
 
 SYNTHETIC_MARKER = "# SYNTHETIC - kein echter Familientext"
 
-# Muster, die in synthetischen Fixtures NIEMALS auftreten sollten.
-# Jedes Element: (label, compiled_pattern)
-FORBIDDEN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    # Alle @gmx.de-Adressen — bekannte Familien-Domain, nie in Fixtures
-    ("real-email-addr", re.compile(r"\b[A-Za-z0-9._%+-]+@gmx\.de\b")),
-    # Echte deutsche Telefonnummer: +49 gefolgt von 9+ Ziffern
-    ("real-phone-de", re.compile(r"\+49\s*\d{9,}")),
-    # Echter Pi-Datenpfad
-    ("real-xbuddy-data-path", re.compile(r"/home/buddy/xbuddy-data")),
-    # Echter Datenpfad-Präfix (ohne absoluten Pfad)
-    ("real-data-path-prefix", re.compile(r"\bxbuddy-data/")),
-]
+
+def load_family_email_domains() -> list[str]:
+    """Familien-spezifische E-Mail-Domains aus der gitignored lokalen Config
+    ``privacy_gate_local.json`` (``{"email_domains": [...]}``) — #1759.
+
+    Die konkrete Domain steht NIE im getrackten Code (public-Flip). Fehlt oder
+    ist die Config leer, wird ``[]`` geliefert; dann entfällt das domain-
+    spezifische ``real-email-addr``-Muster (die übrigen Muster bleiben scharf).
+    Format-Vorlage: ``privacy_gate_local.example.json``.
+    """
+    cfg = Path(__file__).with_name("privacy_gate_local.json")
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [str(d) for d in data.get("email_domains", []) if d]
+
+
+def build_forbidden_patterns() -> list[tuple[str, re.Pattern[str]]]:
+    """Muster, die in synthetischen Fixtures NIEMALS auftreten sollten.
+
+    Das ``real-email-addr``-Muster kommt je konfigurierter Familien-Domain
+    (leer, wenn keine lokale Config vorhanden ist — #1759). Die übrigen Muster
+    sind generisch (Telefon-Form, Pi-Datenpfad) und tragen keine PII.
+    """
+    patterns: list[tuple[str, re.Pattern[str]]] = [
+        # Alle Adressen einer bekannten Familien-Domain — nie in Fixtures.
+        ("real-email-addr", re.compile(rf"\b[A-Za-z0-9._%+-]+@{re.escape(dom)}\b"))
+        for dom in load_family_email_domains()
+    ]
+    patterns += [
+        # Echte deutsche Telefonnummer: +49 gefolgt von 9+ Ziffern
+        ("real-phone-de", re.compile(r"\+49\s*\d{9,}")),
+        # Echter Pi-Datenpfad
+        ("real-xbuddy-data-path", re.compile(r"/home/buddy/xbuddy-data")),
+        # Echter Datenpfad-Präfix (ohne absoluten Pfad)
+        ("real-data-path-prefix", re.compile(r"\bxbuddy-data/")),
+    ]
+    return patterns
+
+
+# Jedes Element: (label, compiled_pattern). Beim Import aus der lokalen Config gebaut.
+FORBIDDEN_PATTERNS: list[tuple[str, re.Pattern[str]]] = build_forbidden_patterns()
 
 
 class GateViolation(NamedTuple):
