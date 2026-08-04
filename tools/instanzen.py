@@ -50,11 +50,12 @@ ENV_CONFIG_FILE = "INSTANZEN_CONFIG_FILE"
 # INST-2 — genau vier Felder je Eintrag.
 _FELDER = ("slug", "port", "origin", "display_name")
 
-# INST-6 — eingebetteter generischer Fallback je Klasse. NIE echte Namen
-# (INST-1: die example-Datei und der Default tragen `kind1`/`kind2` +
-# generische Namen). port/origin sind Lese-Spiegel — hier bewusst neutral
-# gehalten, damit nichts aus dem Default einen echten Betriebs-Port ableitet
-# (INST-3).
+# INST-6 — eingebetteter generischer Fallback je Klasse. NIE echte Namen.
+# Bewusst STERIL: opake Slugs `kind1`/`kind2` + `port` 0/leere `origin`, damit
+# nichts aus dem Default einen echten Betriebs-Port ableitet (INST-3). Das ist
+# ein anderer Zweck als die getrackte `instanzen.example.json`: die trägt die
+# populierte Demo-Familie »Sonntag« (`mia`/`finn`/`emil` mit echten Beispiel-
+# Ports, deckungsgleich mit `conventions/ports.md`, #1748) als Kopiervorlage.
 _FALLBACK_DEFAULTS: "dict[str, list[dict]]" = {
     "hoerspiel": [
         {"slug": "kind1", "port": 0, "origin": "", "display_name": "Kind Eins"},

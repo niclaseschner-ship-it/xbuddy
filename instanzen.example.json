@@ -1,16 +1,22 @@
 {
   "hoerspiel": [
     {
-      "slug": "kind1",
+      "slug": "mia",
       "port": 5053,
       "origin": "127.0.0.1:5053",
-      "display_name": "Kind Eins"
+      "display_name": "Mia"
     },
     {
-      "slug": "kind2",
+      "slug": "finn",
       "port": 5055,
       "origin": "127.0.0.1:5055",
-      "display_name": "Kind Zwei"
+      "display_name": "Finn"
+    },
+    {
+      "slug": "emil",
+      "port": 5056,
+      "origin": "127.0.0.1:5056",
+      "display_name": "Emil"
     }
   ]
 }
