@@ -1,10 +1,37 @@
 # XBuddy
 
 XBuddy ist ein Ökosystem, das Familien dabei hilft, gut begleitet durch
-einen zunehmend digitalen Alltag zu kommen.
+einen zunehmend digitalen und KI-geprägten Alltag zu kommen.
 
-Dieses Repo hält **Code und Specs**. Vision und Kontext leben im
-Schwester-Repo `xbuddy-knowledge`.
+Dieses Repo hält **Code und Specs**. Die ausführliche Vision lebt im internen
+Schwester-Repo `xbuddy-knowledge`; der **Kern** (was es ist, North Star) ist hier
+gespiegelt, damit dieses Repo zusammen mit [`lotse`](#aufbau) allein trägt.
+
+## Was XBuddy ist
+
+XBuddy ist der Greenfield-Neuaufbau von **BuddyBoard**. Der Produktname nach außen
+bleibt BuddyBoard; XBuddy ist der Projekt- und Repo-Name dieses Neuanfangs.
+
+Es baut die Barrieren zwischen Familien und nützlicher Technologie ab —
+Verfügbarkeit, Komplexität, Interface und Vertrauen. **Kinder** bekommen Autonomie
+und Orientierung: Sie sehen, wer sie abholt, was es zu essen gibt, hören ihre Lieder
+— ohne ein Elternteil fragen zu müssen. **Eltern** bekommen Entlastung vom Mental
+Load. KI ist dabei **Infrastruktur, kein Feature** — Familien erleben nicht „KI",
+sondern die Ergebnisse.
+
+XBuddy ist kein einzelnes Gerät, sondern ein Ökosystem aus Display, Controller, Hub
+und Buddys, das vorhandene Hardware der Familie einbindet statt neue zu erzwingen.
+Die Familien-Schnittstelle ist **konversationell und plattform-eigen** — Familien
+sprechen XBuddy in ihrer Sprache an (Eltern-Chat), nicht über zweite Settings-Welten.
+
+**North Star.** XBuddy ist dann erfolgreich, wenn ein Kind etwas selbst tun kann,
+wofür es vorher ein Elternteil gebraucht hätte. Jede Funktion misst sich daran:
+Verschiebt sie eine Aufgabe vom Elternteil zum Kind — gibt sie Selbstwirksamkeit
+zurück? Qualitätsattribute in Prioritätsreihenfolge: **Zuverlässigkeit** (ein Board,
+das morgens nicht den Plan zeigt, ist schlechter als kein Board), **Einfachheit**,
+**Privacy & Datensicherheit** (Verarbeitung in Deutschland, Anonymisierung vor
+Verlassen der Geräte-Ebene — harter Boden), **Offline-Fähigkeit** (mit Hub ohne
+Internet) und **Nicht-invasiv** (keine Push-Notifications, kein Engagement-Design).
 
 ## Einstieg
 
@@ -42,6 +69,46 @@ python3 -m venv .venv
 `pyproject` deklariert nur die **direkt importierten** Third-Party-Libs; jeder
 fehlende direkte Dep macht das isolierte CI-venv (kein `--system-site-packages`)
 rot, statt still über globale Pakete kaschiert zu werden.
+
+## Quickstart — von clone zu laufender Familie
+
+XBuddy ist keine Ein-Datei-App, sondern mehrere kleine Dienste (je Buddy einer),
+die eine Familien-Instanz bilden. Der Weg von `git clone` zu einem laufenden System:
+
+1. **Umgebung** — venv wie oben (`pip install .`).
+
+2. **Per-Instanz-Dateien anlegen.** Alle familienspezifischen Dateien sind
+   `gitignored` und liegen als getrackte Vorlage `*.example.json` neben dem Code
+   jedes Dienstes. Kopieren und füllen:
+   - `<dienst>/config.example.json` → `config.json` — Runtime (Bind-Host/Port,
+     Log-Level, Provider/Modell). Werte auch per ENV überschreibbar
+     (`tools/configloader.py`, z. B. `PLAN_LISTEN_PORT`).
+   - Daten-Vorlagen je Dienst, z. B. `familie/familie.example.json` (Familien-
+     Registry), `hoerspiel/hoerspiel.example.json`, `essen/wuensche.example.json`.
+   - Der gemeinsame Datenwurzel-Pfad kommt aus **`XBUDDY_DATA_DIR`**
+     (Default `/home/buddy/xbuddy-data`).
+
+3. **Geheimnisse** (KI-Anbieter-Key, Google-OAuth, **Telegram-Bot-Token**) NICHT
+   in Dateien/ENV im Klartext, sondern über den einen Per-Instanz-Speicher
+   [`tools/zugangsdaten`](tools/zugangsdaten/README.md) (ZD-5) — ein geteiltes
+   Modul, aus dem alle Dienste lesen/schreiben.
+
+4. **Dienste starten** — jeder Buddy als eigener Prozess (`python3 -m <dienst>` bzw.
+   die im jeweiligen `<dienst>/`-Verzeichnis dokumentierte Startzeile); der
+   `seiten`-Dienst liefert die Eltern-Seiten und PWA-Mäntel same-origin aus.
+
+### Demo-Einstieg (ohne echte Familie)
+
+Zum Ausprobieren/für Screenshots gibt es einen Demo-Modus, der ein **gitignored
+Wegwerf-Verzeichnis** `xbuddy-data-demo/` aus den generischen Seeds („Familie
+Sonntag", die `*.example.json`) befüllt — die echte Instanz bleibt unangetastet:
+
+```
+tools/demo/seed_demo.sh          # populiert das Wegwerf-Dir
+tools/demo/seed_demo.sh --env    # + druckt die ENV-Exports für den Demo-Run
+```
+
+Details: [`tools/demo/seed_demo.sh`](tools/demo/seed_demo.sh) (#1725).
 
 ## Tests & Lint
 
