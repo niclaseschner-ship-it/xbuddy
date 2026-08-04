@@ -1762,7 +1762,15 @@ def main(argv=None):
     # geladenen Config aufgerufen und liefert einen Transport, der die
     # ggf. neue kalender_id kennt. Der `store` ist live (ZD-4) und liest
     # OAuth-Daten pro Aufruf frisch von Disk.
+    # Demo-Modus (#1761): PLAN_KALENDER_DEMO_FILE schaltet den Kalender auf eine
+    # lokale JSON-Datei (Familie Sonntag, aktuelle Woche) statt Google — so
+    # rendert /display/plan/woche ohne OAuth einen vollen Wochenplan. Live bleibt
+    # GoogleTransport (Env ungesetzt).
+    demo_kalender = os.environ.get("PLAN_KALENDER_DEMO_FILE")
+
     def transport_factory(cfg):
+        if demo_kalender:
+            return kalender_mod.DateiTransport(demo_kalender, cfg.kalender_id)
         return kalender_mod.GoogleTransport(store, cfg.kalender_id)
     transport = transport_factory(cfg)
     configure(cfg, registry=None, transport=transport,

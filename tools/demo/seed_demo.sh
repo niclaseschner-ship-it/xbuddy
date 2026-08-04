@@ -66,6 +66,53 @@ for seed in "${SEED_KEYS[@]}"; do
 done
 echo "[demo] $n Seeds ins Wegwerf-Dir kopiert (Familie Sonntag)."
 
+# Plan-Wochenplan (#1761): der /display/plan/woche-Grid ist kalender-getrieben
+# (plan/kalender.py, sonst Google-only) → für die Demo generieren wir eine lokale
+# Kalender-Datei mit Terminen relativ zu HEUTE (aktuelle Mo–So-Woche), die der
+# plan-Service über PLAN_KALENDER_DEMO_FILE + DateiTransport liest. So rendert die
+# Woche voll, ohne OAuth. Personen-Zuordnung über den Namen im Titel (PLAN-19).
+mkdir -p "$DEMO_DIR/plan"
+python3 - "$DEMO_DIR/plan/kalender-demo.json" <<'PYCAL'
+import json, sys
+from datetime import datetime, timedelta, timezone
+
+out_path = sys.argv[1]
+tz = timezone(timedelta(hours=2))  # Europe/Berlin-nah; Offset reicht für die Demo
+today = datetime.now(tz)
+monday = (today - timedelta(days=today.weekday())).replace(
+    hour=0, minute=0, second=0, microsecond=0)
+
+# (Wochentag 0=Mo, Startstunde, Dauer_h, Titel, creator-Email)
+PLAN = [
+    (0, 15, 1, "Schwimmen (Mia)",        "lena@example.org"),
+    (0, 16, 1, "Klettern (Finn)",        "jonas@example.org"),
+    (1, 14, 1, "Kreativ (Emil)",         "petra@example.org"),
+    (1, 16, 1, "Musikschule (Mia)",      "lena@example.org"),
+    (2, 15, 2, "Turnen (Finn)",          "jonas@example.org"),
+    (3, 14, 1, "Vorlesen (Emil)",        "petra@example.org"),
+    (3, 17, 1, "Fußball (Finn)",         "jonas@example.org"),
+    (4, 15, 1, "Basteln (Mia)",          "lena@example.org"),
+    (4, 16, 2, "Spielplatz (alle)",      "emil@example.org"),
+    (5, 10, 2, "Familienausflug",        "emil@example.org"),
+    (6, 15, 1, "Backen (Mia & Emil)",    "petra@example.org"),
+]
+items = []
+for i, (wtag, h, dur, titel, mail) in enumerate(PLAN):
+    beginn = monday + timedelta(days=wtag, hours=h)
+    ende = beginn + timedelta(hours=dur)
+    items.append({
+        "id": "demo-%02d" % i,
+        "summary": titel,
+        "start": {"dateTime": beginn.isoformat()},
+        "end": {"dateTime": ende.isoformat()},
+        "creator": {"email": mail},
+    })
+with open(out_path, "w", encoding="utf-8") as fh:
+    json.dump({"items": items}, fh, ensure_ascii=False, indent=2)
+print("[demo] Kalender-Demo: %d Termine (Woche ab %s) → %s"
+      % (len(items), monday.date(), out_path))
+PYCAL
+
 if [ "${1:-}" = "--env" ]; then
   cat <<ENV
 
@@ -75,6 +122,8 @@ if [ "${1:-}" = "--env" ]; then
 export INSTANZEN_CONFIG_FILE="$DEMO_DIR/instanzen.json"
 export FAMILIE_STORE_FILE="$DEMO_DIR/familie/familie.json"
 export PLAN_CONFIG_FILE="$DEMO_DIR/plan/plan.json"
+# Demo-Kalender (#1761): schaltet plan auf die lokale Wochen-Datei statt Google.
+export PLAN_KALENDER_DEMO_FILE="$DEMO_DIR/plan/kalender-demo.json"
 export ROUTINE_STORE_FILE="$DEMO_DIR/routine/routine_store.json"
 export WETTER_CONFIG_FILE="$DEMO_DIR/wetter/wetter.json"
 export ESSEN_DATA_DIR="$DEMO_DIR/essen"

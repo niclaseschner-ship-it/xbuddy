@@ -24,9 +24,10 @@ Token-Datei an.
 
 import json
 import logging
+import os
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +266,89 @@ class GoogleTransport:
     def delete_event(self, event_id):
         """Löscht ein Event über seine `id` (PLAN-18)."""
         self._request("DELETE", "/events/" + urllib.parse.quote(event_id))
+
+
+class DateiTransport:
+    """Datei-basierter Kalender-Transport für den **Demo-Modus** (#1761).
+
+    Liest Google-Roh-kompatible Event-Items aus einer lokalen JSON-Datei
+    (``{"items": [ {id, summary, start, end, creator}, … ]}``) statt aus Google.
+    Live bleibt ``GoogleTransport`` — diese Klasse greift NUR, wenn der
+    Entrypoint ``PLAN_KALENDER_DEMO_FILE`` gesetzt sieht, und macht das Demo-
+    Board ohne OAuth screenshot-tauglich (Familie Sonntag). Read-only: die
+    Schreib-Ops sind No-Ops bzw. werfen ``CalendarUnavailable`` (die Demo legt
+    keine Termine an).
+
+    Gleiche Schnittstelle wie ``GoogleTransport`` (PLAN-29-Naht), damit
+    ``Kalender`` und ``main`` nichts über die Quelle wissen müssen.
+    """
+
+    def __init__(self, pfad, kalender_id="demo"):
+        self._pfad = pfad
+        self.kalender_id = kalender_id
+
+    def credentials_available(self):
+        """„Verfügbar", sobald die Demo-Datei existiert (analog OAuth-Check)."""
+        return bool(self._pfad) and os.path.isfile(self._pfad)
+
+    def _load_items(self):
+        try:
+            with open(self._pfad, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError) as exc:
+            raise CalendarUnavailable(
+                "Demo-Kalender-Datei nicht lesbar: %s" % exc) from exc
+        items = data.get("items", []) if isinstance(data, dict) else data
+        return [it for it in items if isinstance(it, dict)]
+
+    @staticmethod
+    def _bound_to_dt(iso):
+        """ISO-String (Z/Offset/naiv) → aware datetime in UTC für Vergleiche."""
+        try:
+            dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
+
+    def _item_start_dt(self, item):
+        wert, _ganztags = _parse_when(item.get("start"))
+        if wert is None:
+            return None
+        if isinstance(wert, datetime):
+            base = wert if wert.tzinfo else wert.replace(tzinfo=UTC)
+            return base.astimezone(UTC)
+        # date (ganztägig) → Mitternacht UTC
+        return datetime(wert.year, wert.month, wert.day, tzinfo=UTC)
+
+    def list_events(self, time_min, time_max):
+        """Roh-Items im Fenster [time_min, time_max) — gleiche Semantik wie
+        ``GoogleTransport.list_events`` (PLAN-17). Unparsebare Grenzen → alle
+        Items (die Demo-Datei trägt ohnehin nur die aktuelle Woche)."""
+        lo = self._bound_to_dt(time_min)
+        hi = self._bound_to_dt(time_max)
+        items = self._load_items()
+        if lo is None or hi is None:
+            return items
+        out = []
+        for it in items:
+            start = self._item_start_dt(it)
+            if start is None or lo <= start < hi:
+                out.append(it)
+        return out
+
+    def insert_event(self, raw_event):
+        raise CalendarUnavailable("Demo-Kalender ist read-only (#1761)")
+
+    def insert_event_with_bearer(self, raw_event, bearer):
+        raise CalendarUnavailable("Demo-Kalender ist read-only (#1761)")
+
+    def patch_event(self, event_id, raw_patch):
+        raise CalendarUnavailable("Demo-Kalender ist read-only (#1761)")
+
+    def delete_event(self, event_id):
+        raise CalendarUnavailable("Demo-Kalender ist read-only (#1761)")
 
 
 # ============================================================
