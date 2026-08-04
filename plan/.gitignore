@@ -7,3 +7,7 @@
 plan.json
 plan.db
 plan.db-journal
+
+# Runtime-Konfig (Bind, Log, Provider, Modell) — Per-Instanz, gitignored
+# wie hoerspiel (#1749: Leak-Fläche über alle Services vereinheitlicht).
+config.json
