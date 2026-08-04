@@ -122,7 +122,7 @@ sync_deps() {
         echo "update: Dep-Sync ok"
         return 0
     fi
-    echo "    ✗ Dep-Sync (pip install) fehlgeschlagen — Deps evtl. petraltet" >&2
+    echo "    ✗ Dep-Sync (pip install) fehlgeschlagen — Deps evtl. veraltet" >&2
     return 1
 }
 

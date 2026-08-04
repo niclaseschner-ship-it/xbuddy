@@ -689,7 +689,7 @@ def test_t1547_template_enthaelt_remove_attribute_src():
     )
 
 
-def test_t1547_template_truthy_pfad_unpetraendert():
+def test_t1547_template_truthy_pfad_unveraendert():
     """T1547 AC2: Der truthy-Pfad (pane.src = next) bleibt im Template erhalten.
 
     Stellt sicher, dass der Fix den existing Swap-Pfad nicht entfernt hat.
@@ -697,9 +697,9 @@ def test_t1547_template_truthy_pfad_unpetraendert():
     body = _template_body()
     assert "pane.src = next;" in body, (
         "heim-shell.html muss weiterhin 'pane.src = next;' im truthy-Zweig enthalten "
-        "(T1547: truthy-Pfad darf nicht petraendert werden)"
+        "(T1547: truthy-Pfad darf nicht veraendert werden)"
     )
-    # Fokus-Logik ebenfalls unpetraendert vorhanden:
+    # Fokus-Logik ebenfalls unveraendert vorhanden:
     assert "pane.blur" in body, (
         "Fokus-Logik (pane.blur) darf durch T1547-Fix nicht entfernt worden sein"
     )

@@ -197,7 +197,7 @@ def _auth_401():
 # Decorator: HART-AUTH (T948/T1321, auth.md AUTH-2/3/5/8). Der hand-kopierte
 # Wrapper-Body ist mit #1626 auf die AUTH-Decorator-Lib-Factory geflippt
 # (tools/initdata/auth_gate.py::make_require_init_data, #1625). Der Name
-# `require_init_data` BLEIBT (AUTH-9-Copetrage-Test trägt per AST-Namen); die
+# `require_init_data` BLEIBT (AUTH-9-Coverage-Test trägt per AST-Namen); die
 # Buddy-eigenen Getter + `_auth_401` gehen WÖRTLICH als Closures rein — die
 # Factory ruft genau diesen `_auth_401`, 401/403/500-Shape bleibt byte-gleich.
 require_init_data = make_require_init_data(
@@ -236,7 +236,7 @@ def post_medium():
 
     Normalisiert (PHOTO-8), erzeugt Thumbnail/Poster (PHOTO-9) und schreibt
     alles atomar (PHOTO-10). Antwort `{"id", "typ"}`. Video über `video_max_s`
-    → 413. Leeres/fehlendes Feld → 400. Schreib-/Petrarbeitungsfehler → 503.
+    → 413. Leeres/fehlendes Feld → 400. Schreib-/Verarbeitungsfehler → 503.
     """
     if "medium" not in request.files:
         return _bad_request("multipart-Feld 'medium' fehlt")
@@ -256,7 +256,7 @@ def post_medium():
         except ingest_mod.VideoZuLang as e:
             return _bad_request(str(e), status=413)
         except ingest_mod.normalize_mod.NormalizeError as e:
-            return _bad_request("Medium nicht petrarbeitbar: %s" % e)
+            return _bad_request("Medium nicht verarbeitbar: %s" % e)
         except store.StoreError as e:
             logger.warning("post_medium: Schreiben fehlgeschlagen: %s", e)
             return _bad_request(str(e), status=503)

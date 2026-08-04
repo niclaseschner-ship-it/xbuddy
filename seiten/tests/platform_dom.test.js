@@ -66,7 +66,7 @@ test("TelegramPlatform.ready(): kein Crash wenn disableVerticalSwipes fehlt", as
 });
 
 /**
- * Fall C — AC3: BrowserPlatform.ready() bleibt unpetraendert — kein Aufruf
+ * Fall C — AC3: BrowserPlatform.ready() bleibt unveraendert — kein Aufruf
  * von expand() oder disableVerticalSwipes() (kein WebApp-Objekt vorhanden).
  */
 test("BrowserPlatform.ready(): ruft weder expand() noch disableVerticalSwipes()", async () => {

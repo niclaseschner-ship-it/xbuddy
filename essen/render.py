@@ -4,7 +4,7 @@ Baut aus dem Katalog und der Wunsch-Liste das View-Modell für
 `templates/wunsch.html` (Tabbed Single-Canvas, Gate-B-Wahl 2026-06-09,
 E-ESSEN-7).
 
-Vier Petrantwortungen:
+Vier Verantwortungen:
   1. ARASAAC-Piktogramme über die geteilte Icon-Plattform referenzieren
      (ICONS-5, ESSEN-11) — nicht buddy-eigener ARASAAC-Bezug.
   2. Vier Kategorien-Tabs in fester Reihenfolge (ESSEN-9).

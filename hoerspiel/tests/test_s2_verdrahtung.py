@@ -180,7 +180,7 @@ class TestMetaAppend:
         assert "Vom Transistor zum Quantengate." in historie, (
             "META-Schnitt fehlt im Historie-Eintrag")
 
-    def test_kein_meta_eintrag_unpetraendert(self, data_root, fake_llm, fake_tts,
+    def test_kein_meta_eintrag_unveraendert(self, data_root, fake_llm, fake_tts,
                                             fixed_now):
         """AC2 / Kind-Guard: baue_album ohne meta → kein META-Block in Historie
         (Kind-Einträge byte-gleich zur Vorform)."""

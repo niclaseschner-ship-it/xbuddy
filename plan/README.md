@@ -4,10 +4,10 @@ V1-Implementierung der Spec [`specs/buddies/plan.md`](../specs/buddies/plan.md).
 
 Der Plan-Buddy ist die XBuddy-App mit dem Buddy-Slug `plan`. Er zeigt einer
 Familie ihren Wochenplan auf einem Display: wer welches Kind bringt und holt,
-wer kocht und ins Bett bringt (Petrantwortlichkeiten), was die Kinder vorhaben
+wer kocht und ins Bett bringt (Verantwortlichkeiten), was die Kinder vorhaben
 (Kind-Aktivitäten) und welche Termine anstehen.
 
-Als App **besitzt** der Plan-Buddy seine Daten (die Petrantwortlichkeiten in
+Als App **besitzt** der Plan-Buddy seine Daten (die Verantwortlichkeiten in
 `plan.db`) und seine Funktion (die Google-Kalender-Anbindung) und stellt beides
 über Schnittstellen bereit (PLAN-1, E-PLAN-1). Was er nicht selbst besitzt,
 holt er von zentralen Komponenten:
@@ -20,10 +20,10 @@ holt er von zentralen Komponenten:
 
 ## Module
 
-| Modul        | Petrantwortung |
+| Modul        | Verantwortung |
 |--------------|---------------|
-| `config.py`  | Slot-Definitionen + Default-Petrantwortlichkeiten + Skalar-Konfig (PLAN-6/10/28). Slots und Defaults sind **Daten** in `plan.json`, keine Code-Konstanten (E-PLAN-2). |
-| `db.py`      | SQLite-Datenhaltung der Petrantwortlichkeiten — `plan.db`, nur `week_assignments` (PLAN-8/9). |
+| `config.py`  | Slot-Definitionen + Default-Verantwortlichkeiten + Skalar-Konfig (PLAN-6/10/28). Slots und Defaults sind **Daten** in `plan.json`, keine Code-Konstanten (E-PLAN-2). |
+| `db.py`      | SQLite-Datenhaltung der Verantwortlichkeiten — `plan.db`, nur `week_assignments` (PLAN-8/9). |
 | `kalender.py`| Google-Kalender-Anbindung: `GoogleTransport` (Netz) + `Kalender` (Normalisierung, Personen-Match). Die Trennung ist die Test-Naht (PLAN-15…20, PLAN-29). |
 | `render.py`  | View-Modell der View `woche` — Tagesraster, Schedule-Rail, Termin-Leiste, Multi-Day-Spannen (PLAN-3…14). |
 | `main.py`    | Flask-App: Display-Views + HTTP-Schnittstellen (PLAN-21/22/23). |
@@ -48,7 +48,7 @@ umgestellt — keine Layout-Änderung, keine hardcodierten Farben/Maße.
 
 ## Konfiguration
 
-Die Slot-Liste, die Default-Petrantwortlichkeiten und die Skalar-Werte stehen
+Die Slot-Liste, die Default-Verantwortlichkeiten und die Skalar-Werte stehen
 in `plan.json` (je Instanz, per `.gitignore` ausgeschlossen). Das Format
 dokumentiert [`plan.example.json`](plan.example.json) — kopieren und anpassen:
 

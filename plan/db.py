@@ -1,6 +1,6 @@
-"""Plan-Buddy — Datenhaltung der Petrantwortlichkeiten (PLAN-8, PLAN-9).
+"""Plan-Buddy — Datenhaltung der Verantwortlichkeiten (PLAN-8, PLAN-9).
 
-Siehe specs/buddies/plan.md §3. Die Petrantwortlichkeiten (wer bringt, holt,
+Siehe specs/buddies/plan.md §3. Die Verantwortlichkeiten (wer bringt, holt,
 kocht, bringt ins Bett) liegen **lokal** in einer SQLite-Datei `plan.db` neben
 dem Code (PLAN-9), je Instanz separat, per `.gitignore` ausgeschlossen.
 
@@ -57,16 +57,16 @@ def week_is_initialised(conn, week_start):
     return row is not None
 
 
-def init_week(conn, week_start, default_petrantwortlichkeiten):
-    """Belegt eine Woche aus den Default-Petrantwortlichkeiten vor (PLAN-10).
+def init_week(conn, week_start, default_verantwortlichkeiten):
+    """Belegt eine Woche aus den Default-Verantwortlichkeiten vor (PLAN-10).
 
     Tut nichts, wenn die Woche bereits initialisiert ist — danach ist jede
-    Woche unabhängig editierbar (PLAN-7). `default_petrantwortlichkeiten` hat
+    Woche unabhängig editierbar (PLAN-7). `default_verantwortlichkeiten` hat
     die Form `{ slot: { wochentag(0-6): person_id | None } }` (config.py).
     """
     if week_is_initialised(conn, week_start):
         return
-    for slot, by_day in default_petrantwortlichkeiten.items():
+    for slot, by_day in default_verantwortlichkeiten.items():
         for day, person_id in by_day.items():
             conn.execute(
                 "INSERT OR IGNORE INTO week_assignments "
@@ -84,7 +84,7 @@ def init_week(conn, week_start, default_petrantwortlichkeiten):
 
 
 def set_assignment(conn, week_start, day, slot, person_id):
-    """Schreibt eine Petrantwortlichkeit für (Woche, Wochentag, Slot) (PLAN-8).
+    """Schreibt eine Verantwortlichkeit für (Woche, Wochentag, Slot) (PLAN-8).
 
     `person_id` ist eine Personen-`id` oder None (leerer Slot). Eine bestehende
     Zuweisung derselben Stelle wird überschrieben.

@@ -128,7 +128,7 @@ def configure(root=None, inventar_path=None, ttl=None,
 
     `heim_origin`, `tailscale_origin` und `funnel_origin` werden fuer die
     SREG-12-Seite benoetigt (render.baue_layout). Leer = Wert bleibt
-    unpetraendert (None ueberschreibt auf leeren String — explizit loeschbar).
+    unveraendert (None ueberschreibt auf leeren String — explizit loeschbar).
     `funnel_origin` ist die Funnel-FQDN fuer Familien-User-Geraete (AUTH-7b,
     SREG-7 dritte Origin, RAT-27 RATIFIZIERT 2026-07-07).
 
@@ -486,7 +486,7 @@ def _dual_auth_401():
 # RAT-32). Ersetzt den bislang hand-kopierten require_dual_gate byte-gleich:
 # Cookie gültig → 200 + Rolling-Refresh (AUTH-2:78); keine Quelle + mode="hard"
 # → _dual_auth_401(); keine Quelle + mode="observe" → 200 + Observe-Log. Der
-# Name `require_dual_gate` BLEIBT (Copetrage-AST MODULE_MAP_7B trägt per Namen);
+# Name `require_dual_gate` BLEIBT (Coverage-AST MODULE_MAP_7B trägt per Namen);
 # die Factory ist parametrisierbar (`require_dual_gate(mode="hard")` /
 # `mode=_AUTH_MODE`), default_mode="observe" wie zuvor. ist_operator_ip
 # (get_client_ip) speist nur noch das Observe-Log (RAT-32, kein Gate).
@@ -717,7 +717,7 @@ def _current_build_id():
 # kommen als special-Handler-Dict rein. AUSGENOMMEN bleiben die divergenten
 # Auth-Regime (hoerspiel-player cookie-only auf alle Assets, shell AUTH-4-Split,
 # connector eigener /api/v1/seiten/-URL) — ein uniformer sw.js-Zweig darüber
-# verletzte die AST-Membran test_auth_decorator_copetrage.py.
+# verletzte die AST-Membran test_auth_decorator_coverage.py.
 def serve_mantel_asset(asset, *, asset_root, mime_map, special=None):
     """Generischer Mantel-Asset-Dispatch (#1740). ``special`` ist ein Dict
     asset-Name→Callable(→Response) für die divergenten manifest/sw-Quellen; alles
@@ -914,7 +914,7 @@ def _connector_build_id():
     """build_id aus [index.html] (PWAM-4/5, pwa_mantel.REGISTRY['connector']).
 
     Override-aware: base_dir = _connector_asset_root() (runtime-Override bleibt
-    erhalten). Verhalten unpetraendert gegenueber frueher (mtime(index.html)) —
+    erhalten). Verhalten unveraendert gegenueber frueher (mtime(index.html)) —
     connector wird in #1266 nur mechanisch ueber die Lib geroutet, KEINE
     Verhaltensaenderung (Set-Vorbehalt: style.css erst im Angleich-Folgetrack).
     """
@@ -1510,7 +1510,7 @@ def hoerspiel_player_asset_view(asset):
 #
 # SHELL-3: Split-Layout — linke Rail 280px Iframe → /controller/app-panel/<panel_id>/,
 #   rechts Buddy-Pane ohne statischen src (src per SSE-Swap, SHELL-4 RAT-31 E2).
-#   Panel bleibt unpetraendert (PANEL-12 berechnet Grid-Geometrie adaptiv).
+#   Panel bleibt unveraendert (PANEL-12 berechnet Grid-Geometrie adaptiv).
 # SHELL-4: Same-device Live-Refresh — seiten-seitiger SSE-Stream + Ingest (RAT-31 E2).
 #   KEIN Router-Fanout, KEIN display_id-Lookup mehr (SHELL-2 obsolet durch RAT-31).
 # SHELL-5: rechtes Pane swappt nur iframe.src, keine displib-Kopie.
@@ -1935,7 +1935,7 @@ def _shell_asset_root():
 def _shell_build_id():
     """build_id aus [heim-shell.css] (PWAM-4/5, pwa_mantel.REGISTRY['shell']).
 
-    Verhalten unpetraendert gegenueber frueher (mtime(heim-shell.css)).
+    Verhalten unveraendert gegenueber frueher (mtime(heim-shell.css)).
     """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     return pwa_mantel.build_id_for("shell", static_dir)
@@ -1994,7 +1994,7 @@ def shell_sw_view(panel_id):
 # sw.js wird von shell_sw_view (Literal-Route, gated) bedient — nicht hier.
 # manifest.json wird von heim_shell_manifest bedient — nicht hier.
 # AST-Membran: shell_sw_view traegt require_dual_gate (sichtbar per AUTH-9-Test);
-#   shell_asset_view ist als AUTH-4-Public-Route explizit ausgenommen (test_auth_decorator_copetrage.py).
+#   shell_asset_view ist als AUTH-4-Public-Route explizit ausgenommen (test_auth_decorator_coverage.py).
 def shell_asset_view(panel_id, asset):
     """SHELL-PWA: PWA-Icon-Auslieferung (public, AUTH-4, analog ESSEN-34 / PLAN-35).
 

@@ -35,7 +35,7 @@ bekommt ein eigenes Ticket sobald er gebraucht wird.
 ## 1. Architektur
 
 ### ROU-1 — Trennung Adapter ↔ Routing-Kern
-Im Code leben zwei klar getrennte Petrantwortungen:
+Im Code leben zwei klar getrennte Verantwortungen:
 
 - **Adapter** (controller-typ-spezifisch): kennt das Roh-Event-Schema
   einer Controller-Familie und übersetzt es in das kanonische interne
@@ -84,7 +84,7 @@ sind reine Erweiterung des Adapters — keine Änderung am Kern.
 *Tickets:* #5, #24
 
 ### ROU-4 — Antwortverhalten
-- **2xx** wenn Event akzeptiert und petrarbeitet (auch wenn unbekannter
+- **2xx** wenn Event akzeptiert und verarbeitet (auch wenn unbekannter
   Trigger — siehe ROU-11).
 - **4xx** bei Schema-Verletzung (fehlende Pflichtfelder, unbekannter
   Event-Typ für die `source_id`, falsche Feld-Typen).
@@ -106,7 +106,7 @@ adressieren können.
 ### ROU-6 — 1:1-Mapping ohne Quantisierung
 Der Phone-Adapter mappt das Phone-Event direkt auf das kanonische
 Modell — **keine eigene Logik, keine Quantisierung, keine Hysterese**.
-Diese Petrantwortung liegt nach E-FIG-7 in der Phone-Seite, nicht im
+Diese Verantwortung liegt nach E-FIG-7 in der Phone-Seite, nicht im
 Router (siehe auch FIG-20/21 in `figuren-erkennung.md`).
 
 Konkret:
@@ -117,7 +117,7 @@ Konkret:
 | `angle_update { figure_id, bucket }` | `{ source_id, descriptor: { figure_id, bucket } }` |
 | `session_ended { figure_id }` | Session-Ende-Signal: setzt State auf `null` (siehe ROU-11) |
 
-`angle` aus dem Phone-Event wird V1 nicht weiterpetrarbeitet — der
+`angle` aus dem Phone-Event wird V1 nicht weiterverarbeitet — der
 Bucket trägt die für den Routing-Lookup relevante Information. `angle`
 darf für Diagnose geloggt werden, fließt aber nicht in den State.
 
@@ -740,7 +740,7 @@ Dieses Verhalten ist **bewusst anders** als ROU-27 (Daten-Proxy für
 
 - **Kein Last-Known-Good-Cache.** Statische HTML-/JS-/CSS-Assets sind
   Code, der bei Service-Ausfall nicht aus einem Snapshot rekonstruiert
-  werden soll — eine petraltete Editor-Seite würde die Eltern in falsche
+  werden soll — eine veraltete Editor-Seite würde die Eltern in falsche
   Annahmen über den aktuellen Editor-Stand führen.
 - **Kein Code-Default-Fallback.** Fehlt der panel-Service, liefert der
   Router den vom Upstream gekommenen Status (404/5xx) **direkt durch**
@@ -804,7 +804,7 @@ Der Endpunkt schreibt oder aktualisiert genau **einen** `panels`-Eintrag der
 Panels auf ein anderes Display); ist sie neu, wird die Zeile angelegt. **Genau
 ein Display pro Panel-Instanz** (Singular `display_id`, E-PANEL-5 / ROU-24) —
 ein `display_ids`-Plural im Body ist eine Schema-Verletzung (4xx), damit die
-petraltete Plural-Form (vom `_parse_routing`-Pfad in ROU-18 schon abgelehnt) gar
+veraltete Plural-Form (vom `_parse_routing`-Pfad in ROU-18 schon abgelehnt) gar
 nicht erst in die Datei gelangt.
 
 **Loopback-/`/admin/`-geschützt (ROU-28).** Die Kante ist **loopback-only**

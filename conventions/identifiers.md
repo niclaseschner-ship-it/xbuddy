@@ -23,7 +23,7 @@ Geräte-Registry (siehe IDENT-1).
 ### IDENT-5 — Identitäts-Token in HTML-Templates (Server-side-Substitution)
 Wenn eine Render-Schicht eine pro-Instanz-Identität in ein HTML-Template
 einsetzt, folgt das einem festen Token-Pattern. So bleibt die Mechanik
-über Konsumenten hinweg lesbar, und Drift bei späterer Petrallgemeinerung
+über Konsumenten hinweg lesbar, und Drift bei späterer Verallgemeinerung
 (`__SEITE_ID__`, `__HUB_ID__`, …) ist ausgeschlossen.
 
 - **Form:** Das Token ist `__<NAME>__` — zwei führende und zwei

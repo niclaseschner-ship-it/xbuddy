@@ -3,7 +3,7 @@
 Belegt, dass ein `get_chat(...).complete_multiturn(...)`-Call mit gemocktem
 anthropic-SDK genau **einen** JSONL-Eintrag in `var/llm/provider_calls.jsonl`
 schreibt — und zwar mit `caller="kibuddy"` (Tier-2-Projektion). Damit ist die
-KIBuddy-Spike-Stufe-2-Vorprobe für T1082 in den Tests petrankert (LLMP-S7
+KIBuddy-Spike-Stufe-2-Vorprobe für T1082 in den Tests verankert (LLMP-S7
 Stufe-1-Fixture 3 „Multi-Turn-Chat").
 """
 

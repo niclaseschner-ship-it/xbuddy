@@ -5,7 +5,7 @@ Bilderrahmen: er besitzt seine Daten (die Medien-Library, PHOTO-7), seine
 Funktion (Ingest + Normalisierung Abschnitt 4, Durchlauf Abschnitt 1) und
 stellt das Ergebnis über seine Display-View `rahmen` bereit (PHOTO-2, APP-1).
 
-Modul-Aufteilung (eine Petrantwortung je Modul, CLAUDE.md §6; einseitige
+Modul-Aufteilung (eine Verantwortung je Modul, CLAUDE.md §6; einseitige
 Abhängigkeiten, keine Zyklen):
 
   config     — Daten-/Verhaltens-Konfig (photo.json), ConfigError (PHOTO-19)

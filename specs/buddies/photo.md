@@ -263,7 +263,7 @@ echte Telegram-/Geräte-Eingänge sind nicht Teil der automatisierten Suite.
   (#83) und kommt später.
 - **OPEN-PHOTO-D — Google Photos / externe Bibliotheken-Sync.** Vision-Endausbau
   (direkter Link zu einer externen Bibliothek), später.
-- **OPEN-PHOTO-E — Bild-/Video-Petrarbeitungs-Libs.** Foto: Pillow + pillow-heif
+- **OPEN-PHOTO-E — Bild-/Video-Verarbeitungs-Libs.** Foto: Pillow + pillow-heif
   (HEIC-Decode). Video: **`ffmpeg`** (Transcode HEVC/MOV→MP4 + Poster-Frame) —
   **schwerere Pi-Abhängigkeit**, fürs Bau-Ticket einplanen.
 - **OPEN-PHOTO-F — Geteilter Upload-/Atomic-Write-Helfer.** Der multipart-Ingest +

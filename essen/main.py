@@ -454,7 +454,7 @@ def _auth_401():
 # Decorator: HART-AUTH (T948, auth.md AUTH-2/3/5/8). Der hand-kopierte
 # Wrapper-Body ist mit #1626 auf die AUTH-Decorator-Lib-Factory geflippt
 # (tools/initdata/auth_gate.py::make_require_init_data, #1625). Der Name
-# `require_init_data` BLEIBT (AUTH-9-Copetrage-Test trägt per AST-Namen); die
+# `require_init_data` BLEIBT (AUTH-9-Coverage-Test trägt per AST-Namen); die
 # Buddy-eigenen Getter + `_auth_401` gehen WÖRTLICH als Closures rein — die
 # Factory ruft genau diesen `_auth_401`, 401/403/500-Shape bleibt byte-gleich.
 # Routes, die Eltern-only-Verhalten brauchen, prüfen explizit g.init_data.
@@ -1061,7 +1061,7 @@ def post_foto():
 
     Normalisiert (HEIC→JPEG, Thumbnail), schreibt atomar in das Essen-eigene
     Foto-Verzeichnis (MEDIEN-2, SVC-5). Antwort `{"id", "typ"}`.
-    Leeres/fehlendes Feld → 400. Schreib-/Petrarbeitungsfehler → 503.
+    Leeres/fehlendes Feld → 400. Schreib-/Verarbeitungsfehler → 503.
     """
     if "medium" not in request.files:
         return _bad_request("multipart-Feld 'medium' fehlt")
@@ -1078,7 +1078,7 @@ def post_foto():
         try:
             medium = medien_store.ingest(fotos_verz, rohbytes, dateiname)
         except medien_store.NormalizeError as e:
-            return _bad_request("Medium nicht petrarbeitbar: %s" % e)
+            return _bad_request("Medium nicht verarbeitbar: %s" % e)
         except medien_store.StoreError as e:
             logger.warning("post_foto: Schreiben fehlgeschlagen: %s", e)
             return _bad_request(str(e), status=503)

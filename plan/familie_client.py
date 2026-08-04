@@ -12,7 +12,7 @@ Dieses Modul ist die einzige Naht, ueber die der Plan-Buddy Personen-Daten
 holt. Es liefert lokale Duck-Type-Objekte (`Person`, `RegistryView`) mit
 genau der API, die `plan.render` und `plan.kalender` heute brauchen
 (`alle()`, `get(id)`, `Person.id/name/ring/art/foto/email/is_kind/...`) —
-damit die Konsumenten unpetraendert bleiben.
+damit die Konsumenten unveraendert bleiben.
 
 Erreichbarkeit: ist die Familie-Komponente nicht erreichbar (Connection
 refused, Timeout, HTTP-Fehler), wird **ein klarer Log-Eintrag** geschrieben

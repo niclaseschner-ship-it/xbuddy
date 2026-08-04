@@ -15,7 +15,7 @@ diese Funktion".
 Begründung: Komponenten sind getrennte Prozesse (SVC-1) mit eigenen Logs
 (SVC-4, LOG-1) und eigenem Lifecycle. Ein direkter Import koppelt die
 Lifecycles: stürzt der importierte Code, fällt der Importeur mit; startet
-eine Komponente neu, hat der Importeur einen petralteten Modul-Stand im
+eine Komponente neu, hat der Importeur einen veralteten Modul-Stand im
 Speicher. HTTP entkoppelt sauber und macht den Aufruf in den Logs
 diagnostizierbar.
 

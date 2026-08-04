@@ -319,7 +319,7 @@ def _auth_401():
 # frühere hand-inline SOFT-Wrapper (V3 #898, pass-through ohne Cookie) ist auf
 # die AUTH-Decorator-Lib-HART-Factory geflippt — SOFT-Pass-through stoppte den
 # PII-Leak nicht (Spec auth.md „AUTH-Decorator-Lib": routine migriert auf
-# HART-Cookie). Der Name `require_init_data` BLEIBT (AUTH-9-Copetrage-Test trägt
+# HART-Cookie). Der Name `require_init_data` BLEIBT (AUTH-9-Coverage-Test trägt
 # per AST-Namen); die Buddy-eigenen Getter + `_auth_401` gehen als Closures rein.
 require_init_data = make_require_init_data(
     get_bot_token=_get_bot_token,

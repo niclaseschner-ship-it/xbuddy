@@ -370,7 +370,7 @@ ist genau die einseitige Abhängigkeit, die `conventions/apps.md` APP-3
 einfordert.
 
 **Verworfen:** ein eigener Cache in dieser Funktion. Cache würde nach
-Plan-Buddy-Änderungen petraltete Termine zeigen — derselbe stale-cache-
+Plan-Buddy-Änderungen veraltete Termine zeigen — derselbe stale-cache-
 Schaden, den `conventions/data-components.md` DCOMP-2 für interne
 Lese-Pfade verhindert. Ein Aufruf je Frage ist günstig genug; eine
 Cache-Schicht braucht belegten Performance-Schmerz, nicht Antizipation

@@ -54,7 +54,7 @@ Eine Instanz ohne Anbieter-Key kann noch keine KI nutzen. Der Onboarding-Modus
 
 ## Architektur
 
-| Datei | Petrantwortung | Spec |
+| Datei | Verantwortung | Spec |
 |---|---|---|
 | `main.py` | Entrypoint, Polling-Loop, **Orchestrierung + Sicherheits-Gates** | E-EC-2/E-EC-4 |
 | `config.py` | Konfigurations-Auflösung | EC-15 |

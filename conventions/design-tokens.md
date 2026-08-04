@@ -55,7 +55,7 @@ Erlaubt: buddy-eigene ergänzende CSS-Dateien mit Buddy-spezifischen Werten, die
 Größen). Nicht erlaubt: eigene Deklarationen für Token-Werte, die der geteilte
 Strang bereits definiert.
 
-*CLAUDE.md-Verweis:* §6, „Ein Modul = eine Petrantwortung" und „Dieselbe Logik
+*CLAUDE.md-Verweis:* §6, „Ein Modul = eine Verantwortung" und „Dieselbe Logik
 zweimal zu schreiben ist verboten — gemeinsamer Code lebt an EINEM Ort."
 
 ### DTOK-4 — Stufen-System: Token-Namen stabil, Werte stufen-abhängig

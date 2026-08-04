@@ -62,7 +62,7 @@ AKTIVITAETEN_V1 = [
     {"art": "geburtstag",  "label": "Geburtstag",
      "keywords": ["geburtstag", "geburts"],
      "piktogramm": "3087"},
-    {"art": "petrabredung", "label": "Petrabredung", "keywords": ["petrabredung"],
+    {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],
      "piktogramm": "2255"},
     {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],
      "piktogramm": "2666"},

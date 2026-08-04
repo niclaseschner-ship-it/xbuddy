@@ -97,7 +97,7 @@ class OnboardingState:
 
 
 def handle_update(update, ctx):
-    """Petrarbeitet ein Update im Onboarding-Modus (ONB-1).
+    """Verarbeitet ein Update im Onboarding-Modus (ONB-1).
 
     `ctx` ist der laufende Context; bei erfolgreichem Abschluss setzt diese
     Funktion `ctx.provider`/`ctx.family_group_chat_id` und `ctx.onboarding`
@@ -227,7 +227,7 @@ def _complete(ctx, provider):
 
 
 def _send(ctx, chat_id, text):
-    """Sendet eine Nachricht; ein Sendefehler bricht die Petrarbeitung nicht ab."""
+    """Sendet eine Nachricht; ein Sendefehler bricht die Verarbeitung nicht ab."""
     try:
         ctx.tg.send_message(chat_id, text)
     except TelegramError as e:

@@ -269,7 +269,7 @@ Der Typing-Indikator ist **Best-Effort-Komfort** und kein Sicherheits-Gate:
 
 **Was sich für die Familie ändert.** Ohne EC-25 sieht die Familie nach dem
 Absenden ihres Bestätigungswortes oder einer Rückfragen-Antwort zunächst Stille
-— je nach Petrarbeitungsdauer mehrere Sekunden, ohne Signal, dass der Bot noch
+— je nach Verarbeitungsdauer mehrere Sekunden, ohne Signal, dass der Bot noch
 aktiv ist. Mit EC-25 erscheint sofort das „tippt gerade"-Signal im Privatchat,
 bevor die Bot-Antwort kommt. Das reduziert Verwirrung bei längeren
 Provider-Calls (EC-14, EC-11), ohne die Latenz zu verändern.
@@ -283,7 +283,7 @@ B) Spec-Patch-Skizze" → EC-N3-Klausel;
 EC-25 deckt Typing **innerhalb** einer mehrstufigen Schreib-Aufgabe ab
 (Session-intern, nach Auth, im Agent-Loop). EC-39 ergänzt das **Sofort-
 Typing bei Empfang** — gesendet vom Polling-Reader direkt nach
-`getUpdates`, **vor** der Auth- und Agent-Petrarbeitung — gilt ebenfalls
+`getUpdates`, **vor** der Auth- und Agent-Verarbeitung — gilt ebenfalls
 nur für Privatchats. Beide Pfade können parallel laufen
 (Telegram-`sendChatAction` ist idempotent).
 
@@ -312,7 +312,7 @@ Ein Skill, der **strukturierte Listen zum Kopieren** vorlegen will (z. B.
 `termine-aus-bild.md` TAB-7 Sammel-Vorschlag und TAB-8.1 Sentinel-Lückenform),
 **aktiviert HTML pro Nachricht** durch ein optionales Argument
 `parse_mode="HTML"` an der `send_message`-API. Diese Wahl ist
-**Skill-Petrantwortung**: der Skill muss in dieser Nachricht alle dynamischen
+**Skill-Verantwortung**: der Skill muss in dieser Nachricht alle dynamischen
 Werte HTML-escapen (siehe unten) — sonst zerstört er die eigene Nachricht.
 
 **HTML-Escape-Pflicht beim Opt-in:** Sobald ein Skill `parse_mode="HTML"`
@@ -379,7 +379,7 @@ Telegram-Chat. Eine Katalog-Aufgabe (EC-8), die das LLM während der
 Tool-Use-Phase aufruft, **postet während ihrer Ausführung nicht selbst** —
 weder direkt über die Telegram-API noch über eine von ihr gerufene
 trigger-agnostische Funktion. Sie returnt stattdessen einen
-**User-tauglichen Antwort-Text als Tool-Result**; das LLM petrarbeitet
+**User-tauglichen Antwort-Text als Tool-Result**; das LLM verarbeitet
 diesen Text in seiner nachfolgenden Antwort-Generierung zur Bot-Nachricht.
 Ziel ist eine flüssige, nach echtem Mensch klingende Antwort: das LLM
 **kennt** das Ergebnis (aus dem Tool-Result) und **formuliert** es —
@@ -412,7 +412,7 @@ und wird erst angegangen, wenn die Provider-Down-Frequenz das rechtfertigt
 **Datei-Anhänge — Skill sendet die Datei, LLM postet den Text.** Wo eine
 Aufgabe ein Nicht-Text-Artefakt ausliefert (Datei via
 `tg.send_document`, Bild via `tg.send_photo`), bleibt der **Anhangs-
-Versand** Skill-Petrantwortung — das LLM hat keine Datei-Sende-Mechanik.
+Versand** Skill-Verantwortung — das LLM hat keine Datei-Sende-Mechanik.
 Der **gesamte Text-Teil** (Caption, Anleitung, Begleittext) wandert in den
 Tool-Result; das LLM formuliert daraus die Bot-Nachricht und postet sie.
 Heute betrifft das `ca-verteilung.md` (CAV) — Zertifikatsdatei vom Skill,
@@ -626,7 +626,7 @@ Variante (Confirm vor Schreib, EC-2X Welle 3).
 **Statistik-Nebennutzen (kein V1-Feature).** Das Receipt-Datenmodell
 zusammen mit EC-35-`task_events` ermöglicht später Auswertungen
 (Call-Dauer pro Skill, Häufigkeit, Fehlerraten, Undo-Quote pro Skill).
-V1 baut **keine** Auswertungs-Schnittstelle; die Spec petrankert nur,
+V1 baut **keine** Auswertungs-Schnittstelle; die Spec verankert nur,
 dass das Schema diese Auswertung **erlaubt**, ohne sie zu erzwingen.
 Eine konkrete Statistik-Funktion entsteht erst beim ersten Vorkommen
 mit belegtem Bedarf (CLAUDE.md §6).
@@ -712,7 +712,7 @@ macht klar, dass das WERKZEUG die Aufgabe ausführt — einschließlich des
 Schritt-für-Schritt-Dialogs (Auswahl aus den jeweiligen Registries/Listen) —
 und bei erneutem Wunsch erneut aufzurufen ist. Sie darf NICHT so lesen, als sei
 der Vorgang bereits im Gange oder erledigt, und NICHT als „erst nach
-Bestätigung ausführen" formuliert sein — beides petranlasst das Modell, auf ein
+Bestätigung ausführen" formuliert sein — beides veranlasst das Modell, auf ein
 externes „Ja" zu warten, statt das Werkzeug bei erneutem Anlauf erneut
 aufzurufen. Der Text ist per Aufgaben-Name parametrisiert, damit das Modell
 erkennt, WELCHES Werkzeug erneut aufzurufen ist. Das deterministische
@@ -849,7 +849,7 @@ Skill an die konsumierenden Buddies.
 ## 4. KI-Anbieter & Datensicherheit
 
 ### EC-11 — KI-Anbieter je Instanz wählbar
-Welcher KI-Anbieter die Anfragen einer Familie petrarbeitet, ist je Instanz
+Welcher KI-Anbieter die Anfragen einer Familie verarbeitet, ist je Instanz
 konfigurierbar (siehe EC-15). Der Wechsel des Anbieters ist eine reine
 Konfigurations-Änderung — er erfordert keine Änderung am übrigen Verhalten oder
 Aufbau des Systems.
@@ -888,7 +888,7 @@ Eine-Stimme-Pattern (EC-29) und ist eine **ehrliche V1-Linie**, kein
 Sicherheits-Versprechen für die Familien-Beta: V1 läuft mit Nic und
 Testfeld; vor einer Familien-Beta ist die Privacy-Lage neu zu bewerten.
 Die langfristige Sicherung liegt im **Anonymisierungs-Layer** und in der
-**Datenpetrarbeitung in Deutschland** (OPEN-EC-A, Backlog) — beide bleiben
+**Datenverarbeitung in Deutschland** (OPEN-EC-A, Backlog) — beide bleiben
 verbindliche Ziele, nicht V1-Bestandteil.
 
 *Tickets:* #27, #551
@@ -1278,7 +1278,7 @@ gelöst).
 `brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`).
 
 Der Telegram-Long-Poll-Lesepfad (`getUpdates`) läuft in einem Daemon-Thread
-(`name="poll-reader"`), getrennt von der Update-Petrarbeitung (`dispatch`).
+(`name="poll-reader"`), getrennt von der Update-Verarbeitung (`dispatch`).
 Reader und Processor sind durch **zwei** Queues verbunden — eine
 Hand-off-Queue für Updates und eine ACK-Queue für Done-Signale:
 
@@ -1292,7 +1292,7 @@ Hand-off-Queue für Updates und eine ACK-Queue für Done-Signale:
   entnimmt), dann **`ack.get()` (blockiert bis Processor Done meldet)**,
   dann `offset = update_id + 1` und nächstes `get_updates`. Erst nach
   dem ACK steigt der Offset — Telegram bestätigt das Update erst, wenn
-  der Processor seine Petrarbeitung abgeschlossen hat.
+  der Processor seine Verarbeitung abgeschlossen hat.
 - **Processor (Hauptthread):** `(t0, update_id, update) = handoff.get()`,
   dann `dispatch(update, ctx)` (kann beliebig lange laufen, z. B. HFE.
   propose() 20–90 s), dann `open_chat_ids.discard(chat_id)`, dann
@@ -1308,7 +1308,7 @@ Hand-off-Queue für Updates und eine ACK-Queue für Done-Signale:
   Client überschreibt das mit der nächsten Bot-Antwort).
 - **E-EC-2-Backoff** wandert in den Reader; Semantik unverändert.
 
-Die Trennung stellt sicher, dass eine länger laufende Petrarbeitung
+Die Trennung stellt sicher, dass eine länger laufende Verarbeitung
 (z. B. HFE.propose() 20–90 s, EC-14-Fehlerfall) das Lesen der nächsten
 eingehenden Nachricht nicht blockiert — und insbesondere die familien-
 seitige Sichtbarkeit (EC-25 / EC-39) während laufender Schreibaufgaben
@@ -1328,16 +1328,16 @@ nicht stillstellt.
 
 *Tickets:* (folgt mit `/arbeitstag-prep`).
 
-### EC-38 — At-least-once-Update-Petrarbeitung
+### EC-38 — At-least-once-Update-Verarbeitung
 
 **RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → B)
 Spec-Patch-Skizze" → EC-N2-Klausel;
 `brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`).
 
 Der Long-Poll-Offset (`getUpdates`-`offset`) wird erst nach der
-beobachteten Petrarbeitung erhöht. Konkret: der Reader bestätigt ein
+beobachteten Verarbeitung erhöht. Konkret: der Reader bestätigt ein
 Update bei Telegram (= nächster `getUpdates(offset+1)`) **erst, nachdem**
-der Processor seine Petrarbeitung abgeschlossen UND ein Done-Signal über
+der Processor seine Verarbeitung abgeschlossen UND ein Done-Signal über
 die ACK-Queue (EC-37) zurück an den Reader gemeldet hat. Bounded
 Hand-off-Queue (Slot 1) plus explizites ACK pro Update — der Reader
 blockiert in `ack.get()` zwischen Hand-off und Offset-Erhöhung.
@@ -1345,9 +1345,9 @@ blockiert in `ack.get()` zwischen Hand-off und Offset-Erhöhung.
 **Konsequenz:** Bei einem Pi-/Heimserver-Crash zwischen Reader-Empfang
 und Processor-Konsum liefert Telegram das Update beim Restart erneut
 (Telegram retent ungelesene Updates 24 h). Das Risiko sind doppelte
-Petrarbeitungen *innerhalb* der 24-h-Retention bei sofortigem Restart —
+Verarbeitungen *innerhalb* der 24-h-Retention bei sofortigem Restart —
 bewertet als kleiner als der heutige Update-Verlust durch In-RAM-Burst-
-Petrarbeitung im sequenziellen `poll_loop`.
+Verarbeitung im sequenziellen `poll_loop`.
 
 **Akzeptanz-Begründung (Codex-Brüche in beiden Pässen):** Eine
 optimistische Variante hätte mehrere Updates in einer unbounded Queue
@@ -1378,7 +1378,7 @@ vor Auth-Check, vor Agent-Loop, vor jeder Bot-Antwort. Ein paralleler
 **`_TypingRenewer`**-Daemon-Thread erneuert den Indikator alle **4 s**
 (gemeinsame Intervall-Konstante mit EC-28 / `skills/typing_indicator.py:28-31`
 — *eine* Wahrheit), solange das Update in der Hand-off-Queue steht oder
-der Processor es petrarbeitet (`chat_id` in `open_chat_ids`).
+der Processor es verarbeitet (`chat_id` in `open_chat_ids`).
 
 **Gilt nur für Privatchats.** Familien-Gruppe bleibt vom Sofort-Typing
 **ausgenommen** — EC-25 (Privatchat-only-Norm für mehrstufige Schreib-
@@ -1405,14 +1405,14 @@ Sofort-Typing erst nach Live-Mitgliedschaftsprüfung (`is_authorized`-
 Call im Reader pro Update). Heute aufgeschoben.
 
 **Best-Effort:** Fehler beim `sendChatAction` (Telegram-Rate-Limit,
-HTTP-Fehler) unterbrechen die Petrarbeitung nicht; sie werden geschluckt
+HTTP-Fehler) unterbrechen die Verarbeitung nicht; sie werden geschluckt
 und geloggt.
 
 **Wirkung für die Familie:** Während Nic eine Hörspiel-Folge anstößt
 (HFE.propose() 20–90 s, Polling-Loop blockiert für `dispatch`) sieht
 Lena binnen 1–2 s nach ihrer Nachricht einen Typing-Indikator
 („Bot tippt"), der durch den Renewer alle 4 s erneuert wird, bis ihr
-Update petrarbeitet ist und der Bot antwortet. Statt 90 s Stille:
+Update verarbeitet ist und der Bot antwortet. Statt 90 s Stille:
 durchgehendes „beschäftigt"-Signal. Quer-Verweis: EC-25 deckt Typing
 **innerhalb** der mehrstufigen Schreib-Aufgabe ab (nach Auth, im
 Agent-Loop); EC-39 ergänzt das **vor** der Auth.
@@ -1554,7 +1554,7 @@ Skill auf — nicht den Knopf in Prosa imitieren.
 
 **Geltungsbereich.** Diese Regel bindet jeden Agent-Turn des
 Eltern-Chats — sowohl die direkte LLM-Antwort als auch die
-Tool-Result-Petrarbeitung. Sie ist **unabhängig vom KI-Anbieter**
+Tool-Result-Verarbeitung. Sie ist **unabhängig vom KI-Anbieter**
 (EC-12) und damit auch bei künftigem Anbieter-Wechsel bindend.
 Tool-`description`-Texte der EC-40-Familie tragen die Regel als
 expliziten Negativ-Hinweis („keinen Markdown-Knopf in der Antwort
@@ -1793,15 +1793,15 @@ bevor es eine leere Liste zurückgibt; die Backoff-Pause liegt danach und
 betrifft nur den Abstand zum nächsten Poll-Aufruf bei Leerlauf/Fehler.
 
 **Verfeinerung Pickup-Latenz-Logging (#294):** Der `poll_loop` misst
-für jedes petrarbeitete Update die Latenz zwischen `getUpdates`-Rückkehr
-(t0) und der Fertigstellung der Petrarbeitung (t1) und schreibt sie pro Update
+für jedes verarbeitete Update die Latenz zwischen `getUpdates`-Rückkehr
+(t0) und der Fertigstellung der Verarbeitung (t1) und schreibt sie pro Update
 als `INFO`-Eintrag gemäß LOG-1-Zeilenformat (`%(asctime)s %(levelname)s %(message)s`);
 der `message`-Teil enthält strukturierten Inhalt im `event=… key=value`-Stil:
 `poll event=pickup_latency count=1 latency_ms=X`. `count=1` ist fix, weil
 durch den Reader/Processor-Split der Processor stets ein Update pro
 Loop-Durchlauf sieht (Per-Update-Log statt Per-Batch). Das ist die
 **familienseitige Long-Poll-Pickup-Latenz** — von Telegrams Update-Lieferung
-bis zum Ende unserer Petrarbeitung — und ist bewusst von der
+bis zum Ende unserer Verarbeitung — und ist bewusst von der
 EC-23-Provider-Latenz (innerhalb eines Turns) abgegrenzt: EC-23 misst, wie
 lange der LLM-Anbieter braucht; diese Metrik misst, wie schnell das System
 auf ein eintreffendes Update reagiert.
@@ -1870,8 +1870,8 @@ Anbieter-API.
 
 Dies ist das *Ergebnis* der Anforderungen EC-11 und EC-12. Die *Anforderung*
 dahinter: Familien gewichten Datensicherheit unterschiedlich — die eine
-akzeptiert Petrarbeitung außerhalb der EU, die andere verlangt einen
-EU-Anbieter oder lokale Petrarbeitung. Der Adapter macht den Anbieterwechsel zu
+akzeptiert Verarbeitung außerhalb der EU, die andere verlangt einen
+EU-Anbieter oder lokale Verarbeitung. Der Adapter macht den Anbieterwechsel zu
 einer Konfigurations-Änderung. V1 liefert den Claude-Adapter — beste
 Erkennungsqualität für die Bewertungsphase; weitere Adapter (etwa Mistral)
 folgen additiv, ohne auf Vorrat spezifiziert zu werden. Dasselbe Adapter/Kern-

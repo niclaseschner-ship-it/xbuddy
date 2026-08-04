@@ -67,6 +67,6 @@ fasst nur eine Action an, nie ein Agent per Shell; nach `main` nur über PR"). M
 Der Satz im Beschluss „kein Agent fasst je wieder Labels per Shell an" meint den
 **`status:*`-Lebenszyklus**, nicht *alle* Labels. **Property-Labels** (`blocked`, künftig
 ggf. `needs-nic`) haben keinen Action-Lebenszyklus und dürfen von Agent oder Mensch per
-Shell gesetzt werden — `blocked` wird das an den arbeitstag-Set-Sites bereits. Petrankert
+Shell gesetzt werden — `blocked` wird das an den arbeitstag-Set-Sites bereits. Verankert
 als Geltungsbereich-Absatz in RECON-3 (`conventions/reconcile.md`). Anlass: xbuddy-prozess#13
 (Label-Taxonomie, Variante b+).

@@ -98,7 +98,7 @@ sind ohne Adapter-Kopie verfügbar
   („Lib oder Netz-Dienst?") explizit zu Lib entschieden (`zugangsdaten.md:215-221`,
   „Ein Dienst wäre Komplexität ohne belegten Bedarf"). LLM-Provider hat
   identische Konsumenten-Topologie (alle In-Prozess auf demselben Hub).
-- **DCOMP-1-Satz-2** petrankert das Layer-Modell: `tools/` ist die
+- **DCOMP-1-Satz-2** verankert das Layer-Modell: `tools/` ist die
   prozesslose Library-Schicht (`conventions/module-boundaries.md:18-20`).
   `tools/llm/` setzt das Muster ohne neue Schicht fort.
 - **Heim-Server-Linse.** HTTP-Hop zwischen Buddy und LLM-Provider auf
@@ -108,7 +108,7 @@ sind ohne Adapter-Kopie verfügbar
 - **RAT-6-Trigger erfüllt.** „LLM-Gateway ab KIBuddy (2. Konsument)" —
   KIBuddy ist der zweite Konsument (eltern-chat = 1., hoerspiel = 2./3.,
   KIBuddy macht Multi-Turn als drittes Vertrags-Muster). Trigger sauber
-  mehrfach petrankert: RAT-6:71, OPEN-KIBUDDY-F (`kibuddy.md:784-787`),
+  mehrfach verankert: RAT-6:71, OPEN-KIBUDDY-F (`kibuddy.md:784-787`),
   HSP-Antizipation (`hoerspiel.md:362-365`).
 
 ## Was die Runde explizit NICHT ratifiziert hat

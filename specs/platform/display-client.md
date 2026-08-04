@@ -152,7 +152,7 @@ Geräte-Aufgaben: er stellt sich selbst in den Vollbild-/Wach-Zustand und
 er skaliert den gerouteten Inhalt geometrisch ins verfügbare Viewport. So
 gilt das xBuddy-Grundprinzip „Dashboards füllen das Display, kein
 Scroll" auch dort, wo Display-Auflösung und Design-Auflösung des Inhalts
-auseinanderlaufen — ohne dass der Inhalt selbst dafür Petrantwortung
+auseinanderlaufen — ohne dass der Inhalt selbst dafür Verantwortung
 übernehmen muss (Plan-Buddy bleibt bei seiner Design-Auflösung).
 
 ### DC-11 — Vollbild & Bildschirm wach halten
@@ -345,7 +345,7 @@ ununterlegt (OPEN-DC-C).
 Trägt die geroutete Content-URL `?fit=viewport`, dimensioniert der Adapter
 das Inhalts-iframe auf 100 %×100 % des Viewports, setzt `transform: none`
 (kein DC-12-Skalieren) und zeigt keinen Letterbox-Rahmen. Die
-Layout-Petrantwortung liegt vollständig beim Inhalt (responsive CSS,
+Layout-Verantwortung liegt vollständig beim Inhalt (responsive CSS,
 viewport-Einheiten/Media-Queries); der Display-Client bleibt ein dummer
 Rahmen. Der `rescale()`-Guard fällt bei fehlendem Param exakt auf den
 bisherigen `applyScale`-Pfad zurück — die fixed-Views bleiben unberührt.

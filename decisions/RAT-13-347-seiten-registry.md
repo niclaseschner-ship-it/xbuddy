@@ -32,7 +32,7 @@ ein Eltern-Chat-Lese-Skill, der Fragen dagegen auflöst.
    `inventar.json`; `GET /api/v1/seiten` antwortet immer aus der Datei
    (<50 ms, keine Upstream-Calls im Request-Pfad). Eigener Service ist
    gerechtfertigt (RAT-1-Muster), weil er eigene geschriebene Daten hat — NICHT
-   im Router (der bliebe Routing + müsste App-Discovery-Petrantwortung tragen).
+   im Router (der bliebe Routing + müsste App-Discovery-Verantwortung tragen).
    Fehlermodell Last-Known-Good (ROU-27-Geist): Snapshot-Teil bei Ausfall
    `stale:true`, nie leer.
 3. **Auth = der Kanal, keine Rolle.** Der Skill `seiten_finden` läuft nur im

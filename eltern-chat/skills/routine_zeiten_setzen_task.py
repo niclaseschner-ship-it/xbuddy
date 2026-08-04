@@ -166,7 +166,7 @@ class RoutineZeitenSetzenTask(WriteTask):
         # is_member_fn wird von build_catalog immer injiziert (_rzs_is_member in tasks.py).
         # Ein None-Default existiert im __init__ nur für Tests, die eine eigene Funktion
         # übergeben — der None-Fallback mit eigener get_chat_member-Logik wäre tote
-        # Duplizierung von _rzs_is_member (§6 CLAUDE.md: ein Modul = eine Petrantwortung).
+        # Duplizierung von _rzs_is_member (§6 CLAUDE.md: ein Modul = eine Verantwortung).
         is_member_fn = self._is_member_fn
 
         # V1 synchron: kein Worker-Thread, kein echtes next_message.

@@ -45,7 +45,7 @@ TASK-7 + TASK-4 `WriteTask` propose→confirm).
 - **Termin-Konflikt-Erkennung** — TAB legt Termine **additiv** an. Eine
   Vor-Prüfung gegen bestehende Termine („am Donnerstag steht schon X")
   wäre möglich, ist aber V1 nicht (OPEN-TAB-Konflikt).
-- **Mehrere Bilder hintereinander** — V1 petrarbeitet ein Bild je Aufruf.
+- **Mehrere Bilder hintereinander** — V1 verarbeitet ein Bild je Aufruf.
   Eine Skill-Queue (Mehr-Bilder-Folge in einer Session) ist Folge-Ticket
   (OPEN-TAB-Queue).
 - **Personen-Anreicherung der Termin-Titel** — TAB-8.2 hängt **keine**
@@ -671,7 +671,7 @@ müssen:
   Plan. V2 muss explizit eine „Login erforderlich"-Heuristik haben und
   dem Aufrufer ehrlich zurückmelden, dass die Seite Auth braucht
   (`eltern-chat.md` EC-7).
-- **Beliebige Seiten als Angriffs-Pfad.** Eine vom LLM petrarbeitete
+- **Beliebige Seiten als Angriffs-Pfad.** Eine vom LLM verarbeitete
   beliebige Seite ist eine Prompt-Injection-Quelle. Das Tool-Schema
   (TAB-5) bleibt für V2 dieselbe Verteidigung — kein Free-Text-Output,
   nur strukturierte Termin-Liste —, aber V2 sollte zusätzlich den Text-
@@ -684,7 +684,7 @@ Familie nach „URL statt Foto" fragt.
 
 ## Offene Punkte
 
-- ~~**OPEN-TAB-Privacy — KI-Anbieter mit DSGVO-Belegen für Bild-Petrarbeitung.**~~
+- ~~**OPEN-TAB-Privacy — KI-Anbieter mit DSGVO-Belegen für Bild-Verarbeitung.**~~
   **ERLEDIGT 2026-06-11 durch E-TAB-7 (Refs #486); Anbieter-Wahl aktualisiert
   2026-07-03 durch E-TAB-8 (Refs #1262).** E-TAB-7 legte Auswahl-Katalog + DE→EU-
   Aufweichung fest (weiter gültig als Auswahl-Regel); die **aktive** Foto-Route ist
@@ -699,7 +699,7 @@ Familie nach „URL statt Foto" fragt.
   Z. 533ff.) schließt. Das Wortlaut von `eltern-chat.md` E-EC-9 wird
   **nicht** in dieser TAB-Spec geändert.
 
-- **OPEN-TAB-Queue — Mehrere Bilder hintereinander.** V1 petrarbeitet ein
+- **OPEN-TAB-Queue — Mehrere Bilder hintereinander.** V1 verarbeitet ein
   Bild je Aufruf. Schickt eine Familie zwei Bilder kurz hintereinander
   (Schulplan Seite 1 und Seite 2), entstehen zwei parallele TAB-Aufrufe
   — V1 macht keinen Queue-Mechanismus. Folge-Ticket „TAB-Skill-Queue:
@@ -861,10 +861,10 @@ Eltern-Chats abwickelt, mit einem `image`-Content-Block (TAB-5).
 
 V2-Pfad als additive Erweiterung: sollte sich zeigen, dass der
 konfigurierte Text-Anbieter Bilder nicht ausreichend kann oder ein
-**anderer** Anbieter DSGVO-konformer für Bild-Petrarbeitung ist (siehe
+**anderer** Anbieter DSGVO-konformer für Bild-Verarbeitung ist (siehe
 OPEN-TAB-Privacy), erweitert V2 das EC-11-Schema um einen **zweiten**
 Adapter-Slot „multimodal" — eine Familie kann dann z. B. Text bei
-Anbieter A und Bilder bei Anbieter B petrarbeiten lassen. Das ist eine
+Anbieter A und Bilder bei Anbieter B verarbeiten lassen. Das ist eine
 **additive** Erweiterung des `eltern-chat.md` EC-11-Vertrags, keine
 Umbau-Migration.
 
@@ -872,7 +872,7 @@ Umbau-Migration.
 nachzutragen, hier zur Referenz):
 
 - **DE-Hosting** der multimodalen Inferenz (`xbuddy-knowledge/CONTEXT.md`
-  §3 „Privacy" — „Petrarbeitung in Deutschland").
+  §3 „Privacy" — „Verarbeitung in Deutschland").
 - **Belegte Zero Data Retention** im DPA des Anbieters (kein
   Training-Use des übermittelten Bilds, kein langfristiges Logging).
 - **Aktiver Lifecycle** des konkret eingesetzten multimodalen Modells
@@ -946,10 +946,10 @@ Plateforme, Paris/Frankreich).
   Act-Exponierung, keine US-Mutterkonzern-Hintertür. Schrems-II-Linie
   des EuGH ist nicht relevant.
 - **EU statt DE als V2-Hosting-Bodenlinie** ist ein konservativer
-  Schritt: Constitution §3 („Petrarbeitung in Deutschland") bleibt für
+  Schritt: Constitution §3 („Verarbeitung in Deutschland") bleibt für
   alle Per-Familie-Datenspeicher (Hub, Photo-Buddy, Zugangsdaten,
   Routine-Store) **unverändert harte Linie**. Nur die KI-Anbieter-
-  Petrarbeitung weicht auf EU auf — und auch das ist eine Bewertungs-
+  Verarbeitung weicht auf EU auf — und auch das ist eine Bewertungs-
   phasen-Aufweichung (E-EC-9 läuft), keine dauerhafte Senkung.
 
 **Folgen für andere Anbieter-Slots:**
@@ -1004,7 +1004,7 @@ unabhängig vom Chat-Slot `eltern-chat-anthropic-api-key`.
 
 **Warum:** Die Foto-Analyse hing am globalen eltern-chat-Provider-Default und kippte mit
 einem Mistral-Default-Wechsel mit (#1262-Anlass). Eigene Route + eigener Slot entkoppeln
-die Bild-Petrarbeitung von der Text-Chat-Anbieterwahl; **Anbieter-Wechsel** geschieht durch
+die Bild-Verarbeitung von der Text-Chat-Anbieterwahl; **Anbieter-Wechsel** geschieht durch
 Tausch des Vendor-Segments im Slot, ohne Code (ENTSCHEID-1262 → „Anbieter wechseln können").
 
 **Supersedes:** E-TAB-7 ratifizierte den V2-Multimodal-Adapter mit **Mistral Medium 3.5**

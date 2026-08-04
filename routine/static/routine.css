@@ -280,7 +280,7 @@ body {
 
 /*
   Haupt-Sektion: relativ positionierter Container, in dem der vertikale Balken
-  mittig steht und die Pins per top:% darin petrankert werden. Nutzt möglichst
+  mittig steht und die Pins per top:% darin verankert werden. Nutzt möglichst
   viel Höhe (flex:1), mit Rand oben/unten, damit oberster/unterster Pin (die
   über/unter ihrem top:% zentriert sind) vollständig sichtbar bleiben.
   ROUTINE-19: container-type: size → .pin-pikto-Kinder skalieren via cqh
@@ -369,7 +369,7 @@ body {
 }
 
 /*
-  Event-Pins (ROUTINE-9): an top:% petrankert, vertikal um diese Position
+  Event-Pins (ROUTINE-9): an top:% verankert, vertikal um diese Position
   zentriert. Liegen NEBEN dem Balken auf alternierenden Seiten — adjazente
   Events nie auf derselben Seite, daher kein Overlap selbst bei 8 Min Abstand.
 */
@@ -523,7 +523,7 @@ body {
    Welle B (#1070) hat die V1-Event-Pins (.event-pin) entfernt — seitdem ist die
    zeit-pins-zone der EINZIGE Pin-Strang. Sie liegt als Overlay deckungsgleich in
    der timeline-section; jeder Pin wird per top:% an seiner Zeitposition am Balken
-   petrankert (vorher Flex-Column bei top:8% → alle Pins klebten oben).
+   verankert (vorher Flex-Column bei top:8% → alle Pins klebten oben).
 
    Pin-Skala unterscheidet anker (volle Pikto-Größe, analog .pin-pikto) und
    vorlauf (kleinere Skala — ROUTINE-26 "feinerer visueller Marker").
@@ -536,7 +536,7 @@ body {
   pointer-events: none;
 }
 
-/* Ein Pin-Chip — an top:% petrankert, vertikal um diese Position zentriert,
+/* Ein Pin-Chip — an top:% verankert, vertikal um diese Position zentriert,
    abwechselnd links/rechts NEBEN dem Balken (Seiten-Alternation löst enge
    Zeitpunkte strukturell auf, analog der alten .event-pin-Logik). */
 .zeit-pin {

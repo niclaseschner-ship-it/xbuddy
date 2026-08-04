@@ -417,7 +417,7 @@ Panel-Instanzen sind eigene Funktionen, eigene Tickets
 ### E-PAA-3 — Voraussetzung nennen, nicht inline anlegen
 Fehlt ein `verwendung: display`-Gerät, **nennt** die Funktion die
 Geräte-Anlage als Voraussetzung und beendet — sie inlinet die Geräte-Anlage
-nicht (ein Modul = eine Petrantwortung, CLAUDE.md §6; Memory-Anchor
+nicht (ein Modul = eine Verantwortung, CLAUDE.md §6; Memory-Anchor
 [[feedback-funktion-nicht-schritt]] / [[feedback-onboarding-flow-prerequisites]]).
 **Verworfen** (vorbehaltlich Nic, OPEN-PAA-E): GAA aus PAA heraus aufzurufen —
 das ist ein Onboarding-Flow-Anliegen, kein Anlage-Anliegen.

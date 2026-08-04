@@ -3,7 +3,7 @@
 // ESSEN-35 Cache-Strategie:
 //   - cache-first fuer Mantel-Assets (HTML, JS, CSS, manifest, icons).
 //   - pass-through (network-only) fuer /api/v1/essen/* — Listen-Inhalte
-//     duerfen NIE petralten (Eltern wuerden sonst bereits Gekauftes erneut
+//     duerfen NIE veralten (Eltern wuerden sonst bereits Gekauftes erneut
 //     in den Wagen legen).
 //   - network-first mit Cache-Fallback fuer /_shared/icons/arasaac/*.png
 //     bzw. /display/_shared/icons/arasaac/*.png (ARASAAC-Piktogramme,

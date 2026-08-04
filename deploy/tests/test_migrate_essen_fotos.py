@@ -220,12 +220,12 @@ class TestEdgeCases:
         )
         result = migrate.main(data_dir=data)
         assert result == 0
-        # gerichte.json darf unpetraendert sein (kein Patch)
+        # gerichte.json darf unveraendert sein (kein Patch)
         gerichte = json.loads((data / "essen" / "gerichte.json").read_text())
         assert gerichte["gerichte"][0].get("foto_ref") == "foto-99"
 
     def test_dry_run_schreibt_nichts(self, tmp_path, migrate):
-        """--dry-run darf keine Dateien petraendern."""
+        """--dry-run darf keine Dateien veraendern."""
         data = _setup_data_dir(
             tmp_path,
             gerichte=[{"id": "g-01", "label": "Lasagne", "foto_ref": "foto-01"}],
@@ -237,7 +237,7 @@ class TestEdgeCases:
         result = migrate.main(data_dir=data, dry_run=True)
         assert result == 1  # Zaehlt was migriert wuerde
 
-        # Keine Datei darf petraendert worden sein
+        # Keine Datei darf veraendert worden sein
         assert (data / "essen" / "gerichte.json").read_text() == gerichte_vorher
         assert (data / "photo" / "medien" / "library.json").read_text() == photo_lib_vorher
         assert not (data / "essen" / "fotos").exists()

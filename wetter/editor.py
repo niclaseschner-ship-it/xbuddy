@@ -6,7 +6,7 @@ Eltern-Editor-Seite (`templates/wetter_regeln.html`) — Muster **Übersicht +
 Fokus** (WETTER-27): je Regel die read-only Bedingung (menschenlesbar) plus
 Pflicht-/Optional-Set und Hinweis, dazu das Fallback und die wählbare Palette.
 
-Reine Transformation, **kein IO** (CLAUDE.md §6, eine Petrantwortung): die
+Reine Transformation, **kein IO** (CLAUDE.md §6, eine Verantwortung): die
 Garderobe wird vom Aufrufer (main.py) geladen und hereingereicht. Piktogramme
 werden über die geteilte Icon-Plattform referenziert (ICONS-5, WETTER-18) —
 dieselbe `render.icon_url`, die der Kiosk nutzt, kein zweiter Icon-Pfad.

@@ -218,8 +218,8 @@ und liefert pro Gruppe `calls`, `input_tokens`, `output_tokens`, `est_cost_eur`
 Topf-Trennung — kein separater Topf-Schlüssel.
 
 **Staleness-Warnung:** Trägt eine Gruppe `est_cost_eur: None`-Beiträge (Preiszeile
-fehlt/petraltet) ODER stützt sie sich auf eine Preiszeile mit altem `as_of`, wird die
-Gruppe als **„Preis unvollständig/petraltet"** markiert — der Roll-up meldet nie eine
+fehlt/veraltet) ODER stützt sie sich auf eine Preiszeile mit altem `as_of`, wird die
+Gruppe als **„Preis unvollständig/veraltet"** markiert — der Roll-up meldet nie eine
 scheinbar vollständige Summe über einer lückenhaften Preisbasis.
 
 **Bewusst NICHT jetzt (n=1, RAT-17-Disziplin):** KEIN `instance_id`-/Familien-Feld —

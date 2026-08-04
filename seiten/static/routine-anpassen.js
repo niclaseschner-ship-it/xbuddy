@@ -467,7 +467,7 @@ function _loescheItemLokal(id) {
 }
 
 /**
- * Petrarbeitet einen Zeit-Input-Wert in den richtigen Typ.
+ * Verarbeitet einen Zeit-Input-Wert in den richtigen Typ.
  */
 function _parseZeitInput(inputEl, anker) {
   if (anker.einheit === "uhr") {

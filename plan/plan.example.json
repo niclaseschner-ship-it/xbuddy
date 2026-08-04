@@ -1,17 +1,17 @@
 {
-  "_comment": "PLAN-28 — Plan-Buddy-Konfiguration einer Instanz. Kopiere als plan.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'slots' definiert die Schedule-Rail (PLAN-6): jeder Slot hat schluessel (stabil), art (petrantwortlich | kalender-read), icon und — bei kalender-read — kind (Personen-id der Familien-Registry). 'default_petrantwortlichkeiten' (PLAN-10) belegt petrantwortlich-Slots beim ersten Anzeigen einer Woche vor: je Slot eine Liste von 7 Personen-ids oder null (Index 0=Montag .. 6=Sonntag). 'kalender_id' (PLAN-15) ist Pflicht. Diese Beispiel-Config bildet die sieben Slots des Wireframe-Handoffs 1:1 ab.",
+  "_comment": "PLAN-28 — Plan-Buddy-Konfiguration einer Instanz. Kopiere als plan.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'slots' definiert die Schedule-Rail (PLAN-6): jeder Slot hat schluessel (stabil), art (verantwortlich | kalender-read), icon und — bei kalender-read — kind (Personen-id der Familien-Registry). 'default_verantwortlichkeiten' (PLAN-10) belegt verantwortlich-Slots beim ersten Anzeigen einer Woche vor: je Slot eine Liste von 7 Personen-ids oder null (Index 0=Montag .. 6=Sonntag). 'kalender_id' (PLAN-15) ist Pflicht. Diese Beispiel-Config bildet die sieben Slots des Wireframe-Handoffs 1:1 ab.",
 
   "slots": [
-    {"schluessel": "bring", "art": "petrantwortlich", "icon": "37807"},
-    {"schluessel": "pick",  "art": "petrantwortlich", "icon": "39520"},
+    {"schluessel": "bring", "art": "verantwortlich", "icon": "37807"},
+    {"schluessel": "pick",  "art": "verantwortlich", "icon": "39520"},
     {"schluessel": "act1",  "art": "kalender-read",  "icon": "3071", "kind": "mia"},
     {"schluessel": "act2",  "art": "kalender-read",  "icon": "3071", "kind": "finn"},
-    {"schluessel": "cook",  "art": "petrantwortlich", "icon": "2342"},
-    {"schluessel": "bed1",  "art": "petrantwortlich", "icon": "6027", "kind": "mia"},
-    {"schluessel": "bed2",  "art": "petrantwortlich", "icon": "6027", "kind": "finn"}
+    {"schluessel": "cook",  "art": "verantwortlich", "icon": "2342"},
+    {"schluessel": "bed1",  "art": "verantwortlich", "icon": "6027", "kind": "mia"},
+    {"schluessel": "bed2",  "art": "verantwortlich", "icon": "6027", "kind": "finn"}
   ],
 
-  "default_petrantwortlichkeiten": {
+  "default_verantwortlichkeiten": {
     "bring": ["emil", "petra",   "lena", "jonas", "petra",   null, null],
     "pick":  ["petra",   "lena", "lena", "jonas", "emil", null, null],
     "cook":  ["jonas", "lena", "petra",   null,     null,     null, null],
@@ -37,7 +37,7 @@
     {"art": "musik",       "label": "Musik",       "keywords": ["musik", "klavier", "geige", "gitarre"],       "piktogramm": "2746"},
     {"art": "ausflug",     "label": "Ausflug",     "keywords": ["ausflug"],                                    "piktogramm": "4670"},
     {"art": "geburtstag",  "label": "Geburtstag",  "keywords": ["geburtstag", "geburts"],                      "piktogramm": "3087"},
-    {"art": "petrabredung", "label": "Petrabredung", "keywords": ["petrabredung"],                                "piktogramm": "2255"},
+    {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],                                "piktogramm": "2255"},
     {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],                                       "piktogramm": "2666"},
     {"art": "zahn",        "label": "Zahnarzt",    "keywords": ["zahn"],                                        "piktogramm": "11229"},
     {"art": "ferien",      "label": "Ferien",      "keywords": ["ferien", "urlaub"],                           "piktogramm": "3166"},

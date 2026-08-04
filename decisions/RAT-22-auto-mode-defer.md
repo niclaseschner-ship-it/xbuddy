@@ -20,7 +20,7 @@
 ## Beschluss
 
 Die „Carve-out"-Prämisse war falsch. R1 zeigte: „Auto-Mode" ist **kein**
-Skill-petrankerter Modus (n=0), die Halt-Regel ist hart-ohne-Auslegung, der
+Skill-verankerter Modus (n=0), die Halt-Regel ist hart-ohne-Auslegung, der
 Watchdog liefert nur einen Richtungssatz (kein Code), „strukturell aber durchwinkbar"
 ist verboten. Lösung: **Regeln bleiben hart, Auto-Mode wird als Defer-Haltung
 definiert** — als Inline-Klauseln, keine neue Sektion (Doppel-Beschreibung des

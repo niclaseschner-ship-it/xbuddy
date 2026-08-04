@@ -824,7 +824,7 @@ Thumb.
 - `DELETE /api/v1/essen/fotos/<id>` — atomar entfernen (Vollmedium +
   Thumbnail + Index-Eintrag).
 
-Index: `xbuddy-data/essen/fotos.json`. Foto-Petrarbeitung (Normalize,
+Index: `xbuddy-data/essen/fotos.json`. Foto-Verarbeitung (Normalize,
 Thumbnail, atomar schreiben) über die geteilte Library
 `tools/medien_store/` (siehe `conventions/medien-store.md`) — Code-Reuse
 ohne Lego-Bruch.
@@ -1297,7 +1297,7 @@ unverändert). PATCH auf unbekannte ID → 404. PATCH
 
 Die Eltern-Mini-App für die Einkaufsliste wird als **installierbare PWA**
 ausgeliefert, damit Eltern sie per „Zum Home-Bildschirm hinzufügen" als
-1-Tap-Icon auf iPhone und Android petrankern können (Bring!-Benchmark). Sie
+1-Tap-Icon auf iPhone und Android verankern können (Bring!-Benchmark). Sie
 folgt `conventions/pwa.md` PWA-1..PWA-4 **analog** (n=1-Experiment einer
 dritten Konsumenten-Klasse „Power-Flow-PWA unter `seiten/static/<flow>/`";
 die Konvention selbst wird **nicht** in dieser Phase erweitert — siehe
@@ -1399,7 +1399,7 @@ Der Service-Worker cached **selektiv**:
   startet.
 - **Pass-through** (network only) für API-Aufrufe: alles unter
   `/api/v1/essen/*` wird **nicht** gecached — Listen-Inhalte sind live,
-  ein petralteter Cache-Snapshot wäre für Eltern beim Einkauf gefährlich
+  ein veralteter Cache-Snapshot wäre für Eltern beim Einkauf gefährlich
   (sie würden bereits eingekaufte Items erneut kaufen).
 - **Network-first mit Cache-Fallback** für ARASAAC-Piktogramme unter
   `/display/_shared/icons/arasaac/<id>.png` (ICONS-5 + ROU-26, ESSEN-31):

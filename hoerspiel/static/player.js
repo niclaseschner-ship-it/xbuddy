@@ -789,7 +789,7 @@ function ensureAudio() {
  *                 preloadNext fetcht den Track selbst (fetch→blob→objectURL),
  *                 damit S.preloadedSrc immer eine Blob-Object-URL ist und
  *                 swapToNext netzfrei bleibt. Kein Cache-Write (HSP-54-Budget).
- * Eine noch nicht verbrauchte, petraltete Vorauflösung wird revoked (Leak-Härtung).
+ * Eine noch nicht verbrauchte, veraltete Vorauflösung wird revoked (Leak-Härtung).
  * @param {number}   idx       Track-Index in S.tracks
  * @param {Function} [_fetchFn] Test-Nähe: fetch-Ersatz; sonst globales fetch
  */

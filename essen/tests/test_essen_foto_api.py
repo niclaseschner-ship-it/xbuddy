@@ -8,7 +8,7 @@ Abdeckung:
   AC5 — DELETE /api/v1/essen/fotos/<id>: bekannte ID → 200, unbekannte → 404.
   AC6 — fotos_verzeichnis aus data_paths() gesetzt (config.py AC2).
 
-Alle Tests laufen OHNE Netz und OHNE echte Bildpetrarbeitung (medien_store
+Alle Tests laufen OHNE Netz und OHNE echte Bildverarbeitung (medien_store
 wird als Doppelung/Monkeypatch injiziert).
 """
 
@@ -109,7 +109,7 @@ def test_post_foto_leerer_inhalt(foto_client, monkeypatch):
 
 
 def test_post_foto_normalize_error(foto_client, monkeypatch):
-    """POST mit nicht petrarbeitbarem Medium → 400 (NormalizeError)."""
+    """POST mit nicht verarbeitbarem Medium → 400 (NormalizeError)."""
     import types
     stub = types.SimpleNamespace(
         ingest=None,

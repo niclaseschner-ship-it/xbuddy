@@ -19,7 +19,7 @@ dependencies = [
     "anthropic~=0.104",
     # HTTP-Client: eltern-chat/telegram.py + diverse Service-HTTP-Calls (kein SDK-Dep auf mistralai).
     "httpx~=0.28",
-    # Bild-Petrarbeitung: tools/medien_store/normalize.py (JPEG/Thumbnail).
+    # Bild-Verarbeitung: tools/medien_store/normalize.py (JPEG/Thumbnail).
     "Pillow~=11.1",
     # HEIC/HEIF-Dekodierung: tools/medien_store/normalize.py (pillow_heif.register_heif_opener).
     "pillow-heif~=1.3",

@@ -235,7 +235,7 @@ dass der Aufrufer kein Familien-Mitglied ist (EC-2, EC-29), wirft sie eine
 Exception als `is_error=True`-Tool-Result-Block; das LLM formuliert daraus
 eine ehrliche Antwort. Eine geteilte Klasse statt mehrerer lokaler vermeidet
 Code-Duplikation (CLAUDE.md §6) und hält das Pattern für Folge-Migrationen
-klar petrankert.
+klar verankert.
 
 *Tickets:* #551, #564
 

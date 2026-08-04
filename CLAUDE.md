@@ -68,8 +68,8 @@ Diese Regeln sind nicht verhandelbar. Im Zweifel: nachfragen, nicht raten.
 
 **Struktur**
 
-- **Ein Modul = eine Petrantwortung.** Jede Datei, jedes Modul, jedes Paket
-  hat genau EINE Petrantwortung. Dieselbe Logik zweimal zu schreiben ist
+- **Ein Modul = eine Verantwortung.** Jede Datei, jedes Modul, jedes Paket
+  hat genau EINE Verantwortung. Dieselbe Logik zweimal zu schreiben ist
   verboten — gemeinsamer Code lebt an EINEM Ort.
 
 - **Klare Modul-Grenzen, einseitige Abhängigkeiten.** Jedes Modul hat eine
@@ -136,7 +136,7 @@ Diese Regeln sind nicht verhandelbar. Im Zweifel: nachfragen, nicht raten.
   migrieren), dann in einem separaten PR entfernen. Kein „big bang"-
   Wegreißen.
 
-- **Lösche keine Dokumente — Code schon.** Petraltete Dokumente
+- **Lösche keine Dokumente — Code schon.** Veraltete Dokumente
   (`*.md`, `specs/*`) wandern per `git mv` nach `_archive/`. Für Code-
   Dateien reicht `git rm` — die git-History ist das Archiv.
 

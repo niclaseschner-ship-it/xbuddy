@@ -14,7 +14,7 @@ kein per-Branch-Sicht-Stempel, kein CI-Zwang/Pflicht-Reviewer.
 
 ## Kontext / Problem
 Pi-SSoT („push erst auf Freigabe am Session-Ende") hielt `origin/main` tagsüber bewusst
-petraltet. `isolation: worktree` zweigt von `origin/main` ab → Base-Drift abhängiger
+veraltet. `isolation: worktree` zweigt von `origin/main` ab → Base-Drift abhängiger
 Folge-Tracks, plus ein Stapel Eigenbau-Abfederung (Worktree-Rückhol per Branch-Name,
 lokaler Merge, „Rebase aller Live-Tracks weil origin stale"). Das Pi-SSoT-Motiv war
 ausschließlich Nics persönlicher Sicht-und-Test-Gate vor Push.

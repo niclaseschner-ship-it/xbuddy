@@ -43,7 +43,7 @@ class _ScriptedReaderTg:
         self.get_updates_calls.append({"offset": offset, "timeout": timeout})
         if not self._responses:
             # Block bis Test endet — gibt dem Reader Zeit, sich am stop_event
-            # zu petrabschieden statt heiss zu pollen.
+            # zu verabschieden statt heiss zu pollen.
             self._exhausted.wait(timeout=2.0)
             return []
         return self._responses.pop(0)
@@ -310,7 +310,7 @@ def test_reader_typing_for_private_message(monkeypatch):
     """EC-39 / AC1 (spec Z. 1394-1396): Privatchat-Update triggert sofort
     `tg_reader.send_chat_action(chat_id, "typing")` — VOR Hand-off.
 
-    Wir lassen `dispatch` 60 s simulierter Petrarbeitung blockieren (HFE-
+    Wir lassen `dispatch` 60 s simulierter Verarbeitung blockieren (HFE-
     Trampolin); ein zweiter Privatchat-Empfang sieht das Sofort-Typing im
     Reader-Thread, obwohl der Processor noch am ersten Update sitzt.
     """
@@ -359,7 +359,7 @@ def test_reader_typing_skipped_for_group(monkeypatch):
         # Warten, bis der Processor beide Updates abgearbeitet hat.
         assert _wait_until(
             lambda: len(dispatch_stub.calls) >= 2, timeout=3.0
-        ), "Processor hat nicht beide Gruppen-Updates petrarbeitet"
+        ), "Processor hat nicht beide Gruppen-Updates verarbeitet"
         assert tg_reader.chat_actions == [], (
             "Reader darf kein Sofort-Typing fuer Gruppen-/Supergruppen-"
             "Updates senden — erhalten: %s" % tg_reader.chat_actions)
@@ -382,7 +382,7 @@ def test_reader_typing_skipped_for_my_chat_member(monkeypatch):
     try:
         assert _wait_until(
             lambda: len(dispatch_stub.calls) >= 1, timeout=2.0
-        ), "Processor hat das my_chat_member-Update nicht petrarbeitet"
+        ), "Processor hat das my_chat_member-Update nicht verarbeitet"
         assert tg_reader.chat_actions == [], (
             "Reader darf kein Sofort-Typing fuer my_chat_member senden — "
             "erhalten: %s" % tg_reader.chat_actions)
@@ -587,7 +587,7 @@ def test_heartbeat_written_after_empty_poll(tmp_path):
 
 def test_heartbeat_write_failure_does_not_crash_loop(tmp_path, monkeypatch):
     """T1666 / SVC-6: Ein OSError beim Heartbeat-Schreiben (z. B. Disk voll)
-    bricht den Poll-Loop NICHT ab — der Reader petrarbeitet weiter Updates.
+    bricht den Poll-Loop NICHT ab — der Reader verarbeitet weiter Updates.
 
     Simulation: `os.replace` wirft OSError — `_write_heartbeat` schlueckt ihn
     (try/except OSError). Das Update muss danach trotzdem beim Processor ankommen.

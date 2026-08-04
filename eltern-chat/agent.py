@@ -415,7 +415,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
              max_iterations=MAX_ITERATIONS, before_provider_call=None,
              chat_action_renewer=None, tg=None, task_events_store=None,
              correction_state=None):
-    """Petrarbeitet eine Anfrage und liefert ein `AgentResult`.
+    """Verarbeitet eine Anfrage und liefert ein `AgentResult`.
 
     `history_messages` ist der geladene Gesprächskontext (EC-6), `user_message`
     die neue Anfrage. `provider` erfüllt `generate(GenerationRequest)`, `catalog`

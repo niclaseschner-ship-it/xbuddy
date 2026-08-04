@@ -46,7 +46,7 @@ body { max-width: 760px; margin: 0 auto; padding: var(--space-4) var(--space-4) 
 /* Typ-Badge */
 .badge { font-size: var(--fs-12); font-weight: var(--font-weight-medium); padding: 3px 10px;
   border-radius: var(--radius-full); white-space: nowrap; }
-.badge.petrantwortlich { background: #eef3ea; color: var(--forest-primary); }
+.badge.verantwortlich { background: #eef3ea; color: var(--forest-primary); }
 .badge.kalender { background: #f6ece2; color: var(--clay-primary); }
 
 /* Buttons */

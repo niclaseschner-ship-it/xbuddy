@@ -103,7 +103,7 @@ def test_photo8_hevc_mov_zu_mp4(hevc_mov_bytes):
 @ffmpeg_noetig
 def test_photo8_mp4_h264_pass_through(mp4_h264_bytes):
     """PHOTO-8/E-PHOTO-9: bereits web-taugliches MP4/H.264 wird durchgereicht
-    (Bytes unpetraendert, kein Re-Encode)."""
+    (Bytes unveraendert, kein Re-Encode)."""
     roh = mp4_h264_bytes()
     norm = normalize_mod.normalisiere(roh, "clip.mp4")
     assert norm.typ == store.TYP_VIDEO
@@ -288,7 +288,7 @@ def test_photo12_config_default_ist_aus():
 def test_photo12_sweep_beim_ingest(tmp_path, jpeg_bytes):
     """PHOTO-12: der Auto-Delete-Sweep laeuft am echten ingest()-Pfad (den die
     POST-Route ruft) — eine gesetzte TTL wirkt im laufenden Betrieb, nicht nur
-    ueber den direkt aufgerufenen Helfer (Entry-Path-Copetrage)."""
+    ueber den direkt aufgerufenen Helfer (Entry-Path-Coverage)."""
     cfg = _cfg(tmp_path, auto_delete_tage=30)
     lib = cfg.library_verzeichnis
     tag0 = datetime(2026, 1, 1, tzinfo=UTC)

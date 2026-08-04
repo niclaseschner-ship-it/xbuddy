@@ -14,7 +14,7 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 
 ## Wo welche Service-Vorlage liegt
 
-| Service-Name (SVC-1) | Vorlage im Repo (SVC-2) | Petrantwortung | Bindet auf |
+| Service-Name (SVC-1) | Vorlage im Repo (SVC-2) | Verantwortung | Bindet auf |
 |---|---|---|---|
 | `xbuddy-plan.service` | `plan/plan.service` | Plan-Buddy (`/display/plan/`, `/api/v1/plan/`) | `127.0.0.1:5020` |
 | `xbuddy-wetter.service` | `wetter/wetter.service` | Wetter-Buddy (`/display/wetter/`) | `127.0.0.1:5030` |

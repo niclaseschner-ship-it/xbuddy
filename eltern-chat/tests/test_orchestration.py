@@ -427,7 +427,7 @@ def test_pickup_latency_logged_on_updates(tmp_path, monkeypatch, caplog):
     Pickup-Latenz als INFO-Eintrag geloggt (event=pickup_latency count=N latency_ms=X).
 
     Abgrenzung zu EC-23-Provider-Latenz: dieser Log-Eintrag misst die Zeit von
-    getUpdates-Rückkehr (im Reader, t0) bis Ende der Petrarbeitung (im
+    getUpdates-Rückkehr (im Reader, t0) bis Ende der Verarbeitung (im
     Processor, t1), NICHT die LLM-Provider-Latenz innerhalb eines Turns.
 
     Reader/Processor-Topologie (EC-37, 2026-06-19): Der Log wird im
@@ -531,7 +531,7 @@ def test_SESS5_registry_routes_privatchat_to_session_deliver(tmp_path):
                        chat_type="private", message_id=300)
     handle_update(msg, ctx)
 
-    # Warten, bis deliver() petrarbeitet wurde.
+    # Warten, bis deliver() verarbeitet wurde.
     deadline = time.monotonic() + 1.0
     while time.monotonic() < deadline and not delivered:
         time.sleep(0.01)
@@ -582,7 +582,7 @@ def _ec36_ctx(tmp_path, tg, provider, *, catalog=None, store=None,
 
 
 def test_EC_36_falsch_nach_a2_foto_loest_inverse_aus(tmp_path, monkeypatch):
-    """AC1/AC2-Integration: handle_update petrarbeitet »falsch« VOR dem Agenten;
+    """AC1/AC2-Integration: handle_update verarbeitet »falsch« VOR dem Agenten;
     A2-Receipt löst HTTP DELETE aus, Quittung positiv, kein Provider-Call."""
     store = A2ReceiptStore(str(tmp_path / "rec.db"))
     chat_id = 42

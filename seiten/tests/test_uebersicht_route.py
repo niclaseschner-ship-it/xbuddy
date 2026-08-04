@@ -269,7 +269,7 @@ def test_funnel_origin_im_layout_json(manifest_root, tmp_path):
 #  Bestand: /api/v1/seiten (SREG-3) unverändert (related_echo)
 # ============================================================
 
-def test_alter_endpoint_seiten_unpetraendert(client):
+def test_alter_endpoint_seiten_unveraendert(client):
     """Echo: Die /api/v1/seiten-Route darf nicht regressieren."""
     resp = client.get("/api/v1/seiten")
     assert resp.status_code == 200

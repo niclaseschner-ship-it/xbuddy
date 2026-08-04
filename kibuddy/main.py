@@ -321,7 +321,7 @@ def _auth_401():
 # Decorator: HART-AUTH (T948/T1321, auth.md AUTH-2/3/5/8). Der hand-kopierte
 # Wrapper-Body ist mit #1626 auf die AUTH-Decorator-Lib-Factory geflippt
 # (tools/initdata/auth_gate.py::make_require_init_data, #1625). Der Name
-# `require_init_data` BLEIBT (AUTH-9-Copetrage-Test trägt per AST-Namen); die
+# `require_init_data` BLEIBT (AUTH-9-Coverage-Test trägt per AST-Namen); die
 # Buddy-eigenen Getter + `_auth_401` gehen WÖRTLICH als Closures rein — die
 # Factory ruft genau diesen `_auth_401`, 401/403/500-Shape bleibt byte-gleich.
 # `make_response` in der Factory wrappt auch die NDJSON-Streaming-Response von

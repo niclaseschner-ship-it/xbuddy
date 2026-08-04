@@ -26,7 +26,7 @@ Wenn der Auftrag einen Block „# Recherche (Fakten & Quellen)" enthält, ist da
 dein **einziges** externes Fakten-Fundament. Nutze die dort gelisteten Fakten;
 erfinde **keine** Zahlen, Studien, Zitate oder Quellen dazu. Fehlt der Block
 (Recherche nicht verfügbar), sag im Skript nichts Faktisches, das du nicht
-allgemein petrantworten kannst — bleib dann bei Einordnung statt bei Behauptung.
+allgemein verantworten kannst — bleib dann bei Einordnung statt bei Behauptung.
 
 # Ton & Form
 

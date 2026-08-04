@@ -173,7 +173,7 @@ class AvbInput:
 # ============================================================
 
 ERGEBNIS_GEWECHSELT = "gewechselt"
-ERGEBNIS_UNPETRAENDERT = "unpetraendert"   # same-provider oder Abbruch
+ERGEBNIS_UNVERAENDERT = "unveraendert"   # same-provider oder Abbruch
 ERGEBNIS_ABGELEHNT = "abgelehnt"
 
 
@@ -184,7 +184,7 @@ class AnbieterWechselnResult:
     `ergebnis` ist einer der ERGEBNIS_*-Werte. `neuer_anbieter` ist der
     Name des neuen Anbieters (nur wenn `ergebnis == ERGEBNIS_GEWECHSELT`).
     """
-    ergebnis: str = ERGEBNIS_UNPETRAENDERT
+    ergebnis: str = ERGEBNIS_UNVERAENDERT
     neuer_anbieter: str = ""
 
 
@@ -242,7 +242,7 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
         _send(tg, chat_id, ASK_ANBIETER % anbieter_zeilen)
         msg = next_message()
         if msg is None:
-            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNPETRAENDERT)
+            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
         text = (msg.text or "").strip().lower()
         if text in _ANBIETER_NAMEN:
             neuer_name = text
@@ -254,7 +254,7 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
     if neuer_name == current_provider_name:
         fire_typing(typing_fn)
         _send(tg, chat_id, SAME_PROVIDER)
-        return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNPETRAENDERT)
+        return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
 
     anzeige = _anzeige(neuer_name)
     # #1510: Pfad-Diskriminante + Persistenz laufen über den litellm-Motor-Slot
@@ -278,7 +278,7 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
                 "(%s) — alter Eintrag bleibt", e)
             fire_typing(typing_fn)
             _send(tg, chat_id, WRITE_FAILED)
-            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNPETRAENDERT)
+            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
 
         # ONB-11 Schritt 5a: Privatchat-Quittung — Pfad-A-Wording (#1021).
         fire_typing(typing_fn)
@@ -295,7 +295,7 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
         _send(tg, chat_id, ASK_KEY % anzeige)
         msg = next_message()
         if msg is None:
-            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNPETRAENDERT)
+            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
         key = (msg.text or "").strip()
         if len(key) < _MIN_KEY_LENGTH or " " in key:
             # Heuristik: zu kurz oder enthält Leerzeichen → kein Key.
@@ -327,7 +327,7 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
                           "— alter Eintrag bleibt", e)
             fire_typing(typing_fn)
             _send(tg, chat_id, WRITE_FAILED)
-            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNPETRAENDERT)
+            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
 
         break   # Erfolg — Schleife verlassen
 

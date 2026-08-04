@@ -129,7 +129,7 @@ def test_falsch_a2_foto_senden_dispatcht_photo_delete(tmp_path):
 
 
 def test_falsch_a2_receipt_sealed(tmp_path):
-    """AC1 write_verification: nach `falsch`-Petrarbeitung sind alle vorher
+    """AC1 write_verification: nach `falsch`-Verarbeitung sind alle vorher
     unversiegelten Receipts der chat_id sealed."""
     db_path = str(tmp_path / "rec.db")
     store = A2ReceiptStore(db_path)

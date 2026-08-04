@@ -460,7 +460,7 @@ test('preloadNext: löst nächsten Track als Blob-Object-URL vorab (preloadedSrc
     await P.preloadNext(2);
     assert.equal(P._S.preloadedIdx, null, 'kein Nachfolger → preloadedIdx zurückgesetzt');
     assert.equal(P._S.preloadedSrc, null, 'preloadedSrc bei out-of-range freigegeben');
-    assert.ok(revoked >= 1, 'petraltete Blob-Object-URL revoked (Leak-Härtung)');
+    assert.ok(revoked >= 1, 'veraltete Blob-Object-URL revoked (Leak-Härtung)');
   } finally {
     global.Audio = savedAudio;
     global.URL = savedURL;

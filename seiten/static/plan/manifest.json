@@ -1,7 +1,7 @@
 {
   "name": "Plan-Einstellungen · XBuddy",
   "short_name": "Plan-Einst.",
-  "description": "Eltern-Einstellungsseite fuer den Plan-Buddy — Slot-Modell und Default-Petrantwortlichkeiten.",
+  "description": "Eltern-Einstellungsseite fuer den Plan-Buddy — Slot-Modell und Default-Verantwortlichkeiten.",
   "start_url": "/seiten/plan/einstellungen/",
   "scope": "/seiten/plan/einstellungen/",
   "display": "fullscreen",

@@ -294,7 +294,7 @@ Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
   (GER-3) wird V1 manuell gesetzt. Ob die Registry automatisch erkennt,
   dass ein Display seit einer Stunde keinen Stream-Reconnect mehr
   hatte, und dann `status` auf `inaktiv` setzt, ist offen — das wäre
-  eine echte zweite Petrantwortung (Beobachtung statt nur Identität).
+  eine echte zweite Verantwortung (Beobachtung statt nur Identität).
   Erst spezifizieren, wenn ein konkreter Schmerz auftaucht.
 
 - **OPEN-GER-C — Telemetrie über tatsächliche Nutzung.** Welches Gerät

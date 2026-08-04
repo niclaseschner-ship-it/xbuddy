@@ -121,7 +121,7 @@ _TOOL_NAME = "extract_termine"
 _TOOL_DESCRIPTION = (
     "Extrahiere ALLE im Bild sichtbaren Termine (Schulplan, Kursplan, "
     "Saison-Übersicht). Sowohl tabellarische Pläne als auch Fließtext-"
-    "Notizen sind zu petrarbeiten. Liefere die Termine in der Reihenfolge, "
+    "Notizen sind zu verarbeiten. Liefere die Termine in der Reihenfolge, "
     "in der sie im Bild erscheinen. Datums-Format: ISO (YYYY-MM-DD für "
     "ganztägige Termine, YYYY-MM-DDTHH:MM:SS+HH:MM für zeitgebundene). "
     "Wenn ein Termin offensichtlich eine Uhrzeit hat, beide Felder "
@@ -203,7 +203,7 @@ class FotoAnalyseProvider:
     propagiert klar — er wird NICHT als `MultimodalError` verschluckt (dieselbe
     Boot-vs-Laufzeit-Trennung wie lib_adapter). Erst der eigentliche Anbieter-
     Fehler zur Laufzeit (`tools.llm.ProviderError`) wird in `MultimodalError`
-    übersetzt, das der TAB-Skill zu `provider_fehler` petrarbeitet (TAB-5).
+    übersetzt, das der TAB-Skill zu `provider_fehler` verarbeitet (TAB-5).
     """
 
     def __init__(self, model: str = ""):
@@ -247,7 +247,7 @@ class FotoAnalyseProvider:
             )
         except LibProviderError as e:
             # TAB-5 / EC-14-analog: Anbieter nicht erreichbar / fehlerhaft →
-            # MultimodalError, das der Skill zu `provider_fehler` petrarbeitet.
+            # MultimodalError, das der Skill zu `provider_fehler` verarbeitet.
             logger.warning("TAB-5 Foto-Analyse (Lib) fehlgeschlagen: %s", e)
             raise MultimodalError(str(e)) from e
 

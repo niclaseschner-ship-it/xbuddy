@@ -103,12 +103,12 @@ def test_privacy_gate_eval_dir_is_clean() -> None:
 
 
 def test_privacy_gate_blocks_real_email(tmp_path: Path) -> None:
-    """AC3: Gate erkennt echte @example.org-Adresse in Fixture-Datei."""
+    """AC3: Gate erkennt echte @gmx.de-Adresse in Fixture-Datei."""
     bad_fixture = tmp_path / "fixture_with_real_email.py"
     bad_fixture.write_text(
         f"{SYNTHETIC_MARKER}\n"
         "# Synthetisches Fixture\n"
-        'TEXT = "Schreib an erfundene.familie@example.org"\n',
+        'TEXT = "Schreib an erfundene.familie@gmx.de"\n',
         encoding="utf-8",
     )
     vs = scan_file(bad_fixture)

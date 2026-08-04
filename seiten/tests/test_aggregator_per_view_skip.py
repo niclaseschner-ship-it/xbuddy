@@ -110,7 +110,7 @@ def test_per_view_skip_reihenfolge_gueltig_kaputt_gueltig(tmp_path):
     assert "plan-mitte" not in keys, "Kaputte View (Mitte) darf nicht erscheinen"
 
 
-def test_per_view_skip_anderes_manifest_unpetraendert(tmp_path):
+def test_per_view_skip_anderes_manifest_unveraendert(tmp_path):
     """AC1: Nur das Manifest mit dem kaputten View leidet — andere Manifeste bleiben intakt.
 
     Wenn in `plan/views.json` eine View kaputt ist, sollen die Views aus

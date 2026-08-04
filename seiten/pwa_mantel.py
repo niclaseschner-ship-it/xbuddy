@@ -192,7 +192,7 @@ _SW_SKELETON = """// sw.js — PWA-Mantel-Skelett (PWML-2 / PWAM-3), generiert v
 //                                       (HTML immer frisch, Offline-Fallback erhalten)
 //                     'network-only'  — immer Netz (kein HTML-Cache)
 //   STOP_PREFIXES   — Pfade, die der Mantel-SW UNBERÜHRT durchlässt (eigene SWs /
-//                     Streaming-Daten, die nie petralten dürfen).
+//                     Streaming-Daten, die nie veralten dürfen).
 // __BUILD_ID__ wird beim Ausliefern von seiten/main.py substituiert (PWML-2).
 
 'use strict';
@@ -500,7 +500,7 @@ REGISTRY: dict[str, MantelConfig] = {
         background_color="#F5F1E8",
         # HTML-Shell offline-fähig (installierbarer Player); die Folgen-Daten +
         # Audio kommen über /api/v1/hoerspiel/ und bleiben UNBERÜHRT (STOP) —
-        # nie petralten, und der harte Audio-Cache (HSP-54) hängt an der PWML-5-
+        # nie veralten, und der harte Audio-Cache (HSP-54) hängt an der PWML-5-
         # Naht, nicht am Mantel.
         html_cache_mode="cache-first",
         stop_prefixes=("/api/v1/hoerspiel/",),

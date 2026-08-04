@@ -1,6 +1,6 @@
 """Dispatch-Entry-Path-Test für den litellm-Audio-Pfad (T1410, LLMP-S6/RAT-28).
 
-Watchdog-Befund 2 (Linse 7 — entry-path-copetrage): `test_stt_litellm.py`
+Watchdog-Befund 2 (Linse 7 — entry-path-coverage): `test_stt_litellm.py`
 konstruiert die Engine-Klassen direkt, fährt aber NICHT den echten Runtime-
 Dispatch `cfg.stt_provider=="litellm"` / `cfg.tts_provider=="litellm"` →
 `kibuddy.main._build_stt`/`_build_tts` → `Litellm*Engine`. Diese Datei schließt

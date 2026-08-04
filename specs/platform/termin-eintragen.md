@@ -54,7 +54,7 @@ und `kalender-verbinden.md` Trigger-Linie).
 - **Termin-Erfassung aus einem Foto** (z. B. ein abfotografierter Schulplan)
   — eigene Funktion: `termine-aus-bild.md` (TAB, Refs #475). TAB schreibt
   als Bulk über `plan.md` PLAN-33; TES bleibt der Einzel-PUT-Pfad
-  (PLAN-22). Benötigt mehrstufige Bild-Petrarbeitung, die nicht zu dieser
+  (PLAN-22). Benötigt mehrstufige Bild-Verarbeitung, die nicht zu dieser
   Funktion gehört.
 - **PrivateChatSession-Refactor** zur SESS-Konvention — verfolgt unter
   einem eigenen Plattform-Ticket (PrivateChatSession-Refactor, Folge-

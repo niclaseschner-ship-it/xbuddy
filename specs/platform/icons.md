@@ -177,7 +177,7 @@ der typische Konsument-Treffer). Beispiel: q=Mensch → „menschen" (Prefix, 8
 Zeichen, Score ≈ 412.5) gewinnt vor „mensch ärgere dich nicht" (Prefix, 26
 Zeichen, Score ≈ 403.8) und vor „marsmensch" (Substring, Score ≈ 1.1).
 
-**Multi-Token-Queries: Copetrage schlägt Qualität.** Sortier-Reihenfolge ist
+**Multi-Token-Queries: Coverage schlägt Qualität.** Sortier-Reihenfolge ist
 `(-token_hits, -score, first_seen)`. Wer mehr Tokens matcht (`token_hits`)
 gewinnt immer — ein 2-Token-Substring-Treffer (token_hits=2) rankt vor einem
 1-Token-Exact-Treffer (token_hits=1). Innerhalb derselben `token_hits`-Stufe

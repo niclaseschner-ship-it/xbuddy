@@ -12,10 +12,10 @@
   <h1>Plan-Einstellungen</h1>
   <span class="pwa-chip">PWA · Heimnetz</span>
 </div>
-<p class="sub">Variante A — Wochen-Matrix: alle Petrantwortlichkeiten auf einen Blick (am Handy seitlich scrollen).</p>
+<p class="sub">Variante A — Wochen-Matrix: alle Verantwortlichkeiten auf einen Blick (am Handy seitlich scrollen).</p>
 
 <div class="sektion">
-  <h2>Default-Petrantwortlichkeiten <span class="hint">Zelle antippen → Person wählen</span></h2>
+  <h2>Default-Verantwortlichkeiten <span class="hint">Zelle antippen → Person wählen</span></h2>
   <div class="card matrix-wrap">
     <table class="matrix"><thead><tr><th class="slot-th"></th><th>Mo</th><th>Di</th><th>Mi</th><th>Do</th><th>Fr</th><th class="wochenende">Sa</th><th class="wochenende">So</th></tr></thead>
     <tbody id="matrix-body"></tbody></table>
@@ -33,7 +33,7 @@
 <div class="sheet-overlay" id="sheet-typ"><div class="sheet"><div class="griff"></div>
   <h3>Neuer Slot — welche Art?</h3>
   <div class="typ-wahl">
-    <div class="opt aktiv"><b>Petrantwortlich</b><span>Jemand ist zuständig — mit Wer-macht-was je Wochentag.</span></div>
+    <div class="opt aktiv"><b>Verantwortlich</b><span>Jemand ist zuständig — mit Wer-macht-was je Wochentag.</span></div>
     <div class="opt"><b>Kalender-Termine</b><span>Termine eines Kindes, gefiltert über seinen Namen.</span></div>
   </div>
   <div class="save-leiste"><button class="btn" onclick="closeSheets()">Abbrechen</button><button class="btn primary" onclick="closeSheets()">Weiter</button></div>
@@ -48,20 +48,20 @@ const PERS = {
 };
 const TAGE=["Mo","Di","Mi","Do","Fr","Sa","So"];
 const SLOTS=[
-  {key:"bring",label:"Bringen",typ:"petrantwortlich",icon:"37807",def:["a1","a2","k1","k2","a2",null,null]},
-  {key:"pick",label:"Abholen",typ:"petrantwortlich",icon:"39520",def:["a2","k1","k1","k2","a1",null,null]},
-  {key:"cook",label:"Kochen",typ:"petrantwortlich",icon:"2342",def:["k2","k1","a2",null,null,null,null]},
-  {key:"bed1",label:"Schlafen Kind 3",typ:"petrantwortlich",icon:"6027",kind:"k3",def:["k1","a1","k1","a1","k1","k1","a1"]},
-  {key:"bed2",label:"Schlafen Kind 4",typ:"petrantwortlich",icon:"6027",kind:"k4",def:["k2","k2","a2","a2","k2","k2","a2"]},
+  {key:"bring",label:"Bringen",typ:"verantwortlich",icon:"37807",def:["a1","a2","k1","k2","a2",null,null]},
+  {key:"pick",label:"Abholen",typ:"verantwortlich",icon:"39520",def:["a2","k1","k1","k2","a1",null,null]},
+  {key:"cook",label:"Kochen",typ:"verantwortlich",icon:"2342",def:["k2","k1","a2",null,null,null,null]},
+  {key:"bed1",label:"Schlafen Kind 3",typ:"verantwortlich",icon:"6027",kind:"k3",def:["k1","a1","k1","a1","k1","k1","a1"]},
+  {key:"bed2",label:"Schlafen Kind 4",typ:"verantwortlich",icon:"6027",kind:"k4",def:["k2","k2","a2","a2","k2","k2","a2"]},
   {key:"act1",label:"Termine Kind 3",typ:"kalender-read",icon:"3071",kind:"k3"},
   {key:"act2",label:"Termine Kind 4",typ:"kalender-read",icon:"3071",kind:"k4"},
 ];
 function ring(id,cls="ring"){ if(!id) return `<span class="${cls} leer"></span>`;
   const p=PERS[id]; return `<img class="${cls} ring-${p.r}" src="assets/fotos/${p.f}" alt="${p.n}" title="${p.n}">`; }
-function badge(t){ return t==="petrantwortlich"?`<span class="badge petrantwortlich">petrantwortlich</span>`:`<span class="badge kalender">kalender-read</span>`; }
+function badge(t){ return t==="verantwortlich"?`<span class="badge verantwortlich">verantwortlich</span>`:`<span class="badge kalender">kalender-read</span>`; }
 
-// Matrix: nur petrantwortlich-Slots
-document.getElementById("matrix-body").innerHTML = SLOTS.filter(s=>s.typ==="petrantwortlich").map(s=>`
+// Matrix: nur verantwortlich-Slots
+document.getElementById("matrix-body").innerHTML = SLOTS.filter(s=>s.typ==="verantwortlich").map(s=>`
   <tr><th class="slot-th"><span class="label"><img class="slot-icon" src="assets/arasaac/${s.icon}.png">${s.label}</span></th>
   ${s.def.map((d,i)=>`<td class="${i>4?'wochenende':''}"><span class="zelle" onclick="openPerson('${s.label} · ${TAGE[i]}')">${ring(d)}</span></td>`).join("")}</tr>`).join("");
 

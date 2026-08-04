@@ -188,7 +188,7 @@ _SESSION_SORTS = _build_session_sorts()
 # ============================================================
 
 def handle_update(update, ctx):
-    """Petrarbeitet ein einzelnes Telegram-Update."""
+    """Verarbeitet ein einzelnes Telegram-Update."""
     msg = ctx.tg.extract_message(update, ctx.bot_username)
     if msg is None:
         return
@@ -344,7 +344,7 @@ def _falsch_hook(msg, ctx, http_delete=None):
       3. **Trivialer Fall** — weder Receipt noch Pending: der Hook gibt False
          zurück, `falsch` ist Gesprächstext und geht an den Agenten.
 
-    Rückgabe: True ⇒ Hook hat petrarbeitet, Orchestrierung beendet den Turn.
+    Rückgabe: True ⇒ Hook hat verarbeitet, Orchestrierung beendet den Turn.
               False ⇒ Hook hat nichts gefunden, weiterreichen.
 
     `http_delete` (Test-Naht, CLIENT-1-Pattern): optionaler Callable mit
@@ -699,7 +699,7 @@ def _format_proposal(proposal):
 
 
 def _send(ctx, chat_id, text, reply_to_message_id=None):
-    """Sendet eine Nachricht; ein Sendefehler bricht die Petrarbeitung nicht ab."""
+    """Sendet eine Nachricht; ein Sendefehler bricht die Verarbeitung nicht ab."""
     try:
         return ctx.tg.send_message(chat_id, text, reply_to_message_id=reply_to_message_id)
     except TelegramError as e:
@@ -957,7 +957,7 @@ def _processor_loop(ctx, handoff, ack, open_chat_ids, chat_ids_lock,
         try:
             dispatch(update, ctx)
         except Exception:  # ein Update darf den Loop nie killen
-            logging.exception("Petrarbeitung eines Updates fehlgeschlagen")
+            logging.exception("Verarbeitung eines Updates fehlgeschlagen")
         finally:
             if chat_id_open is not None:
                 with chat_ids_lock:

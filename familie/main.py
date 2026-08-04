@@ -196,7 +196,7 @@ def _auth_401():
 
 
 # Decorator: HART-AUTH (auth.md AUTH-2/3/5/8, T1638). Der Name
-# `require_init_data` BLEIBT (AUTH-9-Copetrage-Test trägt per AST-Namen);
+# `require_init_data` BLEIBT (AUTH-9-Coverage-Test trägt per AST-Namen);
 # die Buddy-eigenen Getter + `_auth_401` gehen als Closures rein.
 # Loopback-Bypass (AUTH-5): interne Buddies (plan/kibuddy/eltern-chat/
 # hoerspiel) lesen familie via 127.0.0.1:5010 ohne XFF → pass-through.

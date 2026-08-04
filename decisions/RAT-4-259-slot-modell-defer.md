@@ -11,7 +11,7 @@
 ## Beschluss
 
 Das familien-spezifische Slot-Modell (per-Slot-`cycle`-Filter, Kinder + beliebige
-Petrantwortlichkeiten statt „nur Erwachsene") wird **jetzt nicht gebaut**. Ein
+Verantwortlichkeiten statt „nur Erwachsene") wird **jetzt nicht gebaut**. Ein
 `cycle`-Feld ist **keine** bloße Präzisierung von E-PLAN-2, sondern verschiebt
 **E-PLAN-8** (`specs/buddies/plan.md:609-642`): Familienroutinen bleiben Code,
 Familie 2–4 per Repo-Fork, Generalisierung **erst bei belegten Triggern**. PLAN-7
@@ -51,5 +51,5 @@ Nic zog E-PLAN-8 bewusst neu, neues Argument: eine **Settings-Mini-App** für Sl
 - (c) PLAN-30 als „Zuweisungs-Slots" — durch Toggle-All vereinfacht (Wertebereich `person_id` erweitert, API-Form stabil)
 
 **Voller Entscheid:** `brainstorm/berater-runde/20260622-091210-RATIFIZIERT-plan-rearch.md`
-**Ticket-Petrankerung:** #259 (Comment 2026-06-22)
+**Ticket-Verankerung:** #259 (Comment 2026-06-22)
 **Status RAT-4:** **AUFGELÖST** durch Berater-Runde 2026-06-22 + P1-Lieferung.

@@ -67,7 +67,7 @@ Vereinfachung: `127.0.0.1`-Same-Host-Routing, später `initData`).
 ## WRO-3 — Trigger-Phrasen (für LLM-Intent)
 
 Der Eltern-Chat-Agent erkennt diese Phrasen als WRO-Aufruf (Beispiele, nicht
-abschließend — die LLM-Intent-Erkennung ist im Agent-Prompt petrankert, nicht
+abschließend — die LLM-Intent-Erkennung ist im Agent-Prompt verankert, nicht
 im Skill):
 
 - „Garderobe bearbeiten" / „Garderoben-Regeln öffnen" / „Kleidungsregeln

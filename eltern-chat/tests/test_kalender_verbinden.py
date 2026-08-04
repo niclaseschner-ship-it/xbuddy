@@ -367,7 +367,7 @@ def test_KAV_4_aufklaerung_kommt_vor_dem_login_link():
     tg = FakeTelegram(members=_members(user_id))
     zd = _zd_with_client()
     # next_message liefert sofort einen Code — die Funktion postet erst die
-    # Aufklärung, dann den Link, dann petrarbeitet sie den Code.
+    # Aufklärung, dann den Link, dann verarbeitet sie den Code.
     nm = stream("http://localhost:1/?code=ABC&scope=foo")
     kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",

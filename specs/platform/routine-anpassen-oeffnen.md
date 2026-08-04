@@ -68,7 +68,7 @@ die fachliche Schreibe in der Mini-App selbst hat dort ihre eigene Auth
 ## RAO-3 — Trigger-Phrasen (für LLM-Intent)
 
 Der Eltern-Chat-Agent erkennt diese Phrasen als RAO-Aufruf (Beispiele,
-nicht abschließend — die LLM-Intent-Erkennung ist im Agent-Prompt petrankert,
+nicht abschließend — die LLM-Intent-Erkennung ist im Agent-Prompt verankert,
 nicht im Skill):
 
 - „Routine anpassen" / „Routine bearbeiten" / „Morgenroutine ändern"

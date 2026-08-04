@@ -41,7 +41,7 @@ Beide laufen in Sekunden und sind deterministisch (ruff gepinnt `0.15.15`, kein 
 - **Memory-Kontext (Nic):** kein neuer Rechner; der xbuddy→public-Übergang (~Aug '26) löst Actions-Quote + Runner-Frage gemeinsam — 2. Runner deshalb nicht jetzt beschaffen, sondern gegen diesen Übergang planen.
 - **Sofort:** Mess-Ledger (Laufzeit/Queue-Zeit/Claim-Flip-Poll je PR) als Datenbasis für beide Auslöser.
 
-### Teil 5 — „vor Merge lokal die volle Suite" vertraglich petrankern (**umgesetzt**)
+### Teil 5 — „vor Merge lokal die volle Suite" vertraglich verankern (**umgesetzt**)
 Solange pytest advisory ist (nur `closes-guard` required), ist der bislang nur in Memory lebende Reflex (`reference_pi_runner_pytest_bottleneck`) eine **harte Merge-Gate-Zeile**: vor jedem Merge muss lokal die volle Suite grün sein (`python3 -m pytest -q` + `uvx ruff@0.15.15 check` + `lint-imports`). Landepunkt = **`methode/` SSoT** (`methode/commands/arbeitstag.md` Merge-Gate + Anker in `methode/contracts/preflight.md`/`schemas.md`), **NICHT** direkt `~/.claude` (Codex: RAT-23 SSoT-Drift). Ein-Wege-Tür (SSoT) → nach Merge muss `deploy-methode.sh --verify-only` grün sein.
 
 ## Reversibilität (gesamt)

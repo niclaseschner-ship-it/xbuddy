@@ -182,7 +182,7 @@ body {
   border-radius: 999px;
   white-space: nowrap;
 }
-.badge.petrantwortlich { background: #eef3ea; color: #47503C; }
+.badge.verantwortlich { background: #eef3ea; color: #47503C; }
 .badge.kalender { background: #f6ece2; color: #b05a20; }
 
 /* ── Pfeile (Reorder wie routine-anpassen) ───────────────────────────────────── */

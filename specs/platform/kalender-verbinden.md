@@ -325,7 +325,7 @@ Hook fehl, hängt EC-21 eine zusammengefasste Warnung an die Erfolgs-
 Quittung — die Familie sieht dann, dass etwas mit der automatischen
 Übernahme nicht stimmt. Die hart-codierte Erfolgs-Nachricht der Funktion
 selbst enthält **keinen** manuellen Restart-Hinweis mehr (Refs #154,
-Live-Test 2026-05-26 hat das petraltete Wording aufgedeckt; mit #140
+Live-Test 2026-05-26 hat das veraltete Wording aufgedeckt; mit #140
 ReloadHook geschlossen, Erfolgs-Quittung ohne Restart-Anleitung stabil).
 
 *Tickets:* #139, #140 (ReloadHook), #154

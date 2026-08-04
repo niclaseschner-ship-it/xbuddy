@@ -1,4 +1,4 @@
-"""tools.medien_store — domain-neutrale Medien-Petrarbeitungs-Library.
+"""tools.medien_store — domain-neutrale Medien-Verarbeitungs-Library.
 
 Public-API (re-exportiert fuer bequemen Zugriff):
   normalize:    normalisiere, NormResult, NormalizeError, THUMBNAIL_MAX_KANTE

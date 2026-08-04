@@ -51,7 +51,7 @@ Entlastung unmittelbar folgt.
    technik-affine Familien können tieferen Eingriff bekommen, technik-ferne
    werden vom Default getragen. Tiefe der Bedienbarkeit, kein
    Engagement-Stufenmodell.
-3. **Privacy & Datensicherheit** — Petrarbeitung in Deutschland,
+3. **Privacy & Datensicherheit** — Verarbeitung in Deutschland,
    Anonymisierungs-Layer vor Verlassen der Geräte-Ebene.
 4. **Offline-Fähigkeit** — mit Hub läuft XBuddy ohne Internet.
 5. **Nicht-invasiv** — kein Engagement-Design, keine Pushes.

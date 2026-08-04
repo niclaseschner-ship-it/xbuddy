@@ -54,7 +54,7 @@ Eltern.").
 
 Der Eltern-Chat-Agent erkennt diese Phrasen als EZG-Aufruf (Beispiele,
 nicht abschließend — die LLM-Intent-Erkennung ist im Agent-Prompt
-petrankert, nicht im Skill):
+verankert, nicht im Skill):
 
 - „Ich bin (gleich / jetzt / nachher) einkaufen"
 - „Zeig mir die Einkaufsliste" / „Zeig mir die Liste"

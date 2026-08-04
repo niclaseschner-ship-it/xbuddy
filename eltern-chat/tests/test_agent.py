@@ -1010,7 +1010,7 @@ def test_EC40_1105_system_prompt_traegt_negativ_regel():
 #
 #  EC-40 Positiv-Norm: die Tool-description von hoerspiel_oeffnen
 #  ist die einzige Heimat des positiven Trigger-Vokabulars.
-#  Dieser Test petrankert, dass sie die Kern-Begriffe beider
+#  Dieser Test verankert, dass sie die Kern-Begriffe beider
 #  Trigger-Familien enthält — schlägt beim Editieren der
 #  description fehl, wenn das Vokabular verloren geht.
 # ============================================================

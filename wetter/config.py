@@ -11,7 +11,7 @@ analog plan/config.py (PLAN-28) und der CONFIG-1/CONFIG-5-Konvention. Der Ort
 Die Garderoben-Regeln sind die zentrale Datei-getriebene Struktur (WETTER-14):
 eine geordnete Liste von Bedingung→Kleidungs-Set, plus ein Fallback-Set. Diese
 Datei parst sie in `clothing.Garderobe`; die Auswertung selbst lebt in
-clothing.py (eine Petrantwortung je Modul, CLAUDE.md §6).
+clothing.py (eine Verantwortung je Modul, CLAUDE.md §6).
 """
 
 import json

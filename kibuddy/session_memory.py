@@ -8,7 +8,7 @@ SessionRegistry hält eine Map sid → SessionMemory.
 Reset löscht NUR die Session des Aufrufers (die eigene sid).
 Audio-Cache bleibt global (per content-Hash dedupliziert, OPEN-KIBUDDY-K).
 
-# OPEN: Session-TTL/Cleanup — petraltete Sessions werden derzeit nicht
+# OPEN: Session-TTL/Cleanup — veraltete Sessions werden derzeit nicht
 # automatisch bereinigt. Wird in OPEN-KIBUDDY-K adressiert.
 """
 

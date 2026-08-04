@@ -139,7 +139,7 @@ class ProviderError(Exception):
     """Der KI-Anbieter war nicht erreichbar oder hat fehlerhaft geantwortet.
 
     Wird vom Adapter geworfen und in der Orchestrierung zu einem klaren Hinweis
-    an das Familienmitglied (EC-14) petrarbeitet.
+    an das Familienmitglied (EC-14) verarbeitet.
 
     Optionales Attribut `telemetry` (EC-23/#268): wird vom `agent.run_turn`-
     Wrapper gesetzt, bevor er die Exception weiterwirft. Die Orchestrierung

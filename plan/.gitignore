@@ -2,7 +2,7 @@
 # gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
 # dokumentiert.
 #
-# Per-Instanz-Konfig + Petrantwortlichkeiten-DB (PLAN-9/PLAN-28) — je Instanz separat.
+# Per-Instanz-Konfig + Verantwortlichkeiten-DB (PLAN-9/PLAN-28) — je Instanz separat.
 # Format: plan/plan.example.json
 plan.json
 plan.db

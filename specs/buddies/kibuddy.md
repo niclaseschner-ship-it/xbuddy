@@ -197,7 +197,7 @@ Sichtbare Hinweis-Bubble „Bitte sprich etwas lauter und länger" für 4 s.
 
 **Wenn** die Aufnahme länger als die **Maximum-Aufnahme-Dauer** (KIBUDDY-21,
 Default 30 s) läuft, **dann** endet sie automatisch und wird normal
-petrarbeitet (Kinder-Resilienz, keine Endlos-Aufnahme).
+verarbeitet (Kinder-Resilienz, keine Endlos-Aufnahme).
 
 ### KIBUDDY-8 — Visuelles Feedback im Druck-Moment (sofort, nicht erst beim Aufnahme-Start)
 Im **Moment des Drucks** (vor dem Beginn der Aufnahme-Pegel-Anzeige) zeigt
@@ -297,7 +297,7 @@ gehen normal durch. Nur Phrasen, die Kinder nie verwenden
 („im Auftrag", „Untertitelung", „Amara.org"), lösen den Filter aus.
 
 ### KIBUDDY-13 — Streaming-Reveal: STT-Phase synchron, LLM+TTS-Phase progressiv
-V1 petrarbeitet eine Frage als **NDJSON-Chunked-Stream**: die View postet das
+V1 verarbeitet eine Frage als **NDJSON-Chunked-Stream**: die View postet das
 Audio per `POST /api/v1/kibuddy/frage` (KIBUDDY-24) und liest die Response
 als ReadableStream.
 

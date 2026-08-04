@@ -296,7 +296,7 @@ koppelt das Historie-Update an Album-Bau-Erfolg).
 
 Der Eltern-Chat-Agent erkennt diese Phrasen als HFE-Aufruf (Beispiele,
 nicht abschließend — die LLM-Intent-Erkennung ist im Agent-Prompt
-petrankert, nicht im Skill, EC-30-Trennlinie):
+verankert, nicht im Skill, EC-30-Trennlinie):
 
 - „Schreib eine Folge in der …"
 - „Eine neue Folge über …"

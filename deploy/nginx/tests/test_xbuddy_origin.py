@@ -344,7 +344,7 @@ def test_URL_14_photo_in_routing_tabelle_dokumentiert():
 # (Port 5042) serviert. Der allgemeine /display/->Router-Fallback ist mit
 # RAT-31 (#1568) abgerissen; /display/_shared/icons/ ist ein eigener
 # spezifischer Block. Kein nginx-alias (scheiterte an 0700-Home-Permission,
-# #135 — unpetraendert); seiten laeuft als User buddy.
+# #135 — unveraendert); seiten laeuft als User buddy.
 
 
 def test_ROU_26_icons_location_existiert_und_zeigt_auf_seiten():
@@ -375,7 +375,7 @@ def test_ROU_26_icons_location_vorhanden_ohne_display_fallback():
 
 
 def test_ROU_26_kein_alias_fuer_icon_root():
-    """Es darf keine `alias`-Direktive auf die icon-root geben (ROU-26, #135 unpetraendert)."""
+    """Es darf keine `alias`-Direktive auf die icon-root geben (ROU-26, #135 unveraendert)."""
     text = _conf_text()
     match = re.search(r"alias\s+[^\s;]+;", text)
     assert match is None, (
@@ -755,7 +755,7 @@ def test_SHELL_1_shell_in_routing_tabelle_dokumentiert():
     """Der Conf-Header muss /shell/ in der Routing-Tabelle listen (SHELL-1, #1592).
 
     Doku und Verhalten duerfen nicht auseinanderlaufen; die fehlende Zeile in der
-    Tabelle war mitpetrantwortlich, dass die Regression durch PR-D nicht sofort
+    Tabelle war mitverantwortlich, dass die Regression durch PR-D nicht sofort
     auffiel.
     """
     text = _conf_text()

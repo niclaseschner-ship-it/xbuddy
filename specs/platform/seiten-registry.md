@@ -243,7 +243,7 @@ Der Skill arbeitet in zwei Runden mit dem LLM:
 1. **Runde 1 (Inventar-Übergabe):** Der Skill ruft `seiten_client.inventar()`
    und gibt die Liste der Registry-Einträge (pro Eintrag: `label` + `key` +
    `synonyme` + `zeigt`) als **Tool-Result** an den Agent-Loop zurück. **Kein
-   Bot-Post in dieser Runde** — die Antwort wird im Agent-Kontext petrarbeitet.
+   Bot-Post in dieser Runde** — die Antwort wird im Agent-Kontext verarbeitet.
 
 2. **Runde 2 (LLM-Wahl):** Das LLM wählt aus dem in Runde 1 übergebenen
    Inventar das passende Element und ruft den Skill erneut mit
@@ -845,8 +845,8 @@ müssen.
   "typ": "pwa",
   "pfad": "/seiten/plan/einstellungen",
   "label": "Plan-Einstellungen",
-  "synonyme": ["petrantwortlichkeiten", "wer macht was"],
-  "zeigt": "Default-Petrantwortlichkeiten je Slot und Wochentag setzen.",
+  "synonyme": ["verantwortlichkeiten", "wer macht was"],
+  "zeigt": "Default-Verantwortlichkeiten je Slot und Wochentag setzen.",
   "zielgruppe": "eltern",
   "pwa": {
     "manifest": "/seiten/static/plan/manifest.json",
@@ -1017,7 +1017,7 @@ Unübersichtlichkeit.
   fallen (Zuverlässigkeits-Bruch, CONTEXT.md); Wetter hat zudem keine API
   (BUD-1b). Wahrheit ist die committete Platte (SREG-2).
 - **Aggregator im Router** statt eigenem Service — verworfen: machte aus Routing
-  eine App-Discovery-Petrantwortung + nochmal ein Fehler-/Snapshot-Modell. Der
+  eine App-Discovery-Verantwortung + nochmal ein Fehler-/Snapshot-Modell. Der
   eigene Service ist gerechtfertigt, weil er eigene geschriebene Daten hat
   (`inventar.json`, RAT-1).
 - **`views.json` als gitignoretes Per-Instanz-Config-Feld** — verworfen: Config

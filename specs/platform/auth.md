@@ -13,7 +13,7 @@ Service-Modulen und ist über die Klauseln hier verriegelt.
 
 **V1-Scope (Phase 1):** AUTH-1..AUTH-6 + AUTH-8 + AUTH-9. AUTH-3-Liste
 enthält **nur essen-einkauf-Routen**. Weitere Power-Flows wandern phasen-
-weise hinzu (Reihenfolge im RAT-18 petrankert).
+weise hinzu (Reihenfolge im RAT-18 verankert).
 
 **Out-of-Scope V1** (eigene Phase, sobald gebraucht): AUTH-7 (Display-
 Renderer nginx-Map, Phase 4) · AUTH-8-V2-Deep-Link · Cookie-Revoke-Liste ·
@@ -219,8 +219,8 @@ schreibbar, KiBuddy-Prompt überschreibbar) IST der in AUTH-6 geforderte
   AUTH-7-Frage.
 
 Die **method-explizite** Endliste (GET/POST/PATCH/DELETE je Pfad) enumeriert der
-**#1321-Bau** gegen die realen Routen; der AUTH-9-Copetrage-Test
-(`tests/test_auth_decorator_copetrage.py`) verifiziert, dass **jede** gelistete
+**#1321-Bau** gegen die realen Routen; der AUTH-9-Coverage-Test
+(`tests/test_auth_decorator_coverage.py`) verifiziert, dass **jede** gelistete
 Route den Auth-Decorator trägt. Die `/display/…`-Renderer-Routen
 (`/display/photo/rahmen`, `/display/kibuddy/frage`, `/display/plan/woche`) bleiben
 **außerhalb** AUTH-3 — ihre Funnel-Exposition ist die separate AUTH-7-Frage
@@ -241,7 +241,7 @@ Power-Flow-Migrationen; bis dahin sind sie in AUTH-6 dokumentiert.
 
 **#1321-Endliste (method-explizit, photo/kibuddy/plan).** Der #1321-Bau
 enumeriert die oben klassifizierten Routen byte-gleich gegen die realen
-`@app.route`-Strings; der AUTH-9-Copetrage-Test parst diesen Fence mit:
+`@app.route`-Strings; der AUTH-9-Coverage-Test parst diesen Fence mit:
 
 ```
 /api/v1/photo/medien                          (POST)
@@ -350,7 +350,7 @@ Routen, die **ausschließlich den Session-Cookie** akzeptieren — kein tma-Head
 (Player ist eine Browser-PWA, kein Telegram-Mini-App), kein Loopback-Bypass
 (browser-only Route, keine internen Server-Caller). Ein ungültiger oder fehlender
 `xbuddy_session`-Cookie → `401`, kein Render. Der Gate lebt **inline** in der
-View-Funktion (kein geteilter Decorator, da n=1 — AUTH-9-Copetrage-Test gilt
+View-Funktion (kein geteilter Decorator, da n=1 — AUTH-9-Coverage-Test gilt
 **nicht** für diese Routen).
 
 **V1-Liste (#1292, gebaut 2026-07-07):**
@@ -457,10 +457,10 @@ sich, weil plans Getter den Slot bereits kapselt — **kein** repo-weites Rename
 **Migration Buddy-für-Buddy** (bisectbar): photo → essen → kibuddy → plan (HART)
 → seiten (dual). routine + hoerspiel migrieren mit ihrem Phase-2/3-Cookie-Schritt
 (#1639/#1640) auf dieselbe HART-Factory. Pro Schritt AUTH-9-Test grün +
-real-route-Smoke (401-HTML byte-gleich). `test_auth_decorator_copetrage.py` ist um
+real-route-Smoke (401-HTML byte-gleich). `test_auth_decorator_coverage.py` ist um
 routine + hoerspiel zu erweitern (heute in keiner MODULE_MAP).
 ✓ eingelöst 2026-07-31 — vollständige Migration abgeschlossen (#1626/#1628/#1639/#1640/#1655);
-`test_auth_decorator_copetrage.py` deckt jetzt alle MODULE_MAP-Einträge ab.
+`test_auth_decorator_coverage.py` deckt jetzt alle MODULE_MAP-Einträge ab.
 
 Der Decorator-Code (egal in welchem Buddy) prüft zuerst — **verbindlich und
 load-bearing** — BEIDE Bedingungen zusammen:
@@ -627,8 +627,8 @@ Cookie und ohne Operator-IP:
   (AUTH-4), von den 7b-Renderer-Views als Asset geladen; hinter den Dual-Gate
   gezogen würde es die Views brechen.
 
-**Bau-Notiz (nicht Spec-Kern, für #1388-Track):** der AUTH-9-Copetrage-Test
-(`tests/test_auth_decorator_copetrage.py`) muss um die 7b-Routen erweitert
+**Bau-Notiz (nicht Spec-Kern, für #1388-Track):** der AUTH-9-Coverage-Test
+(`tests/test_auth_decorator_coverage.py`) muss um die 7b-Routen erweitert
 werden, sobald 7b gebaut wird — sonst landet der Dual-Gate-Decorator still an
 **null** Routen (der Zustand, gegen den AUTH-9 überhaupt existiert). 7a bleibt
 eine nginx-/IP-Sache und ist **nicht** über den Python-Decorator-Test
@@ -675,7 +675,7 @@ Chat-Verfeinerung 2026-06-16 V1-/V2-Aufstockung]
 
 ### AUTH-9 — Decorator-Anwendung maschinell verriegelt
 
-Ein Test (`tests/test_auth_decorator_copetrage.py`) parst die AUTH-3-Liste
+Ein Test (`tests/test_auth_decorator_coverage.py`) parst die AUTH-3-Liste
 aus dieser Spec und prüft per AST des jeweiligen Service-Moduls
 (`essen/main.py`, später `routine/main.py`, `hoerspiel/main.py`, …), dass
 **jede** in AUTH-3 gelistete Route den Auth-Decorator (`@require_init_data`

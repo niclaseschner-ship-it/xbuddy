@@ -88,7 +88,7 @@ def test_album_bau_fehlende_shared_assets_wirft(data_root, fake_llm, fake_tts, f
         )
 
 
-def test_album_bau_tts_fehler_laesst_historie_unpetraendert(data_root, fake_llm, fixed_now):
+def test_album_bau_tts_fehler_laesst_historie_unveraendert(data_root, fake_llm, fixed_now):
     """HSP-15/HSP-16: bei TTS-Fehler darf die Historie NICHT verändert werden."""
     from hoerspiel.tests.conftest import FakeTTSEngine
     fail_tts = FakeTTSEngine(fail=True)

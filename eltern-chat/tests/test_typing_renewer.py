@@ -3,7 +3,7 @@
 Der Renewer-Thread erneuert alle 4 s (EC-28-Konstante,
 `skills/typing_indicator.py:28-31`) den Typing-Indikator fuer jede
 `chat_id` in `open_chat_ids` — solange der Processor ein Update fuer
-diesen Chat petrarbeitet. Wir testen den `_renewer_loop` direkt mit
+diesen Chat verarbeitet. Wir testen den `_renewer_loop` direkt mit
 einer Mock-Zeit-Doppelung (kurzes Intervall + reale time.sleep), damit
 der Test in <1 s laeuft.
 """

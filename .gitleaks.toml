@@ -19,11 +19,11 @@ title = "xbuddy Leak-Guard (Custom-PII aus Gate-1, #1724)"
 useDefault = true
 
 # ── Klarnamen (Familie) ──────────────────────────────────────────────────────
-# Wortgrenzen (\b) wie im Gate-1-Set — sonst träfe 'petra' in 'Petrantwortung'.
+# Wortgrenzen (\b) wie im Gate-1-Set — sonst träfe 'vera' in 'Verantwortung'.
 [[rules]]
-id = "xbuddy-familienname-sonntag"
+id = "xbuddy-familienname-eschner"
 description = "Familienname Eschner (Klarname)"
-regex = '''(?i)\bsonntag\b'''
+regex = '''(?i)\beschner\b'''
 # LICENSE ratifiziert ausgenommen — der Copyright-Name bleibt (2026-07-30).
 [[rules.allowlists]]
 paths = ['''(^|/)LICENSE$''']
@@ -31,32 +31,32 @@ paths = ['''(^|/)LICENSE$''']
 [[rules]]
 id = "xbuddy-vornamen-erwachsene"
 description = "Vornamen der Erwachsenen (Klarnamen)"
-regex = '''(?i)\b(lena|jonas|petra|timo)\b'''
+regex = '''(?i)\b(sophia|julian|vera|taro)\b'''
 
 [[rules]]
 id = "xbuddy-kind-slugs"
-description = "Kind-Slugs mia/finn (Klarnamen-Slugs)"
-regex = '''(?i)\b(mia|finn)\b'''
+description = "Kind-Slugs paula/neko (Klarnamen-Slugs)"
+regex = '''(?i)\b(paula|neko)\b'''
 
 [[rules]]
-id = "xbuddy-emil-slug"
-description = "Slug emil (Klarname)"
-regex = '''(?i)\bemil\b'''
-# LICENSE ausgenommen wie sonntag (Copyright-Name ratifiziert behalten).
+id = "xbuddy-niclas-slug"
+description = "Slug niclas (Klarname)"
+regex = '''(?i)\bniclas\b'''
+# LICENSE ausgenommen wie eschner (Copyright-Name ratifiziert behalten).
 [[rules.allowlists]]
 paths = ['''(^|/)LICENSE$''']
 
 # ── Private Kontaktdaten ─────────────────────────────────────────────────────
 [[rules]]
 id = "xbuddy-private-mail"
-description = "Private Mail-Adresse (emil.sonntag@…)"
-regex = '''emil[._]sonntag@(gmail|gmx)'''
+description = "Private Mail-Adresse (niclas.eschner@…)"
+regex = '''niclas[._]eschner@(gmail|gmx)'''
 
 [[rules]]
 id = "xbuddy-familien-mail-domain"
-description = "Familien-E-Mail-Domain @example.org (→ @example.de scrubben)"
+description = "Familien-E-Mail-Domain @gmx.de (→ @example.de scrubben)"
 regex = '''@gmx\.de'''
-# Privacy-Gate-Detektor + Golden-Set führen @example.org als Detektions-Pattern
+# Privacy-Gate-Detektor + Golden-Set führen @gmx.de als Detektions-Pattern
 # (Security-Feature). Bloße Provider-Domain = keine PII (#1719).
 [[rules.allowlists]]
 paths = [
@@ -68,12 +68,12 @@ paths = [
 [[rules]]
 id = "xbuddy-github-org"
 description = "GitHub-Org (enthält echten Benutzernamen)"
-regex = '''emilsonntag-ship-it'''
+regex = '''niclaseschner-ship-it'''
 
 [[rules]]
 id = "xbuddy-tailscale-fqdn"
 description = "Tailscale-FQDN-Identifier (instanz-spezifisch)"
-regex = '''demo-tailnet'''
+regex = '''taile235cf'''
 
 [[rules]]
 id = "xbuddy-lan-ip"
@@ -88,12 +88,12 @@ regex = '''100\.108\.61\.'''
 [[rules]]
 id = "xbuddy-telegram-chat-id"
 description = "Bekannte Telegram-Chat-ID"
-regex = '''\b0000000000\b'''
+regex = '''\b464143432\b'''
 
 [[rules]]
 id = "xbuddy-ortsname"
-description = "Wohnort-Name (Mustertal)"
-regex = '''(?i)\bMustertal\b'''
+description = "Wohnort-Name (Dreisamtal)"
+regex = '''(?i)\bDreisamtal\b'''
 
 # ── Globale Allowlist (EIN Block — gitleaks honoriert nur den ersten) ────────
 # Das Ruleset selbst trägt die Muster (naturgemäß) und darf sich nicht als Leak
@@ -104,6 +104,6 @@ regex = '''(?i)\bMustertal\b'''
 description = "Ruleset-Selbstreferenz + curated Detektor-/FP-/Artefakt-Ausnahmen (#1719)"
 paths = [
     '''(^|/)\.gitleaks\.toml$''',
-    '''test_auth_decorator_copetrage\.py''',
+    '''test_auth_decorator_coverage\.py''',
     '''\.pyc$''',
 ]

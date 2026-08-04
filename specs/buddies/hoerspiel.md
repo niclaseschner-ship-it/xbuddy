@@ -248,7 +248,7 @@ der Wechsel zwischen Mia und Finn läuft über zwei Web-App-Menu-
 Buttons im Telegram-Bot, nicht über ein UI-Element in der App. Damit
 bleibt die Eltern-App single-tenant intern, und die Face-Pille-Form
 hat n=1 gebautes Beispiel (Kinder-View) statt zwei mit unterschiedlicher
-Semantik (Kinder = Instanz-Wechsel, Eltern = Petrantwortungs-Stempel-
+Semantik (Kinder = Instanz-Wechsel, Eltern = Verantwortungs-Stempel-
 Pendant aus Plan-Buddy). MAD-Konventions-Klausel für Face-Pille wartet
 auf zweiten Konsumenten in der **gleichen** Semantik (n=2-Regel).
 
@@ -419,7 +419,7 @@ gültiger Wert** — der Config-Loader (HSP-26) und `PATCH /config`
 (HSP-17) lehnen unbekannte Provider mit HTTP 422 + Klartext-Hinweis ab.
 
 **Wenn** der konfigurierte Provider (HSP-26) `claude` ist, **dann** wird
-der Anthropic-SDK-Adapter genutzt mit dem im Provider-Default petrankerten
+der Anthropic-SDK-Adapter genutzt mit dem im Provider-Default verankerten
 Modell-Pin (`claude-opus-4-7`) oder dem in der Config überschriebenen
 Wert.
 
@@ -1078,7 +1078,7 @@ gesetzten Providers und antwortet HTTP 422 bei unbekanntem Wert.
 | mistral | `mistral-small-2503`   | Small 3.1 (schnell, günstig) |
 
 Erweiterung um weitere Modelle = Tupel an `AVAILABLE_MODELS` anhängen,
-keine Spec-Änderung nötig. Petraltete Modell-IDs werden aus der Liste
+keine Spec-Änderung nötig. Veraltete Modell-IDs werden aus der Liste
 entfernt; ein in `config.json` persistiertes `llm_model` außerhalb der
 Liste wird beim Start mit Warnung auf den Provider-Default
 zurückgesetzt (CONFIG-4).
@@ -1153,7 +1153,7 @@ vorliegen.
 **Wenn** ein Album-Bau angefordert wird (HSP-15) und die für die gewählte
 Voice nötigen Shared-Assets fehlen, **dann** lehnt der Endpoint mit
 HTTP 412 + Klartext-Hinweis ab — kein stilles Scheitern, kein
-Auto-Rebuild beim Album-Bau (Trennung der Petrantwortung).
+Auto-Rebuild beim Album-Bau (Trennung der Verantwortung).
 
 ### HSP-30 — Registrierung in der Plattform
 Der Slug `hoerspiel` wird im Origin-Routing (URL-14) registriert, damit
@@ -1885,7 +1885,7 @@ die HSP-Config gehört oder fixe Konstante bleibt (Bau-Entscheidung).
 Cache Storage (kind-getrennt); Offline-Fetch eines gecachten Tracks liefert 200
 aus dem Cache; die N+1-te Folge ist LRU-verdrängt. **HSP-54a:** offline sind
 Folgen-Liste, Manifest und Config des aktiven Kindes aus dem Cache verfügbar
-(Regal + Track-Auflösung funktionieren ohne Netz). Test-Referenzen petrankern
+(Regal + Track-Auflösung funktionieren ohne Netz). Test-Referenzen verankern
 **HSP-54 / HSP-54a** (nicht eine frei erfundene AC-ID).
 
 ### HSP-55 — Tests

@@ -1,7 +1,7 @@
 """Plan-Buddy — Render-Logik der View `woche` (PLAN-3 … PLAN-14).
 
 Siehe specs/buddies/plan.md §1-5. Dieses Modul baut aus Konfiguration,
-Petrantwortlichkeiten (db.py) und Kalender-Events (kalender.py) das
+Verantwortlichkeiten (db.py) und Kalender-Events (kalender.py) das
 View-Modell, das `templates/plan_kinder.html` rendert.
 
 Geschnitten nach XBuddy-Konventionen (MIGRATION.md §4), die kniffligen
@@ -163,7 +163,7 @@ _PICKER_TINT = {
     "musik":       "#dcd0f0",
     "ausflug":     "#ffe1c2",
     "geburtstag":  "#ffe1c2",
-    "petrabredung": "#f9c8c8",
+    "verabredung": "#f9c8c8",
     "waldgang":    "#cfe6f5",
 }
 _PICKER_TINT_FALLBACK = "#eeeeee"
@@ -390,7 +390,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     from . import db as db_mod
     wochen = sorted({t["week_start"] for t in tage})
     for w in wochen:
-        db_mod.init_week(conn, w, cfg.default_petrantwortlichkeiten)
+        db_mod.init_week(conn, w, cfg.default_verantwortlichkeiten)
     zuweisungen = db_mod.assignments_for_weeks(conn, wochen)
 
     # PLAN-6/PLAN-7: Schedule-Raster — je Tag je Slot eine Zelle.

@@ -2,7 +2,7 @@
 """Plan-Buddy-App — HTTP-Schnittstellen + Entrypoint (PLAN-1 … PLAN-33).
 
 Siehe specs/buddies/plan.md. Der Plan-Buddy ist die XBuddy-App mit dem
-Buddy-Slug `plan` (PLAN-1). Er besitzt seine Daten (Petrantwortlichkeiten,
+Buddy-Slug `plan` (PLAN-1). Er besitzt seine Daten (Verantwortlichkeiten,
 plan.db) und seine Funktion (Kalender-Anbindung) und stellt beides über
 Schnittstellen bereit (PLAN-21/22/23/33).
 
@@ -14,7 +14,7 @@ Endpunkte:
   PUT|DELETE /api/v1/plan/aktivitaet    — Kind-Aktivität setzen/löschen (PLAN-11)
   GET|PUT /api/v1/plan/termine          — Termin-Schnittstelle für Apps (PLAN-22)
   POST /api/v1/plan/termine/bulk        — Bulk-Termin-Schnittstelle (PLAN-33)
-  GET|PUT /api/v1/plan/defaults         — Default-Petrantwortlichkeiten (PLAN-36, public)
+  GET|PUT /api/v1/plan/defaults         — Default-Verantwortlichkeiten (PLAN-36, public)
   GET|PUT /api/v1/plan/slot-modell      — Slot-Modell-Editor-API (PLAN-37, public)
   PUT /api/v1/plan/admin/kalender       — kalender_id setzen (PLAN-32, loopback)
 
@@ -392,7 +392,7 @@ def _auth_401():
 # Decorator: HART-AUTH (T948/T1321, auth.md AUTH-2/3/5/8). Der hand-kopierte
 # Wrapper-Body ist mit #1626 auf die AUTH-Decorator-Lib-Factory geflippt
 # (tools/initdata/auth_gate.py::make_require_init_data, #1625). Der Name
-# `require_init_data` BLEIBT (AUTH-9-Copetrage-Test trägt per AST-Namen); die
+# `require_init_data` BLEIBT (AUTH-9-Coverage-Test trägt per AST-Namen); die
 # Buddy-eigenen Getter + `_auth_401` gehen WÖRTLICH als Closures rein — die
 # Factory ruft genau diesen `_auth_401`, 401/403/500-Shape bleibt byte-gleich.
 # D3-Sonderfall: `_get_familie_client` liest UNVERÄNDERT den eigenen
@@ -504,7 +504,7 @@ def api_zuteilung_lesen():
     Zuteilungen dieser Woche als Liste:
         [ { "day": 0..6, "slot": "<schluessel>", "person_id": "<id>|null" }, ... ]
     Ist die Woche noch nicht initialisiert, antwortet die API mit den
-    Default-Petrantwortlichkeiten (PLAN-10) — der Erst-Lesepfad belegt die
+    Default-Verantwortlichkeiten (PLAN-10) — der Erst-Lesepfad belegt die
     Woche aus plan.json vor, sodass ein Konsument denselben Stand sieht wie
     eine View-Anfrage.
 
@@ -531,7 +531,7 @@ def api_zuteilung_lesen():
         # Erst-Lese-Pfad: die Woche wird wie in der View aus den Defaults
         # vorbelegt (PLAN-10). Damit liefert die Lese-API dieselbe Wahrheit
         # wie die View — kein Sonderstand „API sieht Defaults nicht".
-        db_mod.init_week(conn, week_start, cfg.default_petrantwortlichkeiten)
+        db_mod.init_week(conn, week_start, cfg.default_verantwortlichkeiten)
         zuweisungen = db_mod.assignments_for_weeks(conn, [week_start])
     finally:
         conn.close()
@@ -568,7 +568,7 @@ def api_zuteilung():
     # frischen plan.json — eine eben hinzugefügte Slot-Form wird sofort als
     # gültig akzeptiert, ohne Restart.
     slot = _current_config().slot(body["slot"])
-    if slot is None or not slot.ist_petrantwortlich_slot():
+    if slot is None or not slot.ist_verantwortlich_slot():
         return jsonify({"error": "kein Erwachsenen-Slot: %r" % body["slot"]}), 400
     person_id = body.get("person_id")
     if person_id is not None and _aktuelle_registry().get(person_id) is None:
@@ -771,7 +771,7 @@ def api_termine_bulk():
 
     Body: { "request_id": "<UUIDv4>", "items": [ <PLAN-22-PUT-Body>, … ] }
 
-    Zwei-Phasen-Petrarbeitung (PLAN-33.1):
+    Zwei-Phasen-Verarbeitung (PLAN-33.1):
       1. Pre-validate: alle Items gegen PLAN-22-Regeln.
          Mindestens ein Fehler → HTTP 400, results-Liste, 0 Schreibvorgänge.
       2. Best-effort write: saubere Items einzeln in Google schreiben,
@@ -1430,7 +1430,7 @@ def api_aktivitaeten_loeschen(art):
 
 
 # ============================================================
-#  Public: Default-Petrantwortlichkeiten + Slot-Modell (PLAN-36/PLAN-37, #1126)
+#  Public: Default-Verantwortlichkeiten + Slot-Modell (PLAN-36/PLAN-37, #1126)
 # ============================================================
 #
 # Zwei PUBLIC-Daten-APIs für die Eltern-Einstellungs-PWA (PLAN-35). Anders als
@@ -1447,17 +1447,17 @@ def api_aktivitaeten_loeschen(art):
 
 
 def _defaults_aus_config():
-    """Liefert die Default-Petrantwortlichkeiten in API-Nutzform `defaults`.
+    """Liefert die Default-Verantwortlichkeiten in API-Nutzform `defaults`.
 
     In-Memory liegt der Stand als `{ slot: { wochentag_int: person_id|None } }`
-    vor (`Config.default_petrantwortlichkeiten`, PLAN-10). Die API-Form spiegelt
+    vor (`Config.default_verantwortlichkeiten`, PLAN-10). Die API-Form spiegelt
     das mit String-Wochentag-Keys (JSON kennt keine int-Keys):
     `{ "<slot>": { "0".."6": "<pid>"|null } }`.
     Reload-on-Read (DCOMP-2): pro Aufruf frisch via `_current_config()`.
     """
     cfg = _current_config()
     out = {}
-    for slot_key, by_day in cfg.default_petrantwortlichkeiten.items():
+    for slot_key, by_day in cfg.default_verantwortlichkeiten.items():
         out[slot_key] = {str(wd): by_day.get(wd) for wd in range(7)}
     return out
 
@@ -1465,7 +1465,7 @@ def _defaults_aus_config():
 @app.route("/api/v1/plan/defaults", methods=["GET"])
 @require_init_data
 def api_defaults_lesen():
-    """PLAN-36: PUBLIC GET — Default-Petrantwortlichkeiten (PLAN-10).
+    """PLAN-36: PUBLIC GET — Default-Verantwortlichkeiten (PLAN-10).
 
     Antwort: `{ "defaults": { "<slot>": { "0".."6": "<pid>"|null } } }`.
     Reload-on-Read (DCOMP-2): pro Aufruf frisch aus plan.json.
@@ -1476,20 +1476,20 @@ def api_defaults_lesen():
 @app.route("/api/v1/plan/defaults", methods=["PUT"])
 @require_init_data
 def api_defaults_schreiben():
-    """PLAN-36: PUBLIC PUT — setzt die Default-Petrantwortlichkeiten (PLAN-10).
+    """PLAN-36: PUBLIC PUT — setzt die Default-Verantwortlichkeiten (PLAN-10).
 
     Body: `{ "defaults": { "<slot>": { "<wochentag 0..6>": "<pid>"|null } } }`.
     Der übergebene Stand ist der Gesamt-Soll-Zustand der Defaults.
 
     Validierung VOR Persistenz (kein 500, kein Teil-Write bei Fehler):
       - `defaults` ist Pflicht und ein Objekt;
-      - jeder slot_key ist ein Petrantwortlichkeits-Slot (PLAN-6) der aktuellen
+      - jeder slot_key ist ein Verantwortlichkeits-Slot (PLAN-6) der aktuellen
         Config;
       - jeder Wochentag-Key ist 0..6;
       - jede person_id existiert in familie.json (FAM-3) — `null` (leerer Tag)
         ist erlaubt.
     Persistenz (Form↔Datei-Mapping, verbindlich): geschrieben wird ZWINGEND
-    unter dem Datei-Schlüssel `default_petrantwortlichkeiten` in LISTEN-Form
+    unter dem Datei-Schlüssel `default_verantwortlichkeiten` in LISTEN-Form
     `[p0..p6]` — das ist die Form, die der Config-Loader liest
     (`plan/config.py` `_parse_defaults`). Atomar + Reload (PLAN-32-Muster).
     """
@@ -1498,15 +1498,15 @@ def api_defaults_schreiben():
         return jsonify({"error": "defaults (Objekt) ist Pflicht"}), 400
 
     cfg = _current_config()
-    petrantwortlich_keys = {s.schluessel for s in cfg.erwachsenen_slots()}
+    verantwortlich_keys = {s.schluessel for s in cfg.erwachsenen_slots()}
     registry = _aktuelle_registry()
 
     # Validierung + Übersetzung in die Datei-Listen-Form — alles VOR Persistenz.
     datei_defaults = {}
     for slot_key, by_day in body["defaults"].items():
-        if slot_key not in petrantwortlich_keys:
+        if slot_key not in verantwortlich_keys:
             return jsonify({
-                "error": "kein Petrantwortlichkeits-Slot: %r" % slot_key
+                "error": "kein Verantwortlichkeits-Slot: %r" % slot_key
             }), 400
         if not isinstance(by_day, dict):
             return jsonify({
@@ -1541,7 +1541,7 @@ def api_defaults_schreiben():
             return jsonify({"error": "plan.json nicht lesbar: %s" % e}), 500
 
         # Rest-Dict-Merge: nur die eine Sektion setzen, alles andere bleibt stehen.
-        obj["default_petrantwortlichkeiten"] = datei_defaults
+        obj["default_verantwortlichkeiten"] = datei_defaults
 
         try:
             _write_plan_json_obj(path, obj)
@@ -1584,7 +1584,7 @@ def api_slot_modell_schreiben():
     Validierung VOR Persistenz (kein 500, kein Teil-Write):
       - `slots` ist Pflicht und eine Liste;
       - jeder Slot trägt `schluessel`, `art`, `icon`;
-      - `art ∈ {petrantwortlich, kalender-read}`;
+      - `art ∈ {verantwortlich, kalender-read}`;
       - jeder `kalender-read`-Slot trägt ein `kind`, das in familie.json (FAM-3)
         existiert;
       - `label` ist optional (fehlt/null erlaubt); wenn vorhanden, ein String;
@@ -1596,7 +1596,7 @@ def api_slot_modell_schreiben():
     loggt das beim Reload.
 
     Multi-Sektion-Save (verbindlich, atomar in EINEM Write): die `slots`-Sektion
-    UND die `default_petrantwortlichkeiten`-Sektion fallen konsistent — Defaults
+    UND die `default_verantwortlichkeiten`-Sektion fallen konsistent — Defaults
     eines gelöschten Slots werden mit entfernt (sonst wirft `_parse_defaults`
     beim nächsten load einen ConfigError, plan/config.py).
     """
@@ -1646,7 +1646,7 @@ def api_slot_modell_schreiben():
             }), 400
         seen.add(schluessel)
         eintrag = {"schluessel": schluessel, "art": art, "icon": raw["icon"]}
-        # kind nur übernehmen, wenn gesetzt (petrantwortlich-Slots dürfen ein
+        # kind nur übernehmen, wenn gesetzt (verantwortlich-Slots dürfen ein
         # kind tragen — z. B. bett-bringt-Slot — aber es ist optional).
         if kind:
             eintrag["kind"] = kind
@@ -1668,19 +1668,19 @@ def api_slot_modell_schreiben():
 
         # Multi-Sektion-Save: slots setzen UND defaults gelöschter/art-gewechselter
         # Slots bereinigen. Ein Default-Eintrag bleibt NUR, wenn sein Slot im neuen
-        # Soll-Zustand existiert UND art == petrantwortlich ist (PLAN-37). Ein Slot,
-        # der von petrantwortlich → kalender-read wechselt, verliert seine Defaults
+        # Soll-Zustand existiert UND art == verantwortlich ist (PLAN-37). Ein Slot,
+        # der von verantwortlich → kalender-read wechselt, verliert seine Defaults
         # genauso wie ein gelöschter — sonst wirft _parse_defaults beim nächsten
         # load einen ConfigError (plan/config.py:351-354).
-        petrantwortlich_keys = {
+        verantwortlich_keys = {
             s["schluessel"] for s in sauber
-            if s.get("art") == config_mod.SLOT_PETRANTWORTLICH
+            if s.get("art") == config_mod.SLOT_VERANTWORTLICH
         }
-        alte_defaults = obj.get("default_petrantwortlichkeiten")
+        alte_defaults = obj.get("default_verantwortlichkeiten")
         obj["slots"] = sauber
         if isinstance(alte_defaults, dict):
-            obj["default_petrantwortlichkeiten"] = {
-                k: v for k, v in alte_defaults.items() if k in petrantwortlich_keys
+            obj["default_verantwortlichkeiten"] = {
+                k: v for k, v in alte_defaults.items() if k in verantwortlich_keys
             }
 
         try:

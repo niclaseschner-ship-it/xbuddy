@@ -280,7 +280,7 @@ def _auth_401():
 
 
 # Decorator: HART-AUTH (auth.md AUTH-2/3/5/8, T1640 Phase-3-Migration). Der Name
-# `require_init_data` trägt den AUTH-9-Copetrage-Test per AST-Namen
+# `require_init_data` trägt den AUTH-9-Coverage-Test per AST-Namen
 # (_AUTH_DECORATORS). Buddy-eigene Getter + `_auth_401` gehen als Closures rein.
 require_init_data = make_require_init_data(
     get_bot_token=_get_bot_token,

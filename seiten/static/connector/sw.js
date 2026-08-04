@@ -3,7 +3,7 @@
 // Cache-Strategie:
 //   - cache-first fuer statische Mantel-Assets (style.css, manifest, Logos, Icons).
 //   - pass-through (network-only) fuer die HTML-Shell /api/v1/seiten/connector/ —
-//     sie traegt das server-gerenderte Aggregat (CONN-8) und darf NIE petralten.
+//     sie traegt das server-gerenderte Aggregat (CONN-8) und darf NIE veralten.
 //
 // Cache-Versionierung (PWAM-4 / reference_mini_app_cache_buster.md):
 //   __BUILD_ID__ wird beim Ausliefern via connector_sw_view (seiten/main.py)
@@ -90,5 +90,5 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // HTML-Shell + alles andere: pass-through (network-only — Aggregat nie petralten).
+  // HTML-Shell + alles andere: pass-through (network-only — Aggregat nie veralten).
 });

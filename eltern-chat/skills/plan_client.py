@@ -191,7 +191,7 @@ class PlanClient:
                        (TAB-6), aber Server erzwingt es ebenfalls.
 
         Erfolg (HTTP 200): liefert das vollständige Antwort-Dict
-        `{ok, geschrieben, gesamt, results}` zur Weiterpetrarbeitung
+        `{ok, geschrieben, gesamt, results}` zur Weiterverarbeitung
         (TAB-11 N-von-M-Quittung mit Fehler-Codes).
 
         Fehler-Lagen (TAB-10): drei spezialisierte Exceptions, damit der

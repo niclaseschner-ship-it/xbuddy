@@ -76,7 +76,7 @@ Punkte für Per-Kind, nicht gebaut).
   Befund**, kein Blocker hier — Finn-Service folgt dem bestehenden Pattern.
   **Aufgelöst durch #1014 (SVC-2-Move, 2026-06-21).**
 - `deploy/hoerspiel/bootstrap.sh` ist Mia-hart — pro Instanz manuell
-  initialisieren, **keine** Bootstrap-Petrallgemeinerung jetzt.
+  initialisieren, **keine** Bootstrap-Verallgemeinerung jetzt.
 - Eltern-Chat-Skill `eltern-chat/skills/hoerspiel_folge_erzeugen.py:54`
   trägt `MIA_ALTER = 4` als Modul-Konstante (an drei Stellen verwendet).
   Spec selbst dokumentiert das als „V1 hart". Cross-Service-Schnitt: muss
@@ -94,7 +94,7 @@ Filesystem ist Drop-In-Switch + `cp -a`, **kein** Code-Change. URL-Pfad
   Klasse mit n Instanzen (Kandidaten: Kibuddy, Routine — heute nur offene
   Punkte). Wiederaufnahme-Trigger: bei zweitem Buddy mit n Instanzen.
 - Face-Pille-Konvention in `conventions/mini-app-design.md` (MAD) — n=0
-  gebaute Beispiele für Petrantwortungs-Stempel-Variante; Eltern-Pille +
+  gebaute Beispiele für Verantwortungs-Stempel-Variante; Eltern-Pille +
   Kinder-Pille (#911) werden erst n=1 bauen.
 - FAM-3-Erweiterung um `geburtsdatum` — eigene Runde, zweiter Konsument nötig.
 - Bootstrap-Generalisierung — n=1.

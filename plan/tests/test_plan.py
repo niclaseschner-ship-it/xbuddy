@@ -73,7 +73,7 @@ def gcal_timed(eid, summary, start_dt, end_dt=None, creator=None):
 # ============================================================
 
 def test_PLAN_1_app_owns_data_and_function(demo_config, demo_registry):
-    """Die App besitzt ihre Daten (Petrantwortlichkeiten in plan.db) und ihre
+    """Die App besitzt ihre Daten (Verantwortlichkeiten in plan.db) und ihre
     Funktion (Kalender-Anbindung) — beide sind App-eigene Module."""
     # Datenhaltung: eine plan.db-Verbindung mit dem week_assignments-Schema.
     conn = db_mod.connect(demo_config.db_datei)
@@ -198,7 +198,7 @@ def test_PLAN_6_slots_come_from_config(demo_config):
     assert keys == ["bring", "pick", "act1", "act2", "cook", "bed1", "bed2"]
     # Jede Slot-Definition trägt Art und Icon direkt aus der Config.
     bring = demo_config.slot("bring")
-    assert bring.art == config_mod.SLOT_PETRANTWORTLICH
+    assert bring.art == config_mod.SLOT_VERANTWORTLICH
     assert bring.icon == "37807"
     act1 = demo_config.slot("act1")
     assert act1.art == config_mod.SLOT_KALENDER_READ
@@ -311,11 +311,11 @@ def test_PLAN_9_db_holds_only_assignments(demo_config):
 
 def test_PLAN_10_first_view_of_week_prefills_defaults(demo_config, demo_registry):
     """Wird eine Woche zum ersten Mal angezeigt, werden ihre Slots aus den
-    Default-Petrantwortlichkeiten vorbelegt."""
+    Default-Verantwortlichkeiten vorbelegt."""
     conn = db_mod.connect(demo_config.db_datei)
     # Eine frische Woche — vorher keine Zuweisungen.
     assert db_mod.week_is_initialised(conn, "2026-08-03") is False
-    db_mod.init_week(conn, "2026-08-03", demo_config.default_petrantwortlichkeiten)
+    db_mod.init_week(conn, "2026-08-03", demo_config.default_verantwortlichkeiten)
     zuw = db_mod.assignments_for_weeks(conn, ["2026-08-03"])
     conn.close()
     # DEMO_CONFIG: bring Mo=emil, Di=petra.
@@ -327,11 +327,11 @@ def test_PLAN_10_existing_week_not_overwritten(demo_config, demo_registry):
     """Eine schon angezeigte Woche wird nicht erneut aus Defaults belegt —
     danach ist jede Woche unabhängig editierbar (PLAN-7)."""
     conn = db_mod.connect(demo_config.db_datei)
-    db_mod.init_week(conn, "2026-08-03", demo_config.default_petrantwortlichkeiten)
+    db_mod.init_week(conn, "2026-08-03", demo_config.default_verantwortlichkeiten)
     # Eine Zuweisung von Hand ändern.
     db_mod.set_assignment(conn, "2026-08-03", 0, "bring", "petra")
     # Erneut init_week — darf die Hand-Änderung NICHT zurücksetzen.
-    db_mod.init_week(conn, "2026-08-03", demo_config.default_petrantwortlichkeiten)
+    db_mod.init_week(conn, "2026-08-03", demo_config.default_verantwortlichkeiten)
     zuw = db_mod.assignments_for_weeks(conn, ["2026-08-03"])
     conn.close()
     assert zuw[("2026-08-03", 0, "bring")] == "petra"
@@ -555,7 +555,7 @@ def _config_mit_slots(tmp_path, slots, **overrides):
     cfg_path = tmp_path / "plan.json"
     data = dict(DEMO_CONFIG)
     data["slots"] = slots
-    data["default_petrantwortlichkeiten"] = {}
+    data["default_verantwortlichkeiten"] = {}
     data["db_datei"] = str(tmp_path / "plan.db")
     data.update(overrides)
     cfg_path.write_text(json.dumps(data))
@@ -565,7 +565,7 @@ def _config_mit_slots(tmp_path, slots, **overrides):
 def _n_erwachsenen_slots(n):
     """n Erwachsenen-Slots mit eindeutigen Schlüsseln und ARASAAC-icons."""
     return [
-        {"schluessel": "s%d" % i, "art": "petrantwortlich", "icon": "3071"}
+        {"schluessel": "s%d" % i, "art": "verantwortlich", "icon": "3071"}
         for i in range(n)
     ]
 
@@ -610,7 +610,7 @@ def test_parse_slots_warnt_ab_neun_slots(tmp_path, caplog):
     cfg_path = tmp_path / "plan.json"
     data = dict(DEMO_CONFIG)
     data["slots"] = _n_erwachsenen_slots(9)
-    data["default_petrantwortlichkeiten"] = {}
+    data["default_verantwortlichkeiten"] = {}
     data["db_datei"] = str(tmp_path / "plan.db")
     cfg_path.write_text(json.dumps(data))
     with caplog.at_level("WARNING"):
@@ -1250,7 +1250,7 @@ def test_termin_label_verbatim_ohne_personen_treffer(demo_registry):
 def test_PLAN_6_slot_art_lese_toleranz(tmp_path, caplog):
     """PLAN-6 V1.4 (Slot-Art-Migrations-Lesephase): Der Parser akzeptiert alte
     Art-Strings (erwachsenen-slot / aktivitaets-slot) mit WARN-Log UND neue
-    Strings (petrantwortlich / kalender-read) ohne WARN. Beide Wege in einem
+    Strings (verantwortlich / kalender-read) ohne WARN. Beide Wege in einem
     Aufruf: alt → WARN + intern neu; neu → kein WARN."""
     cfg_path = tmp_path / "plan.json"
     data = dict(DEMO_CONFIG)
@@ -1259,24 +1259,24 @@ def test_PLAN_6_slot_art_lese_toleranz(tmp_path, caplog):
         {"schluessel": "alt-erw",  "art": "erwachsenen-slot", "icon": "3071"},
         {"schluessel": "alt-akt",  "art": "aktivitaets-slot", "icon": "3071", "kind": "mia"},
         # NEU: unverändert, kein WARN
-        {"schluessel": "neu-ver",  "art": "petrantwortlich",   "icon": "3071"},
+        {"schluessel": "neu-ver",  "art": "verantwortlich",   "icon": "3071"},
         {"schluessel": "neu-kal",  "art": "kalender-read",    "icon": "3071", "kind": "finn"},
     ]
-    data["default_petrantwortlichkeiten"] = {}
+    data["default_verantwortlichkeiten"] = {}
     data["db_datei"] = str(tmp_path / "plan.db")
     cfg_path.write_text(json.dumps(data))
     with caplog.at_level("WARNING"):
         cfg = config_mod.resolve(str(cfg_path))
     by_key = {s.schluessel: s for s in cfg.slots}
     # Alte Art-Strings wurden intern auf neue Strings migriert.
-    assert by_key["alt-erw"].art == config_mod.SLOT_PETRANTWORTLICH, (
-        "erwachsenen-slot nicht auf petrantwortlich migriert"
+    assert by_key["alt-erw"].art == config_mod.SLOT_VERANTWORTLICH, (
+        "erwachsenen-slot nicht auf verantwortlich migriert"
     )
     assert by_key["alt-akt"].art == config_mod.SLOT_KALENDER_READ, (
         "aktivitaets-slot nicht auf kalender-read migriert"
     )
     # Neue Art-Strings blieben unverändert.
-    assert by_key["neu-ver"].art == config_mod.SLOT_PETRANTWORTLICH
+    assert by_key["neu-ver"].art == config_mod.SLOT_VERANTWORTLICH
     assert by_key["neu-kal"].art == config_mod.SLOT_KALENDER_READ
     # WARN für JEDEN alten Art-String — genau zwei (alt-erw + alt-akt).
     art_warns = [r.getMessage() for r in caplog.records
@@ -1508,14 +1508,14 @@ def test_PLAN_24_no_person_names_in_rendered_view(demo_config, demo_registry):
     conn = db_mod.connect(demo_config.db_datei)
     heute = date.today()
     ws = render_mod.wochenstart_von(heute, 0).isoformat()
-    db_mod.init_week(conn, ws, demo_config.default_petrantwortlichkeiten)
+    db_mod.init_week(conn, ws, demo_config.default_verantwortlichkeiten)
     db_mod.set_assignment(conn, ws, heute.weekday(), "cook", "emil")
     conn.close()
     client = make_client(demo_config, demo_registry, FakeTransport())
     r = client.get("/display/plan/woche")
     text = r.data.decode("utf-8")
     # Kein Personenname taucht als eigenständiges Wort auf — \b schließt
-    # Substring-Treffer wie "Petra" in "Petrabredung" (Aktivitäts-Label) aus.
+    # Substring-Treffer wie "Petra" in "Verabredung" (Aktivitäts-Label) aus.
     for name in ("Emil", "Petra", "Mia", "Finn"):
         assert re.search(r"\b%s\b" % re.escape(name), text) is None, \
             "Personenname %r im UI (PLAN-24 verletzt)" % name
@@ -1772,7 +1772,7 @@ def test_PLAN_29_arasaac_migration_aktivitaeten_v1_ids():
         "musik":       "2746",
         "ausflug":     "4670",
         "geburtstag":  "3087",
-        "petrabredung": "2255",
+        "verabredung": "2255",
         "waldgang":    "2666",
         # Termin-Einträge (PLAN-13 V1.2, #471).
         "zahn":        "11229",
@@ -2249,7 +2249,7 @@ def test_PLAN_16_oauth_comes_from_zugangsdaten_store(tmp_path):
 
 class _MutableFamilieTransport:
     """Test-Doppelung fuer den FamilieClient: ein `transport=`-Callable, das
-    eine petraenderliche Liste von Personen-JSON ausspielt. Imitiert die
+    eine veraenderliche Liste von Personen-JSON ausspielt. Imitiert die
     Familie-Komponente (FAM-7) auf Loopback — kein echtes HTTP."""
 
     def __init__(self, personen_json):
@@ -2348,7 +2348,7 @@ def _write_plan_json(path, kalender_id="demo@group.calendar.google.com",
     data["db_datei"] = str(os.path.dirname(path) + "/plan.db")
     if extra_slot:
         data["slots"].append({
-            "schluessel": "wash", "art": "petrantwortlich", "icon": "drop",
+            "schluessel": "wash", "art": "verantwortlich", "icon": "drop",
         })
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f)
@@ -2734,7 +2734,7 @@ def test_DCOMP_2_db_datei_wechsel_wirksam_ohne_restart(tmp_path, demo_registry):
 def test_PLAN_30_zuteilung_get_empty_week_returns_defaults_or_empty(
         demo_config, demo_registry):
     """Eine noch nicht beruehrte Woche → HTTP 200 + Slots-Liste. Mit den
-    Default-Petrantwortlichkeiten aus DEMO_CONFIG (`bring` Mo emil, Di petra).
+    Default-Verantwortlichkeiten aus DEMO_CONFIG (`bring` Mo emil, Di petra).
     Slots, die in den Defaults nicht stehen, kommen mit person_id=null
     zurueck — eine vollstaendige Erwachsenen-Slot-x-Wochentag-Matrix."""
     client = make_client(demo_config, demo_registry, FakeTransport())
@@ -3134,7 +3134,7 @@ def test_PLAN_32_valid_put_writes_kalender_id_and_reloads(reload_client):
 
 def test_PLAN_32_valid_put_only_changes_kalender_id(reload_client):
     """PLAN-32: atomar — PUT ändert nur `kalender_id`, alle anderen Felder
-    (slots, default_petrantwortlichkeiten, …) bleiben byte-gleich."""
+    (slots, default_verantwortlichkeiten, …) bleiben byte-gleich."""
     client, cfg_path, _ = reload_client
     original = json.loads(cfg_path.read_text(encoding="utf-8"))
 
@@ -3243,7 +3243,7 @@ def test_PLAN_33_prevalidate_fehler_bei_item_fehler(demo_config, demo_registry):
 
 def test_PLAN_33_cap_zu_viele_items_400(demo_config, demo_registry):
     """AC3: Cap >30 → HTTP 400 {error: too_many_items, max: 30},
-    0 Petrarbeitung (PLAN-33.3)."""
+    0 Verarbeitung (PLAN-33.3)."""
     transport = FakeTransport()
     client = make_client(demo_config, demo_registry, transport)
     plan_main._idem_cache.clear()
@@ -3256,7 +3256,7 @@ def test_PLAN_33_cap_zu_viele_items_400(demo_config, demo_registry):
     body = r.get_json()
     assert body.get("error") == "too_many_items"
     assert body.get("max") == 30
-    # 0 Inserts — Cap wird vor jeder Petrarbeitung geprüft.
+    # 0 Inserts — Cap wird vor jeder Verarbeitung geprüft.
     insert_calls = [c for c in transport.calls if "insert" in c[0]]
     assert len(insert_calls) == 0
 
@@ -3549,7 +3549,7 @@ def test_PLAN_33_4_budget_abbruch_markiert_verbleibende_als_rate_limit(
 
 def test_PLAN_33_5_ttl_treffer_und_ablauf(demo_config, demo_registry, monkeypatch):
     """PLAN-33.5 TTL-Test: Cache-Treffer nach 14min → identische Antwort,
-    0 Re-Inserts; nach 16min → Neu-Petrarbeitung (AC4a laut Watchdog-Befund
+    0 Re-Inserts; nach 16min → Neu-Verarbeitung (AC4a laut Watchdog-Befund
     T487-S2).
 
     time.monotonic wird zur Kontrolle von _idem_set/get verwendet:
@@ -3608,7 +3608,7 @@ def test_PLAN_33_5_ttl_treffer_und_ablauf(demo_config, demo_registry, monkeypatc
     inserts_nach_zweitem = [c for c in transport.calls if "insert" in c[0]]
     assert len(inserts_nach_zweitem) == 1, "14-min-Hit: kein Re-Insert erwartet"
 
-    # Phase 3: 16-min-Check (960s > 900s → Cache-Miss, Neu-Petrarbeitung).
+    # Phase 3: 16-min-Check (960s > 900s → Cache-Miss, Neu-Verarbeitung).
     # _idem_get: 1060.0 - 100.0 = 960 > 900 → Miss → neuer Insert.
     time_sequence.clear()
     time_sequence.extend([1060.0] * 20)
@@ -3617,7 +3617,7 @@ def test_PLAN_33_5_ttl_treffer_und_ablauf(demo_config, demo_registry, monkeypatc
     r3 = client.post(BULK_URL, data=payload, content_type="application/json")
     assert r3.status_code == 200
     body3 = r3.get_json()
-    assert body3["geschrieben"] == 1, "Nach TTL-Ablauf soll neu petrarbeitet werden"
+    assert body3["geschrieben"] == 1, "Nach TTL-Ablauf soll neu verarbeitet werden"
     inserts_nach_drittem = [c for c in transport.calls if "insert" in c[0]]
     assert len(inserts_nach_drittem) == 2, (
         "16-min-Miss: zweiter Insert erwartet, "
@@ -4522,7 +4522,7 @@ def test_PLAN_12_picker_zeigt_alle_aktivitaeten_aus_config(tmp_path, demo_regist
         {"art": "musik",       "label": "Musik",       "keywords": ["musik"],     "piktogramm": "2746"},
         {"art": "ausflug",     "label": "Ausflug",     "keywords": ["ausflug"],   "piktogramm": "4670"},
         {"art": "geburtstag",  "label": "Geburtstag",  "keywords": ["geburts"],   "piktogramm": "3087"},
-        {"art": "petrabredung", "label": "Petrabredung", "keywords": ["petrabredung"],"piktogramm": "2255"},
+        {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],"piktogramm": "2255"},
         {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],      "piktogramm": "2666"},
         {"art": "zahn",        "label": "Zahnarzt",    "keywords": ["zahn"],      "piktogramm": "11229"},
         {"art": "ferien",      "label": "Ferien",      "keywords": ["ferien"],    "piktogramm": "3166"},
@@ -4615,7 +4615,7 @@ def test_PLAN_12_leerer_kinder_aktivitaets_slot_plus_symbol(
     )
 
 
-def test_PLAN_12_erwachsenen_slot_unpetraendert(demo_config, demo_registry):
+def test_PLAN_12_erwachsenen_slot_unveraendert(demo_config, demo_registry):
     """AC5/AC2 — Backward-Compat: Erwachsenen-Slots bleiben unverändert.
 
     Leere Erwachsenen-Slots tragen 'empty-face' (kein Plus-Symbol aus dem
@@ -4637,7 +4637,7 @@ def test_PLAN_12_erwachsenen_slot_unpetraendert(demo_config, demo_registry):
 # ============================================================
 #
 # Zwei PUBLIC-Daten-APIs für die Eltern-Einstellungs-PWA (PLAN-35):
-#   GET|PUT /api/v1/plan/defaults     — Default-Petrantwortlichkeiten (PLAN-36)
+#   GET|PUT /api/v1/plan/defaults     — Default-Verantwortlichkeiten (PLAN-36)
 #   GET|PUT /api/v1/plan/slot-modell  — Slot-Modell-Editor (PLAN-37)
 # Test-Setup: config_path gesetzt → die Routen können plan.json schreiben und
 # der Reload-on-Read-Pfad (DCOMP-2) macht den neuen Stand ohne Restart sichtbar.
@@ -4700,17 +4700,17 @@ def test_PLAN_36_get_defaults_form(settings_client):
 
 def test_PLAN_36_put_defaults_roundtrip(settings_client):
     """AC1/Roundtrip: PUT defaults=X → load_config + GET liefern X; persistiert
-    unter dem Datei-Schlüssel default_petrantwortlichkeiten in Listen-Form."""
+    unter dem Datei-Schlüssel default_verantwortlichkeiten in Listen-Form."""
     client, cfg_path = settings_client
     neu = {"defaults": {"pick": {"0": "petra", "2": "emil", "4": None}}}
     r = client.put(DEFAULTS_URL, json=neu)
     assert r.status_code == 200, r.get_json()
     assert r.get_json() == {"ok": True}
 
-    # Datei-Form: Listen unter default_petrantwortlichkeiten (config-loader-Form).
+    # Datei-Form: Listen unter default_verantwortlichkeiten (config-loader-Form).
     obj = _read_json_file(cfg_path)
-    assert "default_petrantwortlichkeiten" in obj
-    liste = obj["default_petrantwortlichkeiten"]["pick"]
+    assert "default_verantwortlichkeiten" in obj
+    liste = obj["default_verantwortlichkeiten"]["pick"]
     assert isinstance(liste, list) and len(liste) == 7
     assert liste[0] == "petra"
     assert liste[2] == "emil"
@@ -4718,7 +4718,7 @@ def test_PLAN_36_put_defaults_roundtrip(settings_client):
 
     # load_config sieht den neuen Stand.
     cfg = config_mod.resolve(str(cfg_path))
-    assert cfg.default_petrantwortlichkeiten["pick"][0] == "petra"
+    assert cfg.default_verantwortlichkeiten["pick"][0] == "petra"
 
     # GET (Reload-on-Read) spiegelt den PUT.
     g = client.get(DEFAULTS_URL).get_json()
@@ -4737,7 +4737,7 @@ def test_PLAN_36_put_defaults_unbekannte_person_400_nichts_geschrieben(settings_
     assert open(str(cfg_path), encoding="utf-8").read() == vorher
 
 
-def test_PLAN_36_put_defaults_kein_petrantwortlich_slot_400(settings_client):
+def test_PLAN_36_put_defaults_kein_verantwortlich_slot_400(settings_client):
     """PUT auf einen kalender-read-Slot (act1) → 400, nichts geschrieben."""
     client, cfg_path = settings_client
     vorher = open(str(cfg_path), encoding="utf-8").read()
@@ -4773,7 +4773,7 @@ def test_PLAN_36_AC_PUBLIC_kein_initdata_kein_auth(settings_client):
 
 def test_PLAN_36_AC_WRITER_MERGE_bewahrt_rest(settings_client):
     """AC3/AC-WRITER-MERGE: ein defaults-PUT bewahrt aktivitaeten, kalender_id,
-    slots und _-Kommentar-Keys — nur default_petrantwortlichkeiten ändert sich."""
+    slots und _-Kommentar-Keys — nur default_verantwortlichkeiten ändert sich."""
     client, cfg_path = settings_client
     vorher = _read_json_file(cfg_path)
     r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": "petra"}}})
@@ -4784,7 +4784,7 @@ def test_PLAN_36_AC_WRITER_MERGE_bewahrt_rest(settings_client):
     assert nachher["slots"] == vorher["slots"]
     assert nachher["_kommentar"] == vorher["_kommentar"]
     # Die Ziel-Sektion IST geändert.
-    assert nachher["default_petrantwortlichkeiten"]["bring"][0] == "petra"
+    assert nachher["default_verantwortlichkeiten"]["bring"][0] == "petra"
 
 
 # ── PLAN-37: GET/PUT slot-modell ───────────────────────────────────────────
@@ -4812,13 +4812,13 @@ def test_PLAN_37_put_slot_modell_roundtrip_anlegen(settings_client):
     ihn; Rest bewahrt."""
     client, cfg_path = settings_client
     slots = _slots_aus_config()
-    slots.append({"schluessel": "hund", "art": "petrantwortlich", "icon": "9999"})
+    slots.append({"schluessel": "hund", "art": "verantwortlich", "icon": "9999"})
     r = client.put(SLOT_MODELL_URL, json={"slots": slots})
     assert r.status_code == 200, r.get_json()
 
     cfg = config_mod.resolve(str(cfg_path))
     assert cfg.slot("hund") is not None
-    assert cfg.slot("hund").ist_petrantwortlich_slot()
+    assert cfg.slot("hund").ist_verantwortlich_slot()
 
     g = client.get(SLOT_MODELL_URL).get_json()["slots"]
     assert any(s["schluessel"] == "hund" for s in g)
@@ -4869,24 +4869,24 @@ def test_PLAN_37_put_slot_modell_label_kein_string_400(settings_client):
 
 def test_PLAN_37_put_slot_modell_loeschen_bereinigt_defaults(settings_client):
     """AC-SLOT-INTEGRITÄT/Multi-Sektion: ein gelöschter Slot (bring fehlt im PUT)
-    verschwindet UND seine default_petrantwortlichkeiten-Einträge — sonst wirft
+    verschwindet UND seine default_verantwortlichkeiten-Einträge — sonst wirft
     _parse_defaults beim nächsten load ConfigError. Roundtrip lädt sauber."""
     client, cfg_path = settings_client
     # Vorher: bring trägt Defaults (DEMO_CONFIG).
-    assert "bring" in config_mod.resolve(str(cfg_path)).default_petrantwortlichkeiten
+    assert "bring" in config_mod.resolve(str(cfg_path)).default_verantwortlichkeiten
     slots = [s for s in _slots_aus_config() if s["schluessel"] != "bring"]
     r = client.put(SLOT_MODELL_URL, json={"slots": slots})
     assert r.status_code == 200, r.get_json()
 
-    # Datei: bring fehlt in slots UND in default_petrantwortlichkeiten.
+    # Datei: bring fehlt in slots UND in default_verantwortlichkeiten.
     obj = _read_json_file(cfg_path)
     assert all(s["schluessel"] != "bring" for s in obj["slots"])
-    assert "bring" not in obj["default_petrantwortlichkeiten"]
+    assert "bring" not in obj["default_verantwortlichkeiten"]
 
     # Roundtrip: load_config wirft NICHT (Defaults-Bereinigung griff).
     cfg = config_mod.resolve(str(cfg_path))
     assert cfg.slot("bring") is None
-    assert "bring" not in cfg.default_petrantwortlichkeiten
+    assert "bring" not in cfg.default_verantwortlichkeiten
 
 
 def test_PLAN_37_put_slot_modell_rename_versuch_400(settings_client):
@@ -4937,7 +4937,7 @@ def test_PLAN_37_put_slot_modell_doppelter_schluessel_400(settings_client):
     """Doppelter schluessel → 400."""
     client, _ = settings_client
     slots = _slots_aus_config()
-    slots.append({"schluessel": "bring", "art": "petrantwortlich", "icon": "1"})
+    slots.append({"schluessel": "bring", "art": "verantwortlich", "icon": "1"})
     r = client.put(SLOT_MODELL_URL, json={"slots": slots})
     assert r.status_code == 400
 
@@ -4948,7 +4948,7 @@ def test_PLAN_37_put_slot_modell_ueber_8_warnt_aber_persistiert(settings_client,
     client, cfg_path = settings_client
     slots = _slots_aus_config()  # 7 Slots
     for i in range(3):  # → 10 Slots
-        slots.append({"schluessel": "extra%d" % i, "art": "petrantwortlich", "icon": "1"})
+        slots.append({"schluessel": "extra%d" % i, "art": "verantwortlich", "icon": "1"})
     with caplog.at_level(logging.WARNING):
         r = client.put(SLOT_MODELL_URL, json={"slots": slots})
     assert r.status_code == 200, r.get_json()
@@ -4979,13 +4979,13 @@ def test_PLAN_37_AC_WRITER_MERGE_bewahrt_rest(settings_client):
 
 
 def test_PLAN_37_put_slot_modell_art_wechsel_bereinigt_defaults(settings_client):
-    """AC-SLOT-INTEGRITÄT/art-Wechsel: ein Slot der von art=petrantwortlich auf
-    art=kalender-read wechselt verliert seinen default_petrantwortlichkeiten-
+    """AC-SLOT-INTEGRITÄT/art-Wechsel: ein Slot der von art=verantwortlich auf
+    art=kalender-read wechselt verliert seinen default_verantwortlichkeiten-
     Eintrag — sonst wirft _parse_defaults beim nächsten load ConfigError
     (latenter Boot-Crash, Watchdog-Befund T1126)."""
     client, cfg_path = settings_client
-    # Vorher: bring ist petrantwortlich und trägt Defaults (DEMO_CONFIG).
-    assert "bring" in config_mod.resolve(str(cfg_path)).default_petrantwortlichkeiten
+    # Vorher: bring ist verantwortlich und trägt Defaults (DEMO_CONFIG).
+    assert "bring" in config_mod.resolve(str(cfg_path)).default_verantwortlichkeiten
 
     # bring auf kalender-read umschalten (kind=mia ist in DEMO_REGISTRY).
     slots = _slots_aus_config()
@@ -5002,13 +5002,13 @@ def test_PLAN_37_put_slot_modell_art_wechsel_bereinigt_defaults(settings_client)
     obj = _read_json_file(cfg_path)
     bring_slot = next(s for s in obj["slots"] if s["schluessel"] == "bring")
     assert bring_slot["art"] == "kalender-read"
-    assert "bring" not in obj["default_petrantwortlichkeiten"]
+    assert "bring" not in obj["default_verantwortlichkeiten"]
 
     # Roundtrip: _parse_defaults wirft KEINEN ConfigError mehr.
     cfg = config_mod.resolve(str(cfg_path))
     assert cfg.slot("bring") is not None
     assert cfg.slot("bring").ist_kalender_read_slot()
-    assert "bring" not in cfg.default_petrantwortlichkeiten
+    assert "bring" not in cfg.default_verantwortlichkeiten
 
 
 def test_PLAN_36_put_defaults_null_erlaubt(settings_client):
@@ -5021,7 +5021,7 @@ def test_PLAN_36_put_defaults_null_erlaubt(settings_client):
 
     # Datei: Eintrag ist None für Tag 0.
     obj = _read_json_file(cfg_path)
-    assert obj["default_petrantwortlichkeiten"]["bring"][0] is None
+    assert obj["default_verantwortlichkeiten"]["bring"][0] is None
 
     # GET (Reload-on-Read) spiegelt das null.
     g = client.get(DEFAULTS_URL).get_json()

@@ -32,7 +32,7 @@ Konsistent mit `eltern-chat.md` EC-1.
 Die Registry kennt zwei Arten von Personen: **Erwachsene** und **Kinder**. Die
 Art ist eine Eigenschaft der Identität, kein Rechte-Konzept (E-FAM-2) — sie
 sagt, *wer* jemand ist, nicht *was er darf*. Konsumenten nutzen die Art für
-adressatengerechte Darstellung (z. B. weist der Plan-Buddy Petrantwortlichkeits-
+adressatengerechte Darstellung (z. B. weist der Plan-Buddy Verantwortlichkeits-
 Slots nur Erwachsenen zu).
 
 *Tickets:* #38

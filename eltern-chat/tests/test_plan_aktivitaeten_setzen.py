@@ -926,7 +926,7 @@ def _build_plan_json(path, tmp_path):
             {"schluessel": "act1", "art": "kalender-read", "icon": "star",
              "kind": "mia"},
         ],
-        "default_petrantwortlichkeiten": {},
+        "default_verantwortlichkeiten": {},
         "fenster_lesekind": 7,
         "fenster_kleinkind": 3,
         "wochenstart": 0,

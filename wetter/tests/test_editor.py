@@ -199,7 +199,7 @@ def test_editor_post_pikto_ausserhalb_palette_abgelehnt(editor_setup):
     assert cfg_path.read_bytes() == vorher
 
 
-def test_editor_post_anzahl_reihenfolge_petraendert_abgelehnt(editor_setup):
+def test_editor_post_anzahl_reihenfolge_veraendert_abgelehnt(editor_setup):
     """AC3/WETTER-28: Regel entfernt (Anzahl ≠) bzw. Bedingung umsortiert ggü.
     geladenem Stand → Ablehnung (422), Datei byte-unverändert."""
     client, cfg_path = editor_setup

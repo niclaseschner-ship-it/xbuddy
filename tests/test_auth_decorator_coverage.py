@@ -41,7 +41,7 @@ MODULE_MAP = {
 # in auth.md („routine: die /api/v1/routine/*-Datenrouten … config, items");
 # die method-explizite Endliste-Fence in auth.md enumeriert bisher nur
 # photo/kibuddy/plan (#1321). Bis diese Fence um routine erweitert wird, hält
-# der Copetrage-Test die routine-AUTH-3-Endliste hier — dieselbe maschinelle
+# der Coverage-Test die routine-AUTH-3-Endliste hier — dieselbe maschinelle
 # Verriegelung wie für die gefenceten Buddies (jede Zeile = eine Flask-Route +
 # Methode, gegen den AST geprüft). NICHT die Display-View /display/routine/morgen
 # (AUTH-6/AUTH-7-Renderer) und nicht /healthz (SVC-6).
@@ -57,7 +57,7 @@ _ROUTINE_AUTH3_ROUTES = [
 # Phase-3-Route-Liste hoerspiel (#1640, method-explizit gegen die realen
 # `@app.route`-Strings in hoerspiel/main.py). Spec-Wahrheit ist die AUTH-3-Prosa
 # in auth.md (Z.203/498: „hoerspiel: config, alben, alben/<id>/manifest, resume,
-# themen, folgen-vorschlag"). Wie bei routine hält der Copetrage-Test die
+# themen, folgen-vorschlag"). Wie bei routine hält der Coverage-Test die
 # method-explizite Endliste hier, bis die #1321-Fence sie enumeriert.
 # KRITISCH — NICHT gelistet (bleiben public):
 #   /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3  → AUTH-4 (Playback!)
@@ -79,7 +79,7 @@ _HOERSPIEL_AUTH3_ROUTES = [
 # `@app.route`-Strings in familie/main.py). Spec-Wahrheit: die AUTH-3-Prosa
 # in auth.md (PII-Datenrouten der Familien-Registry sind AUTH-3-geschützt,
 # da sie Namen/Fotos/Telegram-IDs enthalten). Bis die #1321-Fence diese
-# Routen enumeriert, hält der Copetrage-Test die Endliste hier.
+# Routen enumeriert, hält der Coverage-Test die Endliste hier.
 # NICHT gegated (bleiben public): /healthz (SVC-1).
 _FAMILIE_AUTH3_ROUTES = [
     ("/api/v1/familie/personen", "GET"),
@@ -350,7 +350,7 @@ def test_display_shared_bleibt_public_ungegatet():
 # Diese Tests prüfen nicht nur ob EINE dekorierte Route je Präfix existiert
 # (wie _hat_dekorierte_route), sondern dass JEDE GET-Route unter einem 7b-Präfix
 # den Dual-Gate trägt — Asset-Unterrouten eingeschlossen.
-# auth.md AUTH-9 + AUTH-7 Bau-Notiz (7b-Copetrage-Schärfung).
+# auth.md AUTH-9 + AUTH-7 Bau-Notiz (7b-Coverage-Schärfung).
 
 # RAT-31 E6f (#1568): der Display-Router ist tot; die 7b-Renderer-Präfixe
 # /controller/* und /shell/* leben auf seiten. /display/* trägt auf seiten nur

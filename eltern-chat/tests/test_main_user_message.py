@@ -46,7 +46,7 @@ def test_mehrere_fotos_mit_text_alle_als_pixel():
     assert _block_kinds(um) == [TextBlock, ImageBlock, ImageBlock]
 
 
-def test_reiner_text_unpetraendert():
+def test_reiner_text_unveraendert():
     """Nachricht nur mit Text → ein TextBlock, kein Marker."""
     um = _user_message_from(make_message(text="hallo", images=[]))
     assert _block_kinds(um) == [TextBlock]

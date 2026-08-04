@@ -6,13 +6,13 @@ Der Plan-Buddy ist eine eigenständige XBuddy-**App**. Er zeigt einer Familie
 ihren Wochenplan auf einem Display in der Wohnung — wer welches Kind bringt und
 holt, wer kocht und ins Bett bringt, was die Kinder vorhaben, welche Termine
 anstehen. Ein Kind sieht hier selbst nach, statt zu fragen. Als App **besitzt**
-der Plan-Buddy seine Daten (die Petrantwortlichkeiten) und seine Funktion (die
+der Plan-Buddy seine Daten (die Verantwortlichkeiten) und seine Funktion (die
 Kalender-Anbindung) und stellt beides über Schnittstellen bereit; andere
 XBuddy-Apps sind seine Nutzer (E-PLAN-1).
 
 **V1-Scope:** Die View `woche` in zwei Mitwachsen-Stufen · eine Schedule-Rail
 aus konfigurierbaren Slots · per Tippen zugewiesene, lokal gespeicherte
-Petrantwortlichkeiten · Kind-Aktivitäten und Termine aus dem Familien-Kalender ·
+Verantwortlichkeiten · Kind-Aktivitäten und Termine aus dem Familien-Kalender ·
 die Anbindung an diesen Google-Kalender (lesen/schreiben) als App-eigene
 Fähigkeit · eine Termin-Schnittstelle, die andere XBuddy-Apps nutzen können.
 Das Layout wird **1:1** aus dem Wireframe-Handoff übernommen (E-PLAN-5).
@@ -29,7 +29,7 @@ OAuth-Onboarding (geschlossen durch `kalender-verbinden.md`).
 
 ### PLAN-1 — Plan-Buddy ist eine App mit eigenem Besitz
 Der Plan-Buddy ist die XBuddy-App mit dem Buddy-Slug `plan`. Er besitzt:
-seine **Daten** — die Petrantwortlichkeiten (PLAN-9) —, seine **Funktion** — die
+seine **Daten** — die Verantwortlichkeiten (PLAN-9) —, seine **Funktion** — die
 Anbindung an den Familien-Kalender (Abschnitt 6) — und stellt beides über
 **Schnittstellen** bereit (Abschnitt 7). Was der Plan-Buddy nicht selbst
 besitzt, holt er von zentralen Komponenten: Personen-Identität von der
@@ -87,10 +87,10 @@ und morgen tragen zusätzlich ein Über-Label („heute" / „morgen").
 Die Schedule-Rail besteht aus Slot-Zeilen — je Zeile ein wiederkehrender
 Tagesablauf-Punkt. Welche Slots eine Familie hat, ist **Konfiguration**, kein
 fest verdrahteter Code (CLAUDE.md §6, E-PLAN-2). Jeder Slot definiert in der
-Konfiguration: stabiler Schlüssel, Art (`petrantwortlich` | `kalender-read`),
+Konfiguration: stabiler Schlüssel, Art (`verantwortlich` | `kalender-read`),
 Icon und — bei Kalender-Read-Slots (Aktivitäts-Slots) — das zugehörige Kind.
-Die Art-Maschinen-Strings sind seit Sprint 2 `petrantwortlich` (Konzept
-„Petrantwortlichkeits-Slot", PLAN-7 — war `erwachsenen-slot`, nach Toggle-All
+Die Art-Maschinen-Strings sind seit Sprint 2 `verantwortlich` (Konzept
+„Verantwortlichkeits-Slot", PLAN-7 — war `erwachsenen-slot`, nach Toggle-All
 V1.3 eine Namens-Lüge, da Kinder zuweisbar sind) und `kalender-read` (Konzept
 „Aktivitäts-Slot", PLAN-11 — read-only aus dem Kalender, war `aktivitaets-slot`).
 Der Parser liest beide Schreibweisen (Lese-Toleranz, siehe unten). Die Beispiel-Konfiguration
@@ -114,7 +114,7 @@ Bild über den geteilten Icon-Pfad `/display/_shared/icons/arasaac/<id>.png`
 interne Icon-Keys (`sun`/`clock`/`fork`/`moon`/`star`) — das wären zwei
 Icon-Quellen (Schedule-Rail vs. Aktivitäts-Katalog), Stilbruch innerhalb der
 View. Die V1.2-Defaults in `plan/plan.example.json`: bring → `37807`
-(petrabschieden), pick → `39520` (wiedersehen), act1/act2 → `3071` (kalender,
+(verabschieden), pick → `39520` (wiedersehen), act1/act2 → `3071` (kalender,
 generisches Aktivitäts-Slot-Icon), cook → `2342` (kochen), bed1/bed2 → `6027`
 (bett — Werft #578 Revision Nic 2026-06-10 #647, ersetzt Mond 2933). **Revision 2026-06-10 (Nic, Werft #578):** act1/act2 wurden von `2752`
 (Stern) auf `3071` (Kalender) revidiert — der Stern-Icon wäre eine zweite
@@ -145,7 +145,7 @@ Icon-Pfad; der Template-Mapper `SLOT_ICON_ID` ist entfallen.
 
 **Slot-Art-Lese-Toleranz (V1.4 — Sprint 2, Schema-Vereinheitlichung):** Die
 Slot-Art-Maschinen-Strings wurden umbenannt — `erwachsenen-slot` →
-`petrantwortlich`, `aktivitaets-slot` → `kalender-read` (Treiber: Toggle-All
+`verantwortlich`, `aktivitaets-slot` → `kalender-read` (Treiber: Toggle-All
 V1.3 machte „erwachsenen" zur Lüge; „kalender-read" benennt die read-only
 Kalender-Herkunft klar). Es ist **reines Rename** — kein Verhaltenswechsel an
 den Slots. Der Parser (`plan/config.py:_parse_slots`) trägt analog zur
@@ -159,8 +159,8 @@ Slot-`key`, nie die Art.
 
 *Tickets:* #40, #578, #642, #1116
 
-### PLAN-7 — Petrantwortlichkeits-Slots: Zuweisung per Klick-Cycle
-Eine Zelle eines Petrantwortlichkeits-Slots (`petrantwortlich`) zeigt entweder das Foto-im-Ring (FAM-4)
+### PLAN-7 — Verantwortlichkeits-Slots: Zuweisung per Klick-Cycle
+Eine Zelle eines Verantwortlichkeits-Slots (`verantwortlich`) zeigt entweder das Foto-im-Ring (FAM-4)
 einer Person oder einen leeren Slot mit Plus-Icon. Ein Tippen schaltet
 zyklisch weiter: Person 1 → Person 2 → … → leer → Person 1.
 
@@ -176,15 +176,15 @@ Toggle-Wahl, nicht über Code (E-PLAN-8). Schreib-API-Validierung
 
 *Tickets:* #40
 
-### PLAN-8 — Petrantwortlichkeiten lokal speichern
+### PLAN-8 — Verantwortlichkeiten lokal speichern
 Jede Zuweisung aus PLAN-7 wird **lokal** gespeichert (PLAN-9) — nicht im
 Kalender. Eine Zuweisung gilt für einen Slot an einem Wochentag einer Woche;
 eine spätere Anfrage derselben Woche zeigt dieselbe Zuweisung.
 
 *Tickets:* #40
 
-### PLAN-9 — Datenhaltung der Petrantwortlichkeiten
-Die Petrantwortlichkeiten liegen in einer SQLite-Datei neben dem Code, je
+### PLAN-9 — Datenhaltung der Verantwortlichkeiten
+Die Verantwortlichkeiten liegen in einer SQLite-Datei neben dem Code, je
 Instanz separat, per `.gitignore` ausgeschlossen (analog `eltern-chat.md`
 EC-16). Fehlt die Datei beim Start, legt das System sie leer an. Die Datei hält
 **nur** die Zuweisungen je Woche — Personen kommen aus der Registry, Aktivitäten
@@ -193,7 +193,7 @@ Datenhaltung aus PLAN-1.
 
 *Tickets:* #40
 
-### PLAN-10 — Default-Petrantwortlichkeiten & wochenübergreifendes Fenster
+### PLAN-10 — Default-Verantwortlichkeiten & wochenübergreifendes Fenster
 Die Familie hinterlegt in der Konfiguration Standard-Zuweisungen je Slot und
 Wochentag. Wird eine Woche zum ersten Mal angezeigt, werden ihre Slots aus
 diesen Defaults vorbelegt; danach ist jede Woche unabhängig editierbar (PLAN-7).
@@ -261,7 +261,7 @@ Termin-spezifische Einträge).
 eines Kindes (kein Kalender-Event für diesen Slot) zeigt ein **Plus-Symbol**
 als Anlege-Indikator — Inline-SVG, gedimmt (opacity 0.4, ~30 px). Erwachsenen-
 Slots zeigen weiterhin `empty-face`; volle Kinder-Slots zeigen den Aktivitäts-
-Chip. Nur leere Kinder-Aktivitäts-Slots tragen das Plus, nicht Petrantwortlichkeits-Slots.
+Chip. Nur leere Kinder-Aktivitäts-Slots tragen das Plus, nicht Verantwortlichkeits-Slots.
 
 **Piktogramm-Form über die zentrale Bibliothek (ICONS-4/ICONS-7-Konsum,
 verbindlich, V1.1 #471):** Das Feld `piktogramm` eines `aktivitaeten`-
@@ -572,7 +572,7 @@ Konsum.
   `event_id` (PLAN-33 legt nur an, ändert nicht).
 
 #### PLAN-33.1 — Pre-validate + best-effort write, kein Rollback
-Der Bulk-PUT petrarbeitet die Items in zwei Phasen:
+Der Bulk-PUT verarbeitet die Items in zwei Phasen:
 
 1. **Pre-validate** — alle `items` werden vor irgendeinem Google-Schreib-
    Call gegen die PLAN-22-Validierungs-Regeln geprüft (Pflichtfelder,
@@ -603,7 +603,7 @@ Der Bulk-PUT petrarbeitet die Items in zwei Phasen:
 Antwort-Statuscodes:
 
 - **HTTP 200** mit Body `{ "ok": true, "geschrieben": <N>, "gesamt":
-  <M>, "results": [ … ] }` — der Bulk-Aufruf wurde petrarbeitet, einige
+  <M>, "results": [ … ] }` — der Bulk-Aufruf wurde verarbeitet, einige
   Items können trotzdem in `results` als `{"ok": false}` markiert sein
   (best-effort, PLAN-33.1). `geschrieben` ist die Anzahl der erfolgreich
   geschriebenen Items; `gesamt` = `len(items)`. Reihenfolge in
@@ -638,7 +638,7 @@ Per-Item `error_code`-Vokabular (in `results[i].error_code`):
 
 #### PLAN-33.3 — Server-Cap: maximal 30 Items je Aufruf
 Der Endpoint lehnt Bulk-Aufrufe mit `len(items) > 30` mit HTTP 400 und
-`{"error": "too_many_items", "max": 30}` ab. **Nichts** wird petrarbeitet.
+`{"error": "too_many_items", "max": 30}` ab. **Nichts** wird verarbeitet.
 
 Begründung der Zahl 30: Plan-Buddy macht in der heutigen Google-
 Adapter-Form `plan/kalender.py:147` einen **OAuth-Token-Refresh pro
@@ -659,15 +659,15 @@ gleichzeitig Loops in die Familien-Daten zu öffnen.
 
 #### PLAN-33.4 — Antwort-Zeit-Budget 15 s, Token-Cache, Client-Timeout
 **Server-seitig:** Der Endpoint hält ein internes Antwort-Zeit-Budget
-von **15 Sekunden** ein. Läuft die Bulk-Petrarbeitung in dieses Budget
+von **15 Sekunden** ein. Läuft die Bulk-Verarbeitung in dieses Budget
 (inklusive PLAN-33.6 Backoff-Wartezeiten), antwortet der Endpoint mit
-dem Stand der Petrarbeitung — verbleibende Items werden als
+dem Stand der Verarbeitung — verbleibende Items werden als
 `{"ok": false, "error_code": "calendar_rate_limit"}` markiert (Backoff
 hat 15-s-Cap getroffen). Das Budget schützt den Eltern-Chat-Konsumenten
 vor unbegrenzt langen Buddy-Calls.
 
 **Token-Cache:** Der Plan-Buddy hält den OAuth-Access-Token während
-der Bulk-Petrarbeitung **prozess-lokal** zwischen — ein Refresh am
+der Bulk-Verarbeitung **prozess-lokal** zwischen — ein Refresh am
 Anfang, dann dieselbe Bearer-Authorization für alle 30 Inserts. Das
 senkt die Request-Zahl von `2N` (Refresh + Insert je Item) auf
 `N + 1` (ein Refresh + N Inserts). Der Cache läuft nur **innerhalb**
@@ -691,7 +691,7 @@ hält eine **In-Memory-Map** mit LRU-Verhalten:
 - **Größe:** 256 Einträge (LRU-Eviction, wenn voll).
 - **Zeit-Begrenzung:** Einträge verfallen nach **15 Minuten** ab
   Aufnahme — eine Familie, die einen Aufruf nach mehr als 15 Minuten
-  „nochmal versuchen" lässt, bekommt eine reguläre Neu-Petrarbeitung,
+  „nochmal versuchen" lässt, bekommt eine reguläre Neu-Verarbeitung,
   kein Idempotenz-Treffer.
 
 **Verhalten bei wiederholter `request_id`:**
@@ -753,28 +753,28 @@ Calendar-API-Quoten). Eine reine 429-Erkennung würde die häufigeren
 *Tickets:* #475 (TAB Erst-Konsument)
 
 ### PLAN-30 — Lese-API für Wochenzuteilungen
-Der Plan-Buddy stellt die persistierten Petrantwortlichkeits-Slot-Zuteilungen einer
+Der Plan-Buddy stellt die persistierten Verantwortlichkeits-Slot-Zuteilungen einer
 Woche unter `GET /api/v1/plan/zuteilung?week_start=<YYYY-MM-DD>` bereit —
 Form analog FAM-7 (GET, Query-Parameter, JSON-Antwort). Antwort:
 `{ "week_start": "<YYYY-MM-DD>", "slots": [ { "day": 0..6, "slot": "<key>",
 "person_id": "<id>|null" }, … ] }`. Die Liste enthält je Wochentag je
-Petrantwortlichkeits-Slot eine Zeile; leere Stellen tragen `person_id: null`. Ein
+Verantwortlichkeits-Slot eine Zeile; leere Stellen tragen `person_id: null`. Ein
 ungültiges oder fehlendes `week_start` antwortet HTTP 400 mit JSON-Fehler,
 kein 500.
 
 Die Lese-API folgt der DCOMP-2-Linie (Reload-on-Read): plan.json und
 plan.db werden pro Aufruf frisch gelesen (`_current_config()`, `_db()`).
 Auf dem Erst-Lesepfad wird die Woche wie in der View aus den
-Default-Petrantwortlichkeiten (PLAN-10) vorbelegt — damit liefert die
+Default-Verantwortlichkeiten (PLAN-10) vorbelegt — damit liefert die
 Lese-API denselben Stand wie eine View-Anfrage.
 
 Damit haben andere XBuddy-Apps (z. B. ein zukünftiges Eltern-Chat-Skill,
-das Wochen-Petrantwortlichkeiten anzeigt) einen stabilen Lese-Vertrag —
+das Wochen-Verantwortlichkeiten anzeigt) einen stabilen Lese-Vertrag —
 ohne direkten Zugriff auf `plan.db` (APP-3, einseitige Abhängigkeit).
 
 *Tickets:* #214
 
-### PLAN-31 — Schreib-API für Petrantwortlichkeits-Slot-Zuteilungen
+### PLAN-31 — Schreib-API für Verantwortlichkeits-Slot-Zuteilungen
 Der Plan-Buddy nimmt Zuteilungen von anderen XBuddy-Apps über
 `PUT /api/v1/plan/zuteilung` entgegen — analog PLAN-30 (Lese-Seite).
 Body: `{ "week_start": "<YYYY-MM-DD>", "day": 0..6, "slot": "<key>",
@@ -784,7 +784,7 @@ schreibt die Zuweisung atomar in `plan.db` (PLAN-9) — identisch mit dem
 Klick-Cycle im View (PLAN-7/PLAN-8). Antwort: `{ "ok": true }`.
 
 Fehler-Semantik: `400` mit JSON-Fehler bei fehlendem Pflichtfeld, `slot`
-nicht vorhanden oder kein Petrantwortlichkeits-Slot (PLAN-6), `person_id` unbekannt
+nicht vorhanden oder kein Verantwortlichkeits-Slot (PLAN-6), `person_id` unbekannt
 (FAM-3), ungültigem `day`. Reload-on-Read gilt auch hier: Slot-Definition
 und Registry werden pro Aufruf frisch gelesen (DCOMP-2).
 
@@ -877,7 +877,7 @@ Werte, die im Onboarding entstehen (heute `kalender_id`), setzt der Eltern-Chat
 | Name                         | Default                          | Datei-Schlüssel                | Gesetzt durch (Onboarding-Schritt) |
 |------------------------------|----------------------------------|--------------------------------|------------------------------------|
 | Slot-Definitionen            | die 7 Slots des Handoffs         | `slots`                        | n/a V1 (familienspezifisch hartcodiert, E-PLAN-8) |
-| Default-Petrantwortlichkeiten | leer                             | `default_petrantwortlichkeiten` | Eltern-Einstellungs-Seite P2 (PLAN-35) via PLAN-36; Familie kann `plan.json` zusätzlich direkt editieren |
+| Default-Verantwortlichkeiten | leer                             | `default_verantwortlichkeiten` | Eltern-Einstellungs-Seite P2 (PLAN-35) via PLAN-36; Familie kann `plan.json` zusätzlich direkt editieren |
 | Aktivitäts-Katalog           | 9 Einträge (V1-Default)          | `aktivitaeten`                 | Skill „Plan-Aktivitäten setzen" (`plan-aktivitaeten-setzen.md` PAS) ruft PLAN-34; Familie kann `plan.json` zusätzlich direkt editieren |
 | Fenster Lese-Kind            | 7 Tage                           | `fenster_lesekind`             | n/a (Default reicht) |
 | Fenster Kleinkind            | 3 Tage                           | `fenster_kleinkind`            | n/a (Default reicht) |
@@ -1009,7 +1009,7 @@ unter dessen Asset-Wurzel; die Daten-API bleibt beim Plan-Buddy (APP-1-Eigentum,
 PLAN-36/PLAN-37). Surface: `/seiten/plan/einstellungen`.
 
 Die Seite trägt **zwei Editor-Bereiche** nebeneinander: den **Defaults-Editor**
-(Default-Petrantwortlichkeiten, PLAN-10, über PLAN-36) und den
+(Default-Verantwortlichkeiten, PLAN-10, über PLAN-36) und den
 **Slot-Modell-Editor** (Slot-Definitionen anlegen/löschen/ändern, PLAN-6, über
 PLAN-37). Beide bedienen dieselbe Instanz-Konfiguration (`plan.json`). Der
 Personen-Picker bietet **alle** Personen aus `familie.json` (FAM-3) an
@@ -1021,19 +1021,19 @@ Berechtigungs-Gate (SREG-6).
 
 **Defaults-Editor — Verhalten:**
 - **Wenn** die Seite geladen wird, **dann** zeigt sie den aktuellen Stand der
-  Default-Petrantwortlichkeiten (PLAN-10) — bezogen über `GET /api/v1/plan/defaults`
+  Default-Verantwortlichkeiten (PLAN-10) — bezogen über `GET /api/v1/plan/defaults`
   (PLAN-36) — als bearbeitbares Raster Slot × Wochentag, mit den togglebaren
   Personen aus `familie.json` (Toggle-All, RAT-4-Auflösung: keine Slot-Whitelist).
 - **Wenn** Eltern eine Slot/Wochentag-Zelle einer Person zuweisen oder leeren,
   **dann** persistiert die Seite den Gesamtstand über `PUT /api/v1/plan/defaults`
-  (PLAN-36) — und die Default-Petrantwortlichkeiten gelten ab dem nächsten
+  (PLAN-36) — und die Default-Verantwortlichkeiten gelten ab dem nächsten
   Reload-on-Read (DCOMP-2) ohne Direkt-Schreiben in die Datei (CONFIG-1).
 - **Wenn** eine zugewiesene `person_id` nicht (mehr) in `familie.json` existiert,
   **dann** weist PLAN-36 den Schreibvorgang ab (HTTP 400), und die Seite zeigt
   den unveränderten Vorzustand.
 
 **Abgrenzung — Umfang von P2 (Nic-Setzung 2026-06-25):**
-- Die **wochenkonkrete** Petrantwortlichkeits-Zuteilung hat bereits einen
+- Die **wochenkonkrete** Verantwortlichkeits-Zuteilung hat bereits einen
   Schreib-/Lesevertrag (PLAN-30/PLAN-31, `/api/v1/plan/zuteilung`). PLAN-35
   editiert ausschließlich die **Default**-Vorbelegung (PLAN-10), nicht die
   Wochen-Overrides.
@@ -1046,7 +1046,7 @@ Berechtigungs-Gate (SREG-6).
   familien-spezifische Whitelist „wer darf in *diesem* Slot stehen", altes
   #259/E-PLAN-8) bleibt **RAT-4-Defer** (decisions/RAT-4-259). PLAN-7 V1.3
   Toggle-All gilt weiter: jede Person aus der Registry ist in jeden
-  Petrantwortlichkeits-Slot zuweisbar, es gibt keine Slot-Whitelist. Das ist die
+  Verantwortlichkeits-Slot zuweisbar, es gibt keine Slot-Whitelist. Das ist die
   **per-Slot-`cycle`-Generalisierung**, NICHT das Slot-CRUD — und nur sie ist
   vertagt (siehe PLAN-37-Abgrenzung).
 
@@ -1058,12 +1058,12 @@ keine `authHeaders`/`ensureAuth`).
 
 ### PLAN-36 — Defaults-Schreib-API: `GET/PUT /api/v1/plan/defaults`
 
-> Echte Lücke: für die Default-Petrantwortlichkeiten (PLAN-10) gibt es heute
+> Echte Lücke: für die Default-Verantwortlichkeiten (PLAN-10) gibt es heute
 > keinen nicht-loopback Schreibpfad — nur Direkt-Edit der Datei oder der
 > loopback-only Admin-Reload (PLAN-32-Muster). PLAN-36 schließt sie genau für P2.
 > ENTSCHEID-File 20260625-074425 Paket-Sektion „(b) Daten-API" → genau EINE neue Route; Sektion „Call 3 (defaults-Korrektheit)" → Form↔Datei-Mapping + Roundtrip.
 
-Der Plan-Buddy stellt die Default-Petrantwortlichkeiten (PLAN-10) unter
+Der Plan-Buddy stellt die Default-Verantwortlichkeiten (PLAN-10) unter
 `/api/v1/plan/defaults` bereit — Form analog PLAN-30/PLAN-31.
 
 **`GET /api/v1/plan/defaults`** — liefert den aktuellen Stand:
@@ -1074,17 +1074,17 @@ Reload-on-Read (DCOMP-2): die Konfig wird pro Aufruf frisch gelesen.
 `{ "defaults": { "<slot_key>": { "<wochentag 0..6>": "<person_id>|null }, … } }`.
 
 - **Wenn** der Body wohlgeformt ist und alle genannten `person_id` in
-  `familie.json` (FAM-3) existieren und alle `slot_key` ein Petrantwortlichkeits-Slot
+  `familie.json` (FAM-3) existieren und alle `slot_key` ein Verantwortlichkeits-Slot
   (PLAN-6) sind, **dann** wird der Stand persistiert und die Antwort ist
   `{ "ok": true }`.
 - **Wenn** ein Pflichtfeld fehlt, ein `slot_key` unbekannt / kein
-  Petrantwortlichkeits-Slot ist, ein `wochentag` außerhalb 0..6 liegt oder eine
+  Verantwortlichkeits-Slot ist, ein `wochentag` außerhalb 0..6 liegt oder eine
   `person_id` unbekannt ist (FAM-3), **dann** HTTP 400 mit JSON-Fehler, **kein** 500,
   und es wird **nichts** geschrieben (Validierung vor Persistenz).
 
 **Form↔Datei-Mapping (verbindlich):** Die API-Nutzform heißt `defaults`. Die
 Datei-Persistenz schreibt den Stand ZWINGEND unter dem Datei-Schlüssel
-`default_petrantwortlichkeiten` — denn das ist der Schlüssel, den der Config-Loader
+`default_verantwortlichkeiten` — denn das ist der Schlüssel, den der Config-Loader
 liest (`plan/config.py`). Ein Schreiben unter `defaults` würde beim nächsten Laden
 ignoriert.
 
@@ -1118,7 +1118,7 @@ ignoriert.
 > (Slot-Definitionen, PLAN-6) ist der zweite Editor-Bereich der P2-PWA
 > (PLAN-35). „Dafür machen wir ja die ganze Übung; P1/P2 waren die Vorbereitung
 > dafür." Überstimmt die frühere ENTSCHEID-Linie „slot-modell NOCH NICHT → P3".
-> ENTSCHEID-File 20260625-074425 Paket-Sektion „(b) Daten-API" → slot-modell jetzt IN P2 (Nic 2026-06-25, überstimmt „→ P3"); Sektion „Call 1 (Sorte)" → typ:pwa-Schablone trägt auch diesen zweiten Editor-Bereich; Sektion „Call 3 (defaults-Korrektheit)" → Form↔Datei-Mapping + atomarer Multi-Sektion-Write + Roundtrip-Test, hier auf slots + default_petrantwortlichkeiten gespiegelt.
+> ENTSCHEID-File 20260625-074425 Paket-Sektion „(b) Daten-API" → slot-modell jetzt IN P2 (Nic 2026-06-25, überstimmt „→ P3"); Sektion „Call 1 (Sorte)" → typ:pwa-Schablone trägt auch diesen zweiten Editor-Bereich; Sektion „Call 3 (defaults-Korrektheit)" → Form↔Datei-Mapping + atomarer Multi-Sektion-Write + Roundtrip-Test, hier auf slots + default_verantwortlichkeiten gespiegelt.
 
 **Surface:** Teil derselben P2-PWA (`/seiten/plan/einstellungen`, PLAN-35) — ein
 zweiter Editor-Bereich neben dem Defaults-Editor (PLAN-35/PLAN-36). Die Daten-API
@@ -1140,7 +1140,7 @@ spart eine DB-Migration). Umbenennen = Slot löschen + Slot neu anlegen, bewusst
 zweistufig.
 
 **`GET /api/v1/plan/slot-modell`** — liefert die aktuelle Slot-Liste:
-`{ "slots": [ { "schluessel": "<key>", "art": "petrantwortlich|kalender-read",
+`{ "slots": [ { "schluessel": "<key>", "art": "verantwortlich|kalender-read",
 "icon": "<arasaac-id>", "kind": "<person_id>"?, "label": "<anzeige-name>"? },
 … ] }` — Form aus PLAN-6 (`plan/config.py` `Slot.to_dict`). `label` ist der
 optionale Anzeige-Name (fehlt, wenn nicht gesetzt). Reload-on-Read (DCOMP-2): die
@@ -1151,7 +1151,7 @@ Konfig wird pro Aufruf frisch gelesen.
 gelöscht.
 
 - **Wenn** der Body wohlgeformt ist — jeder Slot hat `schluessel`, `art`, `icon`;
-  `art ∈ {petrantwortlich, kalender-read}`; jeder `kalender-read`-Slot trägt ein
+  `art ∈ {verantwortlich, kalender-read}`; jeder `kalender-read`-Slot trägt ein
   `kind`, das in `familie.json` (FAM-3) existiert; ein etwaiges `label` ist ein
   String (optional, fehlen/`null` erlaubt); alle `schluessel` sind eindeutig —
   und kein Rename-Versuch vorliegt (s. u.), **dann** wird die Slot-Liste inkl.
@@ -1161,7 +1161,7 @@ gelöscht.
   liefert den Slot ohne `label`.
 - **LÖSCHEN als Folge des Soll-Zustands:** **Wenn** ein `schluessel`, der vorher
   in der Konfig stand, in der PUT-Liste **fehlt**, **dann** gilt das als LÖSCHEN:
-  der Slot UND seine Einträge in `default_petrantwortlichkeiten` (PLAN-10) werden
+  der Slot UND seine Einträge in `default_verantwortlichkeiten` (PLAN-10) werden
   entfernt. Historische DB-Zuteilungen (PLAN-30/31) des gelöschten Slots bleiben
   **unangetastet** (kein Cascade-Delete) — sie rendern nicht mehr, weil der Slot
   fehlt, und sind harmlos.
@@ -1185,7 +1185,7 @@ gelöscht.
   geschrieben (Validierung **vor** Persistenz).
 
 **Form↔Datei-Mapping (verbindlich — Multi-Sektion-Save):** Ein erfolgreicher PUT
-schreibt die `slots`-Sektion **und** bereinigt die `default_petrantwortlichkeiten`-
+schreibt die `slots`-Sektion **und** bereinigt die `default_verantwortlichkeiten`-
 Sektion (entfernt Einträge gelöschter Slots) **atomar in EINEM Write**. Das ist
 genau der Multi-Sektion-Save, für den die API-first-Form gewählt wurde
 (RAT-4-Kill-Kriterium erfüllt: zwei Sektionen müssen konsistent in einem Schreib-
@@ -1199,7 +1199,7 @@ vorgang fallen, was ein view-internes Einzelfeld-Save nicht leistet).
 - **Roundtrip-Garantie (testbares Requirement, Pflicht):** Nach einem
   erfolgreichen `PUT slot-modell=X` liefert ein anschließendes `load_config` /
   `GET slot-modell` denselben Stand X. Ein gelöschter Slot fehlt danach **auch**
-  in `default_petrantwortlichkeiten` (Multi-Sektion-Konsistenz). Dieser Roundtrip
+  in `default_verantwortlichkeiten` (Multi-Sektion-Konsistenz). Dieser Roundtrip
   inkl. Defaults-Bereinigung ist als Test Pflicht.
 
 **Abgrenzung — Slot-CRUD JA, per-Slot-`cycle` NEIN (sauber trennen):**
@@ -1209,7 +1209,7 @@ vorgang fallen, was ein view-internes Einzelfeld-Save nicht leistet).
   `cycle`-Filter, also eine familien-spezifische **Whitelist** „wer darf in
   *diesem* Slot stehen" (altes #259 / E-PLAN-8). PLAN-7 V1.3 **Toggle-All** gilt
   unverändert weiter: der Cycle iteriert über **alle** Personen der Registry
-  (Erwachsene und Kinder), jede Person ist in jeden Petrantwortlichkeits-Slot
+  (Erwachsene und Kinder), jede Person ist in jeden Verantwortlichkeits-Slot
   zuweisbar; es gibt **keine** Slot-Whitelist. Diese per-Slot-`cycle`-
   Generalisierung ist die vertagte Sache — NICHT das Slot-CRUD.
 
@@ -1297,7 +1297,7 @@ Standard-Durchlaufs (analog `eltern-chat.md` EC-17).
   gezielt zu aktualisieren. Funktional, aber ein Workaround. Kein V1-Blocker.
 
 - **OPEN-PLAN-D — Sperre vor dem Editieren.** V1 erlaubt jedem am Display jede
-  Änderung (PLAN-25). Ob Petrantwortlichkeiten gegen versehentliches Ändern
+  Änderung (PLAN-25). Ob Verantwortlichkeiten gegen versehentliches Ändern
   geschützt werden, ist eine spätere Entscheidung.
 
 - **OPEN-PLAN-F — Mehrere Kalender je Familie.** Familien- und Schul-/Vereins-
@@ -1312,7 +1312,7 @@ Standard-Durchlaufs (analog `eltern-chat.md` EC-17).
 *Datum:* 2026-05-22
 
 Der Plan-Buddy ist eine eigenständige App. Er **besitzt** seine Daten (die
-Petrantwortlichkeiten, PLAN-9) und seine Funktion (die Kalender-Anbindung,
+Verantwortlichkeiten, PLAN-9) und seine Funktion (die Kalender-Anbindung,
 Abschnitt 6) und stellt beides über **Schnittstellen** bereit (Abschnitt 7).
 Andere XBuddy-Apps sind Nutzer dieser Schnittstellen, nicht Mit-Eigentümer. Eine
 von der App bereitgestellte Fähigkeit existiert für einen Konsumenten genau
@@ -1334,7 +1334,7 @@ eine App besitzt, andere nutzen — hält die Abhängigkeiten einseitig
 ### E-PLAN-2 — Slots und Defaults sind Konfiguration, nicht Code
 *Datum:* 2026-05-22
 
-Die Slot-Liste und die Default-Petrantwortlichkeiten leben in einer Config-Datei.
+Die Slot-Liste und die Default-Verantwortlichkeiten leben in einer Config-Datei.
 Im Quell-Prototyp war die Slot-Liste an drei Stellen hart verdrahtet — der
 `planbuddy-kids`-Handoff benannte das als teuerste Refactor-Stelle. XBuddy
 verbietet Code-Konstanten ohne Override-Pfad (CLAUDE.md §6). Das ist **keine**
@@ -1349,11 +1349,11 @@ Query-Parameter, nicht zwei Views. Die URL-Konvention verlangt Varianten als
 Query-Parameter (URL-2). Inhaltlich *ist* es eine View — dieselben Daten,
 adressatengerecht übersetzt, exakt das „Mitwachsen" der Constitution.
 
-### E-PLAN-4 — Petrantwortlichkeiten lokal, Aktivitäten & Termine im Kalender
+### E-PLAN-4 — Verantwortlichkeiten lokal, Aktivitäten & Termine im Kalender
 *Datum:* 2026-05-22 (übernommen aus dem Handoff `planbuddy-kids`)
 
 Wer-bringt-wen (PLAN-8) liegt **lokal** in SQLite, Kind-Aktivitäten und Termine
-(PLAN-11, PLAN-13) liegen im **Kalender**. Petrantwortlichkeiten sind eine
+(PLAN-11, PLAN-13) liegen im **Kalender**. Verantwortlichkeiten sind eine
 plan-interne Konvention, die es im Google-Kalender nicht natürlich gibt — lokal
 zu halten ist einfach. Aktivitäten und Termine *sind* Kalender-Einträge; sie
 dort zu halten heißt, dass eine Änderung im Google-Kalender und eine am Display

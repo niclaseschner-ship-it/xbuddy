@@ -29,7 +29,7 @@ wofür es vorher ein Elternteil gebraucht hätte. Jede Funktion misst sich daran
 Verschiebt sie eine Aufgabe vom Elternteil zum Kind — gibt sie Selbstwirksamkeit
 zurück? Qualitätsattribute in Prioritätsreihenfolge: **Zuverlässigkeit** (ein Board,
 das morgens nicht den Plan zeigt, ist schlechter als kein Board), **Einfachheit**,
-**Privacy & Datensicherheit** (Petrarbeitung in Deutschland, Anonymisierung vor
+**Privacy & Datensicherheit** (Verarbeitung in Deutschland, Anonymisierung vor
 Verlassen der Geräte-Ebene — harter Boden), **Offline-Fähigkeit** (mit Hub ohne
 Internet) und **Nicht-invasiv** (keine Push-Notifications, kein Engagement-Design).
 

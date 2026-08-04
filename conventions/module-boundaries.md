@@ -118,7 +118,7 @@ Maschinelle Durchsetzung über einen zweiten CI-Step in
 `.github/workflows/lint-imports.yml`: zweistufiger Datei-Check (Datei
 enthält `sys.path.`-Manipulation UND String `"eltern-chat"`/`'eltern-chat'`
 irgendwo) + Eigen-Verzeichnis-Filter (`eltern-chat/*` übersprungen) +
-Bestand-Allowlist + Petraltete-Allowlist-Check (Allowlist-Einträge ohne
+Bestand-Allowlist + Veraltete-Allowlist-Check (Allowlist-Einträge ohne
 aktuellen Match müssen entfernt werden — zwingt Sanierungs-PRs zum
 gleichzeitigen Allowlist-Update). Der zweistufige Datei-Check fängt
 auch Drift-Pfade, die ein zeilen-basierter Grep verfehlt: Single-Quote-

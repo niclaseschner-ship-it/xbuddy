@@ -150,5 +150,5 @@ def _coerce(raw, default, key, env_name):
 
 class ConfigLoaderError(Exception):
     """Wird geworfen, wenn die Konfigurations-Datei oder ein ENV-Override
-    nicht petrarbeitet werden kann. Eine fehlende Datei ist KEIN Fehler
+    nicht verarbeitet werden kann. Eine fehlende Datei ist KEIN Fehler
     (CONFIG-1)."""

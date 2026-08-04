@@ -5,7 +5,7 @@
   zwei Brech-Runden + Antiberater-Pass auf den Spec-Text), **ratifiziert**
   2026-06-06 (Nic — Baustein 1+2 „umsetzen", Baustein 3 „Text zeigen, dann Gate").
 - **Anlass:** Belegfall #343 (Routine-Eltern-Chat-Schreib-Skill) lief fast als
-  `status:ready` raus, obwohl die bindende Spec für das Delipetrable nur als Skizze
+  `status:ready` raus, obwohl die bindende Spec für das Deliverable nur als Skizze
   `OPEN-ROUTINE-B` unter `## Offene Punkte` existierte (routine.md:418). Drei
   Prep-Schichten hatten den Konflikt vorliegen und übersahen ihn (REIF-Grep,
   LEDGER, Orchestrator-Disziplin).

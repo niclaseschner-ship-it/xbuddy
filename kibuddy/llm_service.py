@@ -81,7 +81,7 @@ Ein Apfel ist eine Frucht.
 
 
 class LLMServiceError(Exception):
-    """LLM-Antwort konnte nicht petrarbeitet werden."""
+    """LLM-Antwort konnte nicht verarbeitet werden."""
 
 
 def _load_prompt(data_root: str) -> str:

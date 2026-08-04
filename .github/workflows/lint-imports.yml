@@ -37,7 +37,7 @@ jobs:
         # `sys.path += [...]`, neutrale Variablen-Namen mit String in
         # vorheriger Zeile). Eltern-chat-Eigen-Inserts (innerhalb
         # eltern-chat/) sind KEIN MOD-4-Bruch und werden übersprungen.
-        # Zusätzlich: Petraltete-Allowlist-Check — Allowlist-Einträge ohne
+        # Zusätzlich: Veraltete-Allowlist-Check — Allowlist-Einträge ohne
         # aktuellen Match müssen entfernt werden (Sanierungs-Schutz, zwingt
         # Sanierungs-PRs zum gleichzeitigen Allowlist-Update).
         # Siehe conventions/module-boundaries.md MOD-6.
@@ -69,7 +69,7 @@ jobs:
             echo " $HITS " | grep -q " $entry " || STALE="$STALE $entry"
           done
           if [ -n "$STALE" ]; then
-            echo "::error::MOD-6 Allowlist petraltet — folgende Einträge matchen nicht mehr, bitte entfernen:"
+            echo "::error::MOD-6 Allowlist veraltet — folgende Einträge matchen nicht mehr, bitte entfernen:"
             for e in $STALE; do echo "  $e"; done
             echo "Siehe conventions/module-boundaries.md MOD-6 (Allowlist schmilzt mit Sanierungs-PRs)"
             exit 1

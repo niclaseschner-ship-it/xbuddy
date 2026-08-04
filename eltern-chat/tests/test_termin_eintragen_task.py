@@ -347,7 +347,7 @@ def test_handle_update_routes_to_tes_session(tmp_path):
                        chat_type="private", message_id=200)
     handle_update(msg, ctx)
 
-    # Warten, bis deliver() die Nachricht petrarbeitet hat.
+    # Warten, bis deliver() die Nachricht verarbeitet hat.
     deadline = time.monotonic() + 1.0
     while time.monotonic() < deadline and not delivered:
         time.sleep(0.01)

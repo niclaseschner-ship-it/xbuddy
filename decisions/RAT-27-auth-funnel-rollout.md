@@ -15,4 +15,4 @@ Familien-**User**-Geräte (Handy/Tablet) erreichen die volle Familien-UI **cert-
 3. Observe-Flip = sauberes Log + `paired_at`.
 
 ## Bezug / löst ab
-Supersede-Teil von **RAT-25** (Heim-Shell LAN-only → Funnel-Cookie erlaubt). Baut auf RAT-18 (Cookie-Standard), #948/#1292/#1321 (Mini-App-Cookie-Auth gemergt). Bau: #1389 (Enforcement) + #1390 (Rollout). AUTH-9-Copetrage-Test um 7b-Routen erweitern.
+Supersede-Teil von **RAT-25** (Heim-Shell LAN-only → Funnel-Cookie erlaubt). Baut auf RAT-18 (Cookie-Standard), #948/#1292/#1321 (Mini-App-Cookie-Auth gemergt). Bau: #1389 (Enforcement) + #1390 (Rollout). AUTH-9-Coverage-Test um 7b-Routen erweitern.

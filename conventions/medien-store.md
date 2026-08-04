@@ -1,4 +1,4 @@
-# Convention — Mediendatei-Petrarbeitung als Library (`tools/medien_store/`)
+# Convention — Mediendatei-Verarbeitung als Library (`tools/medien_store/`)
 
 *Datum:* 2026-06-14 · *Status:* aktiv · *Tickets:* #804 (Brett, Welle 1
 #806 gemergt)
@@ -13,7 +13,7 @@ die Library direkt; jeder Buddy behält die volle Datenhoheit über seine
 eigenen Daten.
 
 **Konkret heute (n=1 Konsument):** `tools/medien_store/` für Medien-
-Petrarbeitung. Photo-Buddy ist erster Konsument (Welle 1 von #804, gemergt
+Verarbeitung. Photo-Buddy ist erster Konsument (Welle 1 von #804, gemergt
 PR #805). Welle 2 ergänzt Essen-Buddy als zweiten Konsumenten — beide
 halten ihre eigenen Verzeichnisse + Indizes (`xbuddy-data/photo/medien/`
 bzw. `xbuddy-data/essen/fotos/`).

@@ -241,7 +241,7 @@ async function main() {
 
   // Jeder View-Eintrag hat einen relativen path; hier einmalig zur
   // voll-qualifizierten Ziel-URL aufloesen, damit der Rest des Harness
-  // viewCfg.url unpetraendert benutzen kann.
+  // viewCfg.url unveraendert benutzen kann.
   const origin = cfg.origin || "";
   for (const viewCfg of Object.values(cfg.views)) {
     viewCfg.url = origin + viewCfg.path;

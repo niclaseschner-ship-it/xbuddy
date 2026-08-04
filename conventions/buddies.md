@@ -155,7 +155,7 @@ die Kleinkind-**Variante** tut das.
 **Icon-Existenz ist ein Deploy-/Backfill-Gate, kein Aggregator-Test:** ein Pfad in
 `icons[]` muss als PNG im `_shared/icons`-Cache liegen (ICONS-4 seedet nur aus dem
 Cache, lädt nichts nach). Verifiziert wird das beim Backfill per lokalem
-`GET /display/_shared/icons/<pfad>` → `200 image/png` (Petrantwortung: der
+`GET /display/_shared/icons/<pfad>` → `200 image/png` (Verantwortung: der
 Backfill-PR, #387), **nicht** in der Aggregator-Durchreichung (SREG-10). Ein
 Kachel-Icon ist **nie** ein app-eigenes Asset (URL-13) und **nie** das
 View-Hero-Bild.
@@ -205,7 +205,7 @@ nginx, dann Code** (URL-14: „erst hier eine Zeile, dann nginx, dann Code").
 
 Buddys **teilen die Topologie, nicht den Inhalt**: jeder Buddy spiegelt
 dieselben Datei-Namen und -Rollen, gefüllt mit seiner eigenen Domäne. Das ist
-keine Code-Duplikation (jede Datei hat eine eigene Petrantwortung, CLAUDE.md
+keine Code-Duplikation (jede Datei hat eine eigene Verantwortung, CLAUDE.md
 §6), sondern ein wiedererkennbares Skelett.
 
 | Datei | Rolle |

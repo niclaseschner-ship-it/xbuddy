@@ -524,7 +524,7 @@ class TelegramClient:
     def extract_message(self, update, bot_username):
         """Übersetzt ein rohes Telegram-Update in ein `IncomingMessage`.
 
-        Liefert None, wenn das Update keine petrarbeitbare Nachricht ist
+        Liefert None, wenn das Update keine verarbeitbare Nachricht ist
         (z. B. ein Status-Update). Bilder werden geladen und Base64-kodiert.
         """
         msg = update.get("message")

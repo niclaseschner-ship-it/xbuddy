@@ -365,7 +365,7 @@ def test_shell_pwa_ac2_icon_public_ohne_operator(client, monkeypatch, tmp_path):
     """SHELL-PWA AC2 / AUTH-4: icon-192.png liefert 200 OHNE Cookie und OHNE Operator-IP.
 
     T1448-S3-fix: shell_asset_view ist AUTH-4-public (kein Decorator); WebAPK-Installer
-    holt Icons credential-los (Fetch-Spec). Dieser Test petrankert die Public-Eigenschaft
+    holt Icons credential-los (Fetch-Spec). Dieser Test verankert die Public-Eigenschaft
     in der seiten-Suite (ohne Header → 200, nicht 401).
     """
     import shutil
@@ -439,7 +439,7 @@ def test_shell_pwa_ac3_rail_iframe_nativ(client):
 
 
 def test_shell_pwa_ac3_panel_unangetastet():
-    """SHELL-PWA AC3 stop_rule: die PANEL-12-Grid-Geometrie in app.js unpetraendert.
+    """SHELL-PWA AC3 stop_rule: die PANEL-12-Grid-Geometrie in app.js unveraendert.
 
     Bewacht wird die JS-seitige Grid-Geometrie (computeGridGeometry /
     applyGridGeometry) — sie darf nicht angefasst werden. Panel-CSS (style.css)

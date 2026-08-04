@@ -69,7 +69,7 @@ def _build_vendor(
     """Slot → (Vendor-Instanz, caller, slot-name, available-caps) mit Capability-
     Boot-Fail (LLMP-S3).
 
-    Petrantwortlich für die vier mechanischen Schritte aus LLMP-5:
+    Verantwortlich für die vier mechanischen Schritte aus LLMP-5:
       1. Slot parsen (caller, vendor, purpose)
       2. Vendor-Modul laden
       3. `CAPABILITIES` gegen Required-Set prüfen (LLMP-3, LLMP-S3)

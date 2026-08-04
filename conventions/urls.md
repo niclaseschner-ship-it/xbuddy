@@ -219,7 +219,7 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 18 | `/api/v1/hoerspiel/finn/`      | Hörspiel-Buddy (Finn)  | Hörspiel-Backend Finn-Instanz (HSP-28a, RAT-17, URL-3a): gleiche API-Surface wie Mia. Upstream: xbuddy-hoerspiel-finn (:5055, PORT-2). |
 | 19 | `/api/v1/hoerspiel/emil/`    | Hörspiel-Buddy (Emil)  | Hörspiel-Backend Emil-Instanz (HSP-28a, RAT-17, URL-3a, T1347): gleiche API-Surface wie Mia und Finn. Upstream: xbuddy-hoerspiel-emil (:5056, PORT-2). |
 | 20 | `/api/v1/hoerspiel/`           | Hörspiel-Buddy (Mia, Fallback) | Fallback ohne `<kind_id>`-Segment (z.B. `/api/v1/hoerspiel/themen` vor T4 #910). Übergangs-Provisorium — T4 #910 hebt diese Route auf kind_id-tragende Form. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
-| 21 | `/api/v1/kibuddy/`             | KI-Buddy            | KI-Buddy-Backend (KIBUDDY-24): Frage-Petrarbeitung (`POST /api/v1/kibuddy/frage`), Audio-Cache-Replay (`GET /api/v1/kibuddy/audio/<id>.mp3`), TTS-Replay (`POST /api/v1/kibuddy/vorlesen`), Session-Reset (`POST /api/v1/kibuddy/reset`), Prompt (`GET\|PUT /api/v1/kibuddy/prompt`, KIBUDDY-15), Config (`GET\|PUT /api/v1/kibuddy/config`). Upstream: xbuddy-kibuddy (:5054, PORT-2). |
+| 21 | `/api/v1/kibuddy/`             | KI-Buddy            | KI-Buddy-Backend (KIBUDDY-24): Frage-Verarbeitung (`POST /api/v1/kibuddy/frage`), Audio-Cache-Replay (`GET /api/v1/kibuddy/audio/<id>.mp3`), TTS-Replay (`POST /api/v1/kibuddy/vorlesen`), Session-Reset (`POST /api/v1/kibuddy/reset`), Prompt (`GET\|PUT /api/v1/kibuddy/prompt`, KIBUDDY-15), Config (`GET\|PUT /api/v1/kibuddy/config`). Upstream: xbuddy-kibuddy (:5054, PORT-2). |
 | 22 | `/display/_shared/icons/`      | Seiten-Registry     | ARASAAC-Piktogramme (ROU-26, RAT-31 E6f-B, #1586). Upstream: xbuddy-seiten (:5042, PORT-2). |
 | 23 | `/display/_shared/design/`     | Seiten-Registry     | Design-Tokens (ROU-30, RAT-31 E6f-A, #1582). Upstream: xbuddy-seiten (:5042, PORT-2). |
 | 24 | `/controller/app-panel/`       | Seiten-Registry     | App-Panel-Instanz-Views (SREG-17, RAT-31 E6b, #1564). Upstream: xbuddy-seiten (:5042, PORT-2). |
@@ -338,7 +338,7 @@ Bauregeln:
   TCP-Quelle eines durch nginx kommenden Requests **immer** `127.0.0.1`
   — auch wenn der ursprüngliche Caller im Internet sitzt. Der Code-Guard
   muss deshalb die **echte Caller-IP** prüfen, nicht `request.remote_addr`
-  unpetrarbeitet. Konkrete Form: `werkzeug.middleware.proxy_fix.ProxyFix`
+  unverarbeitet. Konkrete Form: `werkzeug.middleware.proxy_fix.ProxyFix`
   (oder äquivalent) mit `x_for=1` aufsetzen — das setzt `REMOTE_ADDR` aus
   dem `X-Forwarded-For`-Header, **trusted** auf genau eine Proxy-Hop
   (den eigenen nginx). Der Code-Guard prüft danach den ursprünglichen

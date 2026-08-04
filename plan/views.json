@@ -19,8 +19,8 @@
       "typ": "pwa",
       "pfad": "/seiten/plan/einstellungen",
       "label": "Plan-Einstellungen",
-      "synonyme": ["petrantwortlichkeiten", "wer macht was"],
-      "zeigt": "Default-Petrantwortlichkeiten je Slot und Wochentag setzen.",
+      "synonyme": ["verantwortlichkeiten", "wer macht was"],
+      "zeigt": "Default-Verantwortlichkeiten je Slot und Wochentag setzen.",
       "zielgruppe": "eltern",
       "pwa": {
         "manifest": "/seiten/static/plan/manifest.json",

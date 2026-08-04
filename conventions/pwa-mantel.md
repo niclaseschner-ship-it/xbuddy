@@ -124,7 +124,7 @@ Belegt byte-nah zwischen einkauf (einkauf/sw.js:21-22) und plan (plan/sw.js:18-1
 
 - `HTML_CACHE_MODE` — steuert, ob die HTML-Shell gecached wird. Der **connector
   cached HTML bewusst NICHT** (network-only pass-through, connector/sw.js:10-11):
-  sein server-gerendertes Aggregat (CONN-8) darf nie petralten. Ohne diesen Knopf
+  sein server-gerendertes Aggregat (CONN-8) darf nie veralten. Ohne diesen Knopf
   würde connector-HTML versehentlich cache-first.
 - `STOP_PREFIXES` — Pfad-Präfixe, die der SW **nicht** abfängt. Die **heim-shell**
   lässt `/controller/` und `/display/` als Panel-Iframe-Requests durch

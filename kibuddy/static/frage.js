@@ -271,7 +271,7 @@ async function send_aufnahme(chunks, mimeType) {
   $chat.appendChild(ladeBubbleRow);
   $chat.scrollTop = $chat.scrollHeight;
 
-  // Turn-Container wird beim ersten Stage-1-Event (kind) erzeugt und im DOM petrankert,
+  // Turn-Container wird beim ersten Stage-1-Event (kind) erzeugt und im DOM verankert,
   // damit Kind-Bubble und spaetere Buddy-Bubble im selben .turn-Div landen.
   let turnEl = null;
 

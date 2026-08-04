@@ -3,7 +3,7 @@
 // Cache-Strategie:
 //   - cache-first fuer Mantel-Assets (HTML, JS, CSS, manifest, icons).
 //   - pass-through (network-only) fuer /api/v1/plan/* und /api/v1/familie/* —
-//     Einstellungs-Daten duerfen NIE petralten.
+//     Einstellungs-Daten duerfen NIE veralten.
 //   - network-first mit Cache-Fallback fuer /_shared/icons/arasaac/*.png
 //     bzw. /display/_shared/icons/arasaac/*.png (ARASAAC-Piktogramme, ICONS-5).
 //

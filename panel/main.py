@@ -228,7 +228,7 @@ def put_panel_tiles(panel_id):
         return _unprocessable(str(e))
 
     with _write_lock:
-        # DCOMP-2: frisch von Disk lesen — nie einen petralteten Stand überschreiben.
+        # DCOMP-2: frisch von Disk lesen — nie einen veralteten Stand überschreiben.
         reg = registry_mod.load(path)
         panel = reg.get(panel_id)
         if panel is None:

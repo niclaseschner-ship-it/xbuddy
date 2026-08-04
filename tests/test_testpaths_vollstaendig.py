@@ -87,14 +87,14 @@ def test_alle_test_verzeichnisse_in_testpaths():
 
 def test_kein_pytest_suite_eintraege_existieren_noch():
     """Sanitäts-Check: jeder KEIN_PYTEST_SUITE-Eintrag existiert noch und trägt
-    test_*.py — sonst ist die Ausnahme petraltet und gehört entfernt."""
-    petraltet = sorted(
+    test_*.py — sonst ist die Ausnahme veraltet und gehört entfernt."""
+    veraltet = sorted(
         eintrag for eintrag in KEIN_PYTEST_SUITE
         if not list((REPO_ROOT / eintrag).glob("test_*.py"))
     )
-    assert not petraltet, (
-        "Petraltete KEIN_PYTEST_SUITE-Ausnahmen (kein test_*.py mehr) — bitte "
-        "entfernen:\n" + "\n".join(f"  - {d}" for d in petraltet)
+    assert not veraltet, (
+        "Veraltete KEIN_PYTEST_SUITE-Ausnahmen (kein test_*.py mehr) — bitte "
+        "entfernen:\n" + "\n".join(f"  - {d}" for d in veraltet)
     )
 
 

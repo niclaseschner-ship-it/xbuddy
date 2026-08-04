@@ -16,7 +16,7 @@ ist eine Ein-Weg-Tür). Das Gate läuft in zwei Kontexten:
 
   Familientext-Verbote (FORBIDDEN_PATTERNS): Strings, die in synthetischen
   Fixtures nie auftreten sollten:
-    - E-Mail-Adressen mit bekannten Familien-Domains (@example.org)
+    - E-Mail-Adressen mit bekannten Familien-Domains (@gmx.de)
     - Telefonnummer-Muster (+49 + 10+ Ziffern)
     - Interne ZD-Slot-Namen mit echten Zugangsdaten-Schlüsseln
     - Bekannte Real-Datei-Pfade aus xbuddy-data (kein synthetischer Text)
@@ -28,7 +28,7 @@ ist eine Ein-Weg-Tür). Das Gate läuft in zwei Kontexten:
 
 ## Dokumentation der Gate-Entscheidungen
 
-  - `@example.org`: bekannte Familien-Domain; alle Adressen dieser Domain sind real
+  - `@gmx.de`: bekannte Familien-Domain; alle Adressen dieser Domain sind real
   - `+49` + Ziffernkette: echte Telefonnummer-Form
   - `/home/buddy/xbuddy-data`: echter Pi-Pfad, nie in Fixture-Texten
   - `xbuddy-data/`: echter Datenpfad-Präfix
@@ -52,7 +52,7 @@ SYNTHETIC_MARKER = "# SYNTHETIC - kein echter Familientext"
 # Muster, die in synthetischen Fixtures NIEMALS auftreten sollten.
 # Jedes Element: (label, compiled_pattern)
 FORBIDDEN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    # Alle @example.org-Adressen — bekannte Familien-Domain, nie in Fixtures
+    # Alle @gmx.de-Adressen — bekannte Familien-Domain, nie in Fixtures
     ("real-email-addr", re.compile(r"\b[A-Za-z0-9._%+-]+@gmx\.de\b")),
     # Echte deutsche Telefonnummer: +49 gefolgt von 9+ Ziffern
     ("real-phone-de", re.compile(r"\+49\s*\d{9,}")),

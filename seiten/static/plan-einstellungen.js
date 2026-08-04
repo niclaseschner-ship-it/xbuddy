@@ -168,8 +168,8 @@ function ringHtml(personId, cls) {
 }
 
 function badgeHtml(art) {
-  if (art === "petrantwortlich") {
-    return '<span class="badge petrantwortlich">petrantwortlich</span>';
+  if (art === "verantwortlich") {
+    return '<span class="badge verantwortlich">verantwortlich</span>';
   }
   return '<span class="badge kalender">kalender-read</span>';
 }
@@ -216,13 +216,13 @@ function rendereSlotListe() {
 }
 
 function slotBodyHtml(slot) {
-  if (slot.art === "petrantwortlich") {
-    return petrantwortlichBodyHtml(slot);
+  if (slot.art === "verantwortlich") {
+    return verantwortlichBodyHtml(slot);
   }
   return kalenderReadBodyHtml(slot);
 }
 
-function petrantwortlichBodyHtml(slot) {
+function verantwortlichBodyHtml(slot) {
   const defaults = _editDefaults[slot.schluessel] || {};
   const anzeigeName = slotLabel(slot);
 
@@ -811,7 +811,7 @@ async function ladeUndRendere() {
       // Weiter
       if (e.target.closest(".typ-wahl-weiter")) {
         const aktiveOpt = typSheet.querySelector(".typ-wahl .opt.aktiv");
-        const art = aktiveOpt && aktiveOpt.dataset.art ? aktiveOpt.dataset.art : "petrantwortlich";
+        const art = aktiveOpt && aktiveOpt.dataset.art ? aktiveOpt.dataset.art : "verantwortlich";
         schliesseTypWahl();
         oeffneNeuSlotSheet(art);
       }
@@ -922,7 +922,7 @@ async function ladeUndRendere() {
         if (!labelInput || !_pickerIconId) return;
         const label = labelInput.value.trim();
         if (!label) return;
-        const art = (_sheetKontext && _sheetKontext.art) || "petrantwortlich";
+        const art = (_sheetKontext && _sheetKontext.art) || "verantwortlich";
         const iconId = _pickerIconId;      // FIX PLAN-1139: vor dem Schließen sichern (schliesseNeuSlotSheet nullt _pickerIconId)
         schliesseNeuSlotSheet();
         legeSlotAn(label, art, iconId);

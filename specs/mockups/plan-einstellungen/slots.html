@@ -43,7 +43,7 @@
     <div class="griff"></div>
     <h3>Neuer Slot — welche Art?</h3>
     <div class="typ-wahl">
-      <div class="opt aktiv"><b>Petrantwortlich</b><span>Jemand ist zuständig (bringen, kochen). Mit Wer-macht-was je Wochentag.</span></div>
+      <div class="opt aktiv"><b>Verantwortlich</b><span>Jemand ist zuständig (bringen, kochen). Mit Wer-macht-was je Wochentag.</span></div>
       <div class="opt"><b>Kalender-Termine</b><span>Termine eines Kindes aus dem Kalender — gefiltert über seinen Namen.</span></div>
     </div>
     <div class="save-leiste"><button class="btn" onclick="closeSheets()">Abbrechen</button><button class="btn primary" onclick="closeSheets()">Weiter</button></div>
@@ -60,11 +60,11 @@ const PERS = {
 };
 const TAGE = ["Mo","Di","Mi","Do","Fr","Sa","So"];
 const SLOTS = [
-  {key:"bring",label:"Bringen",typ:"petrantwortlich",icon:"37807",def:["a1","a2","k1","k2","a2",null,null]},
-  {key:"pick",label:"Abholen",typ:"petrantwortlich",icon:"39520",def:["a2","k1","k1","k2","a1",null,null]},
-  {key:"cook",label:"Kochen",typ:"petrantwortlich",icon:"2342",def:["k2","k1","a2",null,null,null,null]},
-  {key:"bed1",label:"Schlafen Kind 3",typ:"petrantwortlich",icon:"6027",kind:"k3",def:["k1","a1","k1","a1","k1","k1","a1"]},
-  {key:"bed2",label:"Schlafen Kind 4",typ:"petrantwortlich",icon:"6027",kind:"k4",def:["k2","k2","a2","a2","k2","k2","a2"]},
+  {key:"bring",label:"Bringen",typ:"verantwortlich",icon:"37807",def:["a1","a2","k1","k2","a2",null,null]},
+  {key:"pick",label:"Abholen",typ:"verantwortlich",icon:"39520",def:["a2","k1","k1","k2","a1",null,null]},
+  {key:"cook",label:"Kochen",typ:"verantwortlich",icon:"2342",def:["k2","k1","a2",null,null,null,null]},
+  {key:"bed1",label:"Schlafen Kind 3",typ:"verantwortlich",icon:"6027",kind:"k3",def:["k1","a1","k1","a1","k1","k1","a1"]},
+  {key:"bed2",label:"Schlafen Kind 4",typ:"verantwortlich",icon:"6027",kind:"k4",def:["k2","k2","a2","a2","k2","k2","a2"]},
   {key:"act1",label:"Termine Kind 3",typ:"kalender-read",icon:"3071",kind:"k3"},
   {key:"act2",label:"Termine Kind 4",typ:"kalender-read",icon:"3071",kind:"k4"},
 ];
@@ -76,12 +76,12 @@ const PICKER_ICONS = [
 
 function ring(id, cls="ring"){ if(!id) return `<span class="${cls} leer"></span>`;
   const p=PERS[id]; return `<img class="${cls} ring-${p.r}" src="assets/fotos/${p.f}" alt="${p.n}" title="${p.n}">`; }
-function badge(t){ return t==="petrantwortlich"
-  ? `<span class="badge petrantwortlich">petrantwortlich</span>`
+function badge(t){ return t==="verantwortlich"
+  ? `<span class="badge verantwortlich">verantwortlich</span>`
   : `<span class="badge kalender">kalender-read</span>`; }
 
 function slotBody(s){
-  if(s.typ==="petrantwortlich"){
+  if(s.typ==="verantwortlich"){
     const tage = TAGE.map((t,i)=>`<div class="tag ${i>4?'we':''}"><span class="tagname">${t}</span>
       <span onclick="openPerson('${s.label} · ${t}')">${ring(s.def[i])}</span></div>`).join("");
     return `<div class="slot-body">

@@ -98,7 +98,7 @@ def test_PANEL_1_tap_sends_event_no_local_routing():
 
 def test_PANEL_1_app_js_does_not_route_to_displays_directly():
     """Negativ-Probe: das Frontend macht keine direkten URL-Wechsel auf
-    /display/<app>/<view>. Routing-Petrantwortung liegt allein beim Router."""
+    /display/<app>/<view>. Routing-Verantwortung liegt allein beim Router."""
     js = read(APPJS_PATH)
     # location.href-Manipulation auf /display/ wäre Routing aus der Seite.
     assert not re.search(r"location\.href\s*=.*['\"]/display/", js), \
@@ -1455,7 +1455,7 @@ def test_PANEL_12_no_hardcoded_colors_in_style_css():
 
 
 def test_PANEL_12_apply_grid_geometry_dom_path():
-    """PANEL-12 / Watchdog-Befund 1 — Entry-Path-Copetrage: ruft die echte
+    """PANEL-12 / Watchdog-Befund 1 — Entry-Path-Coverage: ruft die echte
     exportierte Funktion panelLib.applyGridGeometry({doc, win}) auf (kein
     Logik-Reko-Muster). applyGridGeometry ist seit diesem Fix im UMD-Export
     und akzeptiert ein optionales ctx-Objekt {doc, win} für testbare

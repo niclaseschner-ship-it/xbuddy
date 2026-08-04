@@ -136,15 +136,15 @@ DEMO_REGISTRY = {
 # Plan-Buddy-Config: die 7 Slots des Handoffs + ein paar Defaults.
 DEMO_CONFIG = {
     "slots": [
-        {"schluessel": "bring", "art": "petrantwortlich", "icon": "37807"},
-        {"schluessel": "pick", "art": "petrantwortlich", "icon": "39520"},
+        {"schluessel": "bring", "art": "verantwortlich", "icon": "37807"},
+        {"schluessel": "pick", "art": "verantwortlich", "icon": "39520"},
         {"schluessel": "act1", "art": "kalender-read", "icon": "3071", "kind": "mia"},
         {"schluessel": "act2", "art": "kalender-read", "icon": "3071", "kind": "finn"},
-        {"schluessel": "cook", "art": "petrantwortlich", "icon": "2342"},
-        {"schluessel": "bed1", "art": "petrantwortlich", "icon": "6027", "kind": "mia"},
-        {"schluessel": "bed2", "art": "petrantwortlich", "icon": "6027", "kind": "finn"},
+        {"schluessel": "cook", "art": "verantwortlich", "icon": "2342"},
+        {"schluessel": "bed1", "art": "verantwortlich", "icon": "6027", "kind": "mia"},
+        {"schluessel": "bed2", "art": "verantwortlich", "icon": "6027", "kind": "finn"},
     ],
-    "default_petrantwortlichkeiten": {
+    "default_verantwortlichkeiten": {
         # Index 0=Mo … 6=So. bring ist Mo emil, Di petra.
         "bring": ["emil", "petra", "emil", "petra", "emil", None, None],
     },

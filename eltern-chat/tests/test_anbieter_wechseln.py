@@ -30,7 +30,7 @@ from skills.anbieter_wechseln import (
     DONE_PRIVAT_PFAD_A,
     ERGEBNIS_ABGELEHNT,
     ERGEBNIS_GEWECHSELT,
-    ERGEBNIS_UNPETRAENDERT,
+    ERGEBNIS_UNVERAENDERT,
     KEY_INVALID,
     NOT_AUTHORIZED,
     REJECT_ANBIETER,
@@ -241,7 +241,7 @@ def test_same_provider_quittung_claude():
         current_provider_name="claude",
         _validate=_validate_ok)
 
-    assert result.ergebnis == ERGEBNIS_UNPETRAENDERT
+    assert result.ergebnis == ERGEBNIS_UNVERAENDERT
     # Kein Schreiben in den ZD-Speicher.
     assert zd.writes == [], "Same-Provider: darf nicht schreiben"
     assert zd.snapshot() == snapshot_vorher, "ZD-Inhalt muss byte-gleich bleiben"
@@ -263,7 +263,7 @@ def test_same_provider_quittung_mistral():
         current_provider_name="mistral",
         _validate=_validate_ok)
 
-    assert result.ergebnis == ERGEBNIS_UNPETRAENDERT
+    assert result.ergebnis == ERGEBNIS_UNVERAENDERT
     assert zd.writes == []
     assert zd.snapshot() == snapshot_vorher
 
@@ -297,7 +297,7 @@ def test_validierungsfehler_alter_eintrag_byte_gleich():
 
     # ZD unverändert (ONB-12).
     assert zd.snapshot() == snapshot_vorher, "ZD muss byte-gleich bleiben"
-    assert result.ergebnis == ERGEBNIS_UNPETRAENDERT
+    assert result.ergebnis == ERGEBNIS_UNVERAENDERT
 
     # Fehlermeldung im Privatchat — kein Key im Text (ONB-8).
     privat_texte = [m["text"] for m in tg.sent if m["chat_id"] == 11]
@@ -367,7 +367,7 @@ def test_schreibfehler_alter_eintrag_byte_gleich():
 
     # ZD unverändert (byte-gleich).
     assert zd.snapshot() == snapshot_vorher, "ZD muss byte-gleich bleiben"
-    assert result.ergebnis == ERGEBNIS_UNPETRAENDERT
+    assert result.ergebnis == ERGEBNIS_UNVERAENDERT
 
     # Fehlermeldung im Privatchat.
     privat_texte = [m["text"] for m in tg.sent if m["chat_id"] == 11]
@@ -490,7 +490,7 @@ def test_unbekannter_anbieter_reprompt():
 
 def test_timeout_anbieter_wahl():
     """Gibt next_message() None zurück während der Anbieter-Wahl, ist das
-    Ergebnis ERGEBNIS_UNPETRAENDERT ohne Schreiben."""
+    Ergebnis ERGEBNIS_UNVERAENDERT ohne Schreiben."""
     tg = FakeTelegram(members=_members(42))
     zd = FakeZd(initial={zd_name_provider_api_key("claude"): "old"})
     snapshot_vorher = zd.snapshot()
@@ -502,7 +502,7 @@ def test_timeout_anbieter_wahl():
         current_provider_name="claude",
         _validate=_validate_ok)
 
-    assert result.ergebnis == ERGEBNIS_UNPETRAENDERT
+    assert result.ergebnis == ERGEBNIS_UNVERAENDERT
     assert zd.snapshot() == snapshot_vorher
 
 
@@ -597,7 +597,7 @@ def test_set_multi_atomic_kein_partial_state():
         _validate=_validate_ok)
 
     # Skill meldet Fehler an User.
-    assert result.ergebnis == ERGEBNIS_UNPETRAENDERT
+    assert result.ergebnis == ERGEBNIS_UNVERAENDERT
     privat_texte = [m["text"] for m in tg.sent if m["chat_id"] == 11]
     assert any(WRITE_FAILED in t for t in privat_texte)
 

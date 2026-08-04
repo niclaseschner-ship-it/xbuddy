@@ -1,6 +1,6 @@
 """Plan-Buddy — Konfigurations-Auflösung (PLAN-6, PLAN-10, PLAN-28, PLAN-34).
 
-Siehe specs/buddies/plan.md §9. Slot-Definitionen und Default-Petrantwort-
+Siehe specs/buddies/plan.md §9. Slot-Definitionen und Default-Verantwort-
 lichkeiten sind **Daten**, keine Code-Konstanten (E-PLAN-2): sie stehen in
 einer Config-Datei, `plan/plan.example.json` dokumentiert das Format.
 
@@ -10,7 +10,7 @@ ohne sinnvollen Default (Google-Kalender-ID) werfen ConfigError, wenn sie
 fehlen.
 
 Die Slot-Liste ist die zentrale Datei-getriebene Struktur: jeder Slot hat
-einen stabilen Schlüssel, eine Art (`petrantwortlich` | `kalender-read`),
+einen stabilen Schlüssel, eine Art (`verantwortlich` | `kalender-read`),
 ein Icon und — bei Kalender-read-Slots — das zugehörige Kind (PLAN-6).
 
 Der Aktivitäts-Katalog (`aktivitaeten`-Section in plan.json) ist die zweite
@@ -28,14 +28,14 @@ logger = logging.getLogger(__name__)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # PLAN-6: die zwei Slot-Arten (V1.4 — Sprint 2, neue Strings).
-SLOT_PETRANTWORTLICH = "petrantwortlich"
+SLOT_VERANTWORTLICH = "verantwortlich"
 SLOT_KALENDER_READ = "kalender-read"
-SLOT_ARTEN = (SLOT_PETRANTWORTLICH, SLOT_KALENDER_READ)
+SLOT_ARTEN = (SLOT_VERANTWORTLICH, SLOT_KALENDER_READ)
 
 # PLAN-6 V1.4 — Slot-Art-Migrations-Lesephase: alte Strings werden mit
 # WARN-Log akzeptiert; neu geschriebene Slots tragen die neuen Strings.
 _LEGACY_SLOT_ART = {
-    "erwachsenen-slot": SLOT_PETRANTWORTLICH,
+    "erwachsenen-slot": SLOT_VERANTWORTLICH,
     "aktivitaets-slot": SLOT_KALENDER_READ,
 }
 
@@ -104,8 +104,8 @@ class Slot:
         self.kind = kind
         self.label = label
 
-    def ist_petrantwortlich_slot(self):
-        return self.art == SLOT_PETRANTWORTLICH
+    def ist_verantwortlich_slot(self):
+        return self.art == SLOT_VERANTWORTLICH
 
     def ist_kalender_read_slot(self):
         return self.art == SLOT_KALENDER_READ
@@ -146,14 +146,14 @@ class Aktivitaet:
 class Config:
     """Aufgelöste Plan-Buddy-Instanz-Konfiguration (PLAN-28)."""
 
-    def __init__(self, slots, default_petrantwortlichkeiten, fenster_lesekind,
+    def __init__(self, slots, default_verantwortlichkeiten, fenster_lesekind,
                  fenster_kleinkind, wochenstart, zeitzone, db_datei, kalender_id,
                  familie_origin_url, aktivitaeten=None):
         # PLAN-6: Slot-Liste (Reihenfolge = Rail-Reihenfolge).
         self.slots = slots
         # PLAN-10: Default-Zuweisungen je Slot-Schlüssel und Wochentag.
         # Form: { slot_schluessel: { wochentag(0-6): person_id | None } }
-        self.default_petrantwortlichkeiten = default_petrantwortlichkeiten
+        self.default_verantwortlichkeiten = default_verantwortlichkeiten
         self.fenster_lesekind = fenster_lesekind
         self.fenster_kleinkind = fenster_kleinkind
         self.wochenstart = wochenstart
@@ -175,7 +175,7 @@ class Config:
         return None
 
     def erwachsenen_slots(self):
-        return [s for s in self.slots if s.ist_petrantwortlich_slot()]
+        return [s for s in self.slots if s.ist_verantwortlich_slot()]
 
     def aktivitaets_slots(self):
         return [s for s in self.slots if s.ist_kalender_read_slot()]
@@ -211,7 +211,7 @@ def _load_file(path):
 def _migriere_slot_art(schluessel, art):
     """Slot-Art-Migrations-Lesephase (PLAN-6 V1.4 — Sprint 2).
 
-    Ein alter Art-String (`erwachsenen-slot` → `petrantwortlich`,
+    Ein alter Art-String (`erwachsenen-slot` → `verantwortlich`,
     `aktivitaets-slot` → `kalender-read`) wird mit WARN-Log auf den neuen
     String übersetzt; neue Strings werden unverändert durchgereicht. So
     akzeptiert der Parser bestehende plan.json-Dateien ohne Deploy-Block —
@@ -315,22 +315,22 @@ def _parse_aktivitaeten(raw_aktivitaeten):
 
 
 def _parse_defaults(raw_defaults, slots):
-    """Baut die Default-Petrantwortlichkeiten aus der Config (PLAN-10).
+    """Baut die Default-Verantwortlichkeiten aus der Config (PLAN-10).
 
     Erwartet `{ slot_schluessel: [p0, p1, p2, p3, p4, p5, p6] }` — eine
     Personen-`id` (oder null) je Wochentag (0=Mo … 6=So). Kürzere Listen
     werden mit None aufgefüllt. Defaults sind leer, wenn der Abschnitt fehlt
     (PLAN-28). Nur Erwachsenen-Slots können Defaults tragen.
     """
-    erwachsenen_keys = {s.schluessel for s in slots if s.ist_petrantwortlich_slot()}
+    erwachsenen_keys = {s.schluessel for s in slots if s.ist_verantwortlich_slot()}
     out = {}
     for slot_key, by_day in (raw_defaults or {}).items():
         if slot_key not in erwachsenen_keys:
             raise ConfigError(
-                "Default-Petrantwortlichkeit für unbekannten/Nicht-Erwachsenen-Slot %r"
+                "Default-Verantwortlichkeit für unbekannten/Nicht-Erwachsenen-Slot %r"
                 % slot_key)
         if not isinstance(by_day, list):
-            raise ConfigError("Default-Petrantwortlichkeit %r ist keine Liste" % slot_key)
+            raise ConfigError("Default-Verantwortlichkeit %r ist keine Liste" % slot_key)
         tage = {}
         for wd in range(7):
             tage[wd] = by_day[wd] if wd < len(by_day) else None
@@ -355,7 +355,7 @@ def resolve(config_path=None, env=None):
     # PLAN-6: Slots — Datei oder leer.
     slots = _parse_slots(file_cfg.get("slots") or [])
     # PLAN-10: Defaults — Datei oder leer.
-    defaults = _parse_defaults(file_cfg.get("default_petrantwortlichkeiten") or {}, slots)
+    defaults = _parse_defaults(file_cfg.get("default_verantwortlichkeiten") or {}, slots)
     # PLAN-12/PLAN-28: Aktivitäts-Katalog — Datei oder None (→ CONFIG-4-Fallback
     # AKTIVITAETEN_V1 in aktivitaeten.py; None signalisiert: Sektion fehlt).
     raw_akt = file_cfg.get("aktivitaeten")
@@ -392,7 +392,7 @@ def resolve(config_path=None, env=None):
 
     return Config(
         slots=slots,
-        default_petrantwortlichkeiten=defaults,
+        default_verantwortlichkeiten=defaults,
         fenster_lesekind=fenster_lesekind,
         fenster_kleinkind=fenster_kleinkind,
         wochenstart=wochenstart,

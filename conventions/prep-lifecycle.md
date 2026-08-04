@@ -2,7 +2,7 @@
 
 Wie ein Ticket im prep-Lebenszyklus (von `status:spec` über das Reife-Urteil bis
 `status:ready`) **mechanisch** reift — nicht „der Skill denkt dran". Diese
-Konvention petrankert die PW-26-Ratifizierung (xbuddy-prozess#26, 2026-06-09) im
+Konvention verankert die PW-26-Ratifizierung (xbuddy-prozess#26, 2026-06-09) im
 Code-Repo. Maschinell durchgesetzt durch `~/.claude/hooks/status_rollback_guard.py`;
 Bauregeln hier, Implementations-Anker am Ende.
 

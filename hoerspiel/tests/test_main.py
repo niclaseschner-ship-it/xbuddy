@@ -886,7 +886,7 @@ def test_cycle_toggle_ring_wrap_around():
         main_mod.runtime.pop("familie_client", None)
 
 
-def test_cycle_toggle_solo_bleibt_unpetraendert(client_mit_familie):
+def test_cycle_toggle_solo_bleibt_unveraendert(client_mit_familie):
     """AC3: 1-Instanz-Fall (nur mia im Snapshot ohne Finn) → Solo-Anzeige.
     Kein Wechsel-Link, face-pille--solo bleibt.
     Verwende client ohne finn im Snapshot (nur mia).

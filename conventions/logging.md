@@ -15,7 +15,7 @@ journalctl ist textorientiert.
 ### LOG-2 — INFO im Betrieb, DEBUG via Konfig-Override
 Im Produktiv-Betrieb läuft jede Komponente auf `INFO`. `DEBUG` wird
 situativ aktiviert (Konfigurations-Datei oder ENV-Override, vgl. CONFIG-1).
-`WARNING` für Drift-Symptome (z. B. petraltete Config-Schlüssel ignoriert),
+`WARNING` für Drift-Symptome (z. B. veraltete Config-Schlüssel ignoriert),
 `ERROR` für Fehler, die Aufmerksamkeit erfordern.
 
 ### LOG-3 — Keine PII in Logs

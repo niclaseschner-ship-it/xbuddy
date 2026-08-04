@@ -110,7 +110,7 @@ Skill das **gewählte** Piktogramm als Einzel-Foto im propose-Schritt
 Familie sieht visuell, welches Piktogramm gleich gespeichert wird, ohne
 Emoji-Krücke im Text (E-PAS-4). Die ID selbst erscheint im Text nicht
 mehr; sie ist beim Wahl-Album (PAS-4 /
-TASK-10b) als Mapping im LLM-Begleittext petrarbeitet, und der `propose`-
+TASK-10b) als Mapping im LLM-Begleittext verarbeitet, und der `propose`-
 Bubble zeigt das gewählte Piktogramm via `tg.send_photo` (analog Album-
 Helper, ohne Caption — der Vorschlags-Text mit der Aktivität samt
 Piktogramm-Hinweis kommt aus dem LLM).
