@@ -1,5 +1,5 @@
 {
-  "_comment": "Beispiel-Wunschliste klasse=wunsch (CONFIG-3, ESSEN-7/ESSEN-25). Die echte wuensche.json liegt neben dem Code und ist gitignored. Eltern-Einkaufsliste liegt separat in einkaufsliste.json (ESSEN-7). Globaler Quellen-Zähler liegt in zaehler.json (ESSEN-5).",
+  "_comment": "Beispiel-Wunschliste Familie Sonntag, klasse=wunsch (CONFIG-3, ESSEN-7/ESSEN-25) für den Demo-Modus (#1764). Die echte wuensche.json liegt gitignored neben dem Code. bild_ref sind gecachte ARASAAC-Piktogramme.",
   "wuensche": [
     {
       "id": "kind:1",
@@ -22,6 +22,50 @@
       "klasse": "wunsch",
       "abgehakt": false,
       "erstellt_am": "2026-06-09T10:05:00+02:00"
+    },
+    {
+      "id": "kind:3",
+      "label": "Banane",
+      "bild_ref": "2530",
+      "item_id": "banane",
+      "quelle": "kind",
+      "kategorie": "obst_gemuese",
+      "klasse": "wunsch",
+      "abgehakt": false,
+      "erstellt_am": "2026-06-09T10:06:00+02:00"
+    },
+    {
+      "id": "kind:4",
+      "label": "Brot",
+      "bild_ref": "2494",
+      "item_id": "brot",
+      "quelle": "kind",
+      "kategorie": "sonstiges",
+      "klasse": "wunsch",
+      "abgehakt": true,
+      "erstellt_am": "2026-06-09T10:07:00+02:00"
+    },
+    {
+      "id": "kind:5",
+      "label": "Joghurt",
+      "bild_ref": "2618",
+      "item_id": "joghurt",
+      "quelle": "kind",
+      "kategorie": "sonstiges",
+      "klasse": "wunsch",
+      "abgehakt": false,
+      "erstellt_am": "2026-06-09T10:08:00+02:00"
+    },
+    {
+      "id": "kind:6",
+      "label": "Karotte",
+      "bild_ref": "2619",
+      "item_id": "karotte",
+      "quelle": "kind",
+      "kategorie": "obst_gemuese",
+      "klasse": "wunsch",
+      "abgehakt": false,
+      "erstellt_am": "2026-06-09T10:09:00+02:00"
     }
   ]
 }

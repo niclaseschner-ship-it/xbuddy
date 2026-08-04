@@ -113,6 +113,75 @@ print("[demo] Kalender-Demo: %d Termine (Woche ab %s) → %s"
       % (len(items), monday.date(), out_path))
 PYCAL
 
+# Hörspiel-Alben (#1764): der /display/hoerspiel/<kind>/alben-Grid liest Album-
+# Manifeste aus dem Datendir (nicht aus example.json) → für die Demo seeden wir
+# 3 freigegebene Alben (Tiefenschnitt-Struktur wie live, aber generische Titel —
+# KEINE echten Kind-/Freundes-Namen/Orte) + das generische Default-Cover. Kein
+# Audio nötig: die Alben-Liste zeigt Titel + Cover. Demo-Slug: mia.
+HSP_KID="mia"
+HSP_ALBEN="$DEMO_DIR/hoerspiel/alben"
+HSP_SHARED="$DEMO_DIR/hoerspiel/shared-assets"
+mkdir -p "$HSP_ALBEN" "$HSP_SHARED"
+cp "$REPO/tools/demo/assets/hoerspiel-cover-default.jpg" "$HSP_SHARED/cover-default.jpg"
+python3 - "$HSP_ALBEN" "$HSP_KID" <<'PYHSP'
+import json, sys
+alben_dir, kid = sys.argv[1], sys.argv[2]
+cover = "/display/hoerspiel/%s/data/shared-assets/cover-default.jpg" % kid
+# (nummer, titel) — generisch, ohne echte Namen/Orte.
+ALBEN = [
+    (1, "Die Schatzsuche im Garten"),
+    (2, "Das Wettrennen zum großen Stein"),
+    (3, "Der mutige Ausflug zum Leuchtturm"),
+]
+index = {}
+for nummer, titel in ALBEN:
+    folge = "folge-%d" % nummer
+    index["demo%02d0000000000" % nummer] = folge
+    tracks = [{
+        "id": "intro-shimmer", "position": 1, "art": "intro",
+        "audio-asset": "/display/hoerspiel/%s/data/shared-assets/intro_shimmer.mp3" % kid,
+        "dauer-sek": 0,
+    }]
+    for pos in range(2, 6):  # 4 Inhalts-Tracks (Tiefenschnitt-Struktur wie live)
+        tracks.append({
+            "id": "%s-track-%02d" % (folge, pos), "position": pos, "art": "inhalt",
+            "audio-asset": "/display/hoerspiel/%s/data/alben/%s/audio/track-%02d.mp3"
+                           % (kid, folge, pos),
+            "dauer-sek": 180 + pos * 12, "titel": None,
+        })
+    manifest = {
+        "id": folge, "nummer": nummer, "titel": titel, "voice": "shimmer",
+        "erstellt-am": "2026-06-12", "freigegeben": True,
+        "cover-asset": cover, "pikto-hauptbegriffe": [], "tracks": tracks,
+    }
+    import os
+    os.makedirs(os.path.join(alben_dir, folge), exist_ok=True)
+    with open(os.path.join(alben_dir, folge, "manifest.json"), "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, ensure_ascii=False, indent=2)
+with open("%s/.index.json" % alben_dir, "w", encoding="utf-8") as fh:
+    json.dump(index, fh, ensure_ascii=False, indent=2)
+print("[demo] Hörspiel-Demo: %d Alben + Cover → %s (Slug %s)"
+      % (len(ALBEN), alben_dir, kid))
+PYHSP
+
+# Personen-Fotos (#1764): familie.example.json erwartet emil.jpg/mia.jpg… — ohne
+# die Dateien zeigt das plan-Display kaputte Icons. Wir mappen die generischen
+# Demo-Fotos (specs/mockups/…/fotos/demo-*.jpg) auf die erwarteten Namen.
+FOTO_SRC="$REPO/specs/mockups/plan-einstellungen/assets/fotos"
+FOTO_DST="$DEMO_DIR/familie/fotos"
+mkdir -p "$FOTO_DST"
+if [ -d "$FOTO_SRC" ]; then
+  cp "$FOTO_SRC/demo-a1.jpg" "$FOTO_DST/emil.jpg"
+  cp "$FOTO_SRC/demo-a2.jpg" "$FOTO_DST/lena.jpg"
+  cp "$FOTO_SRC/demo-a1.jpg" "$FOTO_DST/jonas.jpg"
+  cp "$FOTO_SRC/demo-a2.jpg" "$FOTO_DST/petra.jpg"
+  cp "$FOTO_SRC/demo-k1.jpg" "$FOTO_DST/mia.jpg"
+  cp "$FOTO_SRC/demo-k2.jpg" "$FOTO_DST/finn.jpg"
+  echo "[demo] Personen-Fotos: 6 Demo-Fotos → $FOTO_DST"
+else
+  echo "[demo] WARN: Demo-Foto-Quelle fehlt: $FOTO_SRC" >&2
+fi
+
 if [ "${1:-}" = "--env" ]; then
   cat <<ENV
 
@@ -130,6 +199,9 @@ export ESSEN_DATA_DIR="$DEMO_DIR/essen"
 export PANEL_REGISTRY_FILE="$DEMO_DIR/panel/panels.json"
 export KIBUDDY_CONFIG_FILE="$DEMO_DIR/kibuddy/kibuddy.json"
 export HOERSPIEL_DATA_ROOT="$DEMO_DIR/hoerspiel"
+# Demo-Hörspiel-Instanz (#1764): Slug mia — matcht die Album-Cover-/Audio-Pfade.
+# Display: /display/hoerspiel/mia/alben.
+export HOERSPIEL_KIND_ID="mia"
 ENV
 fi
 

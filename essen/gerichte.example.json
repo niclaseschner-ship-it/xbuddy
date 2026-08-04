@@ -1,12 +1,48 @@
 {
-  "_comment": "Beispiel-Gerichte-Katalog (CONFIG-3, ESSEN-14/25). Die echte gerichte.json liegt neben dem Code und ist gitignored. Initialzustand: leer.",
+  "_comment": "Beispiel-Gerichte-Katalog Familie Sonntag (CONFIG-3, ESSEN-14/25) für den Demo-Modus (#1764). Die echte gerichte.json liegt gitignored neben dem Code. bild_ref sind gecachte ARASAAC-Piktogramme (kein foto_ref → keine echten Essens-Fotos nötig, keine kaputten Bilder).",
   "gerichte": [
     {
       "id": "1",
+      "label": "Spaghetti",
+      "bild_ref": "2383",
+      "kategorie": "gericht"
+    },
+    {
+      "id": "2",
+      "label": "Nudeln mit Tomatensoße",
+      "bild_ref": "8652",
+      "kategorie": "gericht"
+    },
+    {
+      "id": "3",
+      "label": "Lasagne",
+      "bild_ref": "9051",
+      "kategorie": "gericht"
+    },
+    {
+      "id": "4",
+      "label": "Risotto",
+      "bild_ref": "2259",
+      "kategorie": "gericht"
+    },
+    {
+      "id": "5",
+      "label": "Eintopf",
+      "bild_ref": "2405",
+      "kategorie": "gericht"
+    },
+    {
+      "id": "6",
       "label": "Pizza",
       "bild_ref": "2527",
       "kategorie": "gericht"
+    },
+    {
+      "id": "7",
+      "label": "Burger mit Fleisch",
+      "bild_ref": "2316",
+      "kategorie": "gericht"
     }
   ],
-  "zaehler": 1
+  "zaehler": 7
 }
