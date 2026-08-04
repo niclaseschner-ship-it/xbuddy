@@ -1,14 +1,36 @@
 # App-Panel — Spec     (ID-Präfix: PANEL)
 
-> Status: V1-Kern · Refs #58
+> ⚠️ **ZIEL-ZUSTAND geändert durch RAT-31 (#1339), 2026-07-27/29 — KEIN ROUTER MEHR.**
+> Der zentrale Router-/State-Hub ist gelöscht (`router.md` ENTFALLEN, E6f #1568).
+> Damit gilt das ursprüngliche Panel-Routing-Modell **„Tap → Event an den Router →
+> Router schaltet das Display"** nicht mehr. Ziel-Zustand (RAT-31 E6b/E6f, Ein-Gerät):
+>
+> - Das Panel ist die **linke Nav-Leiste der Heim-Shell** (`heim-shell.md` SHELL-3);
+>   ein Kachel-Tap treibt das **rechte Buddy-Pane same-origin über `seiten/`** —
+>   **ein Gerät = ein Ziel**, kein Router-Fanout, keine `panel_id→display_id`-
+>   Indirektion (ROU-32 entfällt).
+> - **Bleibt (re-home same-origin):** Kachel-Kuratierung — `tiles.json`,
+>   `config.json`, `panel_id`, der PBE-4-Editor (#1400) — und das Ausliefern der
+>   `/controller/app-panel/<id>/`-Assets über den seiten-Dienst (SREG-17, siehe
+>   PANEL-2-Kasten).
+> - **Entfällt ersatzlos:** die `display_id`-Bindung, `router_url` und der
+>   Router-Proxy (`panel-registry.md` PREG-7/PREG-9) sowie jeder Verweis auf den
+>   Router als Routing-Instanz (ROU-1/ROU-18/ROU-24).
+>
+> Wo diese Spec unten noch „Router" als Routing-/Serving-Instanz nennt, ist der
+> Ziel-Zustand oben maßgeblich. Diese Spec bleibt als Anker erhalten.
+> Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`,
+> `decisions/RAT-35-registry-frei-multi-geraet.md`, Epic #1339.
+>
+> Status: V1-Kern (RAT-31-umgeschrieben) · Refs #58 #1339
 
 Ein zweiter Controller-Typ neben der Figuren-Erkennung
 ([`figuren-erkennung.md`](figuren-erkennung.md)): ein Bildschirm mit
 Kacheln, je Kachel eine XBuddy-App-View. Eine Familie ohne physische
-Figuren tippt eine Kachel → ein Event geht an den Router → der Router
-schaltet das Display auf die zugehörige View. Welche Kacheln ein Panel
-zeigt, steht modular in einer Datei neben dem Controller-Code; das Panel
-selbst entscheidet **nichts** über Routing (ROU-1).
+Figuren tippt eine Kachel → das rechte Buddy-Pane der Heim-Shell schaltet
+same-origin auf die zugehörige View (RAT-31: **kein Router**, siehe ZIEL-Kopf).
+Welche Kacheln ein Panel zeigt, steht modular in einer Datei neben dem
+Controller-Code; das Panel selbst entscheidet **nichts** über Routing (PANEL-1).
 
 **V1-Scope:** Kachel-Panel als zweiter Controller-Typ; modulare
 Kachel-Konfiguration als Datei (`tiles.json`); zwei Event-Typen
@@ -49,13 +71,20 @@ ohne Code-Änderung** in den Bestand kommt:
 ## 1. Panel-Funktion
 
 ### PANEL-1 — Panel & Routing-Trennung
-Das Panel ist ein Kachel-Bildschirm; je Kachel eine App-View. Ein Tap
-auf eine Kachel sendet ein Event an den Router. Der **Router** entscheidet
-das Routing (Display-Auswahl, Ziel-URL) — das Panel **niemals selbst**.
-Diese Trennung folgt ROU-1 und ist analog zur Figuren-Erkennung: der
-Controller liefert Semantik, der Router macht Routing.
+Das Panel ist ein Kachel-Bildschirm; je Kachel eine App-View. Ein Tap auf eine
+Kachel **treibt same-origin über den seiten-Dienst** das rechte Buddy-Pane der
+Heim-Shell auf die zugehörige View (`heim-shell.md` SHELL-3; **ein Gerät = ein
+Ziel**). Das Panel liefert nur **Semantik** — welche App/View die Kachel meint
+(PANEL-7-Descriptor) — und **entscheidet niemals selbst** über die Ziel-Auflösung;
+die Trennung „Controller liefert Semantik, das Routing macht der Dienst" bleibt
+(analog Figuren-Erkennung).
 
-*Tickets:* #58
+**RAT-31 (#1339):** Die Routing-Instanz ist **nicht** mehr ein zentraler Router
+(ROU-1 ENTFALLEN, `router.md`), sondern der same-origin-Ingest im seiten-Dienst.
+Es gibt keine `panel_id→display_id`-Indirektion und keine Display-Auswahl mehr —
+das eine Gerät ist das Ziel (siehe ZIEL-Kopf oben).
+
+*Tickets:* #58 · Router-Entkopplung RAT-31 (#1339)
 
 ### PANEL-2 — URL-Verortung
 Die Panel-Seite wird unter `/controller/app-panel/<id>` ausgeliefert —
