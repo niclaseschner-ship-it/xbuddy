@@ -35,9 +35,25 @@ def _lade_map(pfad: str) -> dict[str, str]:
     return json.loads(open(pfad, encoding="utf-8").read())
 
 
+# Private-/Tailnet-IPs (RFC1918 + CGNAT/Tailscale 100.64–127) → Doku-Range
+# 192.0.2.x (TEST-NET-1, RFC 5737). Generisch, damit KEINE echten IPs im
+# getrackten Skript stehen (#1768b). Die IPs sind zwar in #1759 als inert
+# akzeptiert, im Demo-Transcript aber ein Schönheitsfehler (Test-URLs im Chat).
+_IP_RX = re.compile(
+    r"\b(?:10|127|192\.168|172\.(?:1[6-9]|2\d|3[01])"
+    r"|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7]))"
+    r"(?:\.\d{1,3}){1,3}\b")
+
+
+def _scrub_ips(text: str) -> str:
+    """Ersetzt private/Tailnet-IPs durch eine Doku-IP (192.0.2.x)."""
+    return _IP_RX.sub("192.0.2.1", text)
+
+
 def _scrubber(mapping: dict[str, str]):
-    """Baut eine Funktion text→text: Wortgrenzen + optionales Genitiv/Plural-s,
-    case-insensitiv (fängt auch `nekos`). Längste Schlüssel zuerst (Teil-Overlap).
+    """Baut eine Funktion text→text: Namens-Scrub (Wortgrenzen + optionales
+    Genitiv/Plural-s, case-insensitiv — fängt auch `nekos`) + IP-Scrub. Längste
+    Schlüssel zuerst (Teil-Overlap).
     """
     paare = sorted(mapping.items(), key=lambda kv: len(kv[0]), reverse=True)
     muster = [(re.compile(r"\b%s(s?)\b" % re.escape(k), re.IGNORECASE), v) for k, v in paare]
@@ -45,7 +61,7 @@ def _scrubber(mapping: dict[str, str]):
     def scrub(text: str) -> str:
         for rx, ersatz in muster:
             text = rx.sub(lambda m, e=ersatz: e + (m.group(1) or ""), text)
-        return text
+        return _scrub_ips(text)
     return scrub
 
 
