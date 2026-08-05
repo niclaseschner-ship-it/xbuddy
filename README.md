@@ -127,12 +127,17 @@ Der Stack deckt auch die **Eltern-Sicht** ab (#1768): die PWA-Mini-Apps laufen i
 `observe`-Modus ohne Cookie — `/seiten/essen/einkauf/`, `/seiten/plan/einstellungen/`,
 `/seiten/routine/anpassen`, `/seiten/hoerspiel/mia/eltern`.
 
-Für die **Eltern-Chat-Sicht** (Telegram-Bot, kein Web-View) bäckt
-[`tools/demo/chat_transcript/`](tools/demo/chat_transcript/) einen echten,
-**anonymisierten** Verlauf (Familie Sonntag) zu einer statischen Telegram-Look-Seite.
-⚠️ **Privacy-Gate:** Scrub-Map und die generierte Transcript-Datei sind gitignored;
-die finale Seite geht **nie ohne Hand-Review** ins public Repo (automatischer
-Namens-Scrub reicht nicht — gebeugte Formen / externe Kontakte / Orte).
+Für die **Eltern-Chat-Sicht** (Telegram-Bot, kein Web-View) gibt es eine statische
+Telegram-Look-Seite:
+[`tools/demo/chat_transcript/eltern-chat-sonntag.html`](tools/demo/chat_transcript/eltern-chat-sonntag.html)
+— gebacken aus dem **synthetischen** `synthetic-sonntag.json` (erfundener
+Familie-Sonntag-Chat, feature-zeigend, **null echter Familieninhalt**; #1773).
+Direkt im Browser öffnen oder `tools/demo/shoot.sh tools/demo/chat_transcript/eltern-chat-sonntag.html`.
+
+> Der Real-Chat-Scrub (`build_transcript.py` aus `conversations.db`) bleibt ein
+> **Dev-Tool** und wird NICHT fürs public Transcript benutzt — automatischer
+> Namens-Scrub macht den *Inhalt* nicht unprivat (Details:
+> [`PUBLISH_STATUS.md`](tools/demo/chat_transcript/PUBLISH_STATUS.md)).
 
 Details: [`tools/demo/seed_demo.sh`](tools/demo/seed_demo.sh) (#1725),
 [`run_stack.sh`](tools/demo/run_stack.sh) / [`proxy.py`](tools/demo/proxy.py) /

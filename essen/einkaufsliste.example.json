@@ -1,0 +1,71 @@
+{
+  "_comment": "Beispiel-Einkaufsliste Familie Sonntag, klasse=einkauf (ESSEN-7/ESSEN-20) für den Demo-Modus (#1773). Die echte einkaufsliste.json liegt gitignored neben dem Code. bild_ref sind gecachte ARASAAC-Piktogramme.",
+  "wuensche": [
+    {
+      "id": "einkauf:1",
+      "label": "Milch",
+      "bild_ref": "2445",
+      "item_id": "milch",
+      "quelle": "eltern",
+      "kategorie": "sonstiges",
+      "klasse": "einkauf",
+      "abgehakt": false,
+      "erstellt_am": "2026-06-09T09:00:00+02:00"
+    },
+    {
+      "id": "einkauf:2",
+      "label": "Brot",
+      "bild_ref": "2494",
+      "item_id": "brot",
+      "quelle": "eltern",
+      "kategorie": "sonstiges",
+      "klasse": "einkauf",
+      "abgehakt": false,
+      "erstellt_am": "2026-06-09T09:01:00+02:00"
+    },
+    {
+      "id": "einkauf:3",
+      "label": "Apfel",
+      "bild_ref": "2462",
+      "item_id": "apfel",
+      "quelle": "kind",
+      "kategorie": "obst_gemuese",
+      "klasse": "einkauf",
+      "abgehakt": false,
+      "erstellt_am": "2026-06-09T09:02:00+02:00"
+    },
+    {
+      "id": "einkauf:4",
+      "label": "Banane",
+      "bild_ref": "2530",
+      "item_id": "banane",
+      "quelle": "kind",
+      "kategorie": "obst_gemuese",
+      "klasse": "einkauf",
+      "abgehakt": true,
+      "erstellt_am": "2026-06-09T09:03:00+02:00"
+    },
+    {
+      "id": "einkauf:5",
+      "label": "Eier",
+      "bild_ref": "2427",
+      "item_id": "eier",
+      "quelle": "eltern",
+      "kategorie": "sonstiges",
+      "klasse": "einkauf",
+      "abgehakt": false,
+      "erstellt_am": "2026-06-09T09:04:00+02:00"
+    },
+    {
+      "id": "einkauf:6",
+      "label": "Butter",
+      "bild_ref": "2461",
+      "item_id": "butter",
+      "quelle": "eltern",
+      "kategorie": "sonstiges",
+      "klasse": "einkauf",
+      "abgehakt": false,
+      "erstellt_am": "2026-06-09T09:05:00+02:00"
+    }
+  ]
+}

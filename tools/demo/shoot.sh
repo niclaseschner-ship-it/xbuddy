@@ -19,12 +19,20 @@ W="${DEMO_SHOT_W:-1920}"
 H="${DEMO_SHOT_H:-1080}"
 
 PFAD="${1:-/display/plan/woche}"
-NAME="$(echo "$PFAD" | sed -E 's#^/+##; s#/+$##; s#[/?=&]+#-#g')"
-[ -n "$NAME" ] || NAME="index"
 OUT_DIR="$DEMO_DIR/shots"
 mkdir -p "$OUT_DIR"
+# Lokale .html-Datei (z. B. das synthetische Eltern-Chat-Transcript, #1773) →
+# file://-URL; sonst ein Proxy-Pfad über den laufenden Stack.
+if [ -f "$PFAD" ] && [ "${PFAD##*.}" = "html" ]; then
+  ABS="$(cd "$(dirname "$PFAD")" && pwd)/$(basename "$PFAD")"
+  URL="file://$ABS"
+  NAME="$(basename "$PFAD" .html)"
+else
+  URL="http://127.0.0.1:$PROXY_PORT$PFAD"
+  NAME="$(echo "$PFAD" | sed -E 's#^/+##; s#/+$##; s#[/?=&]+#-#g')"
+fi
+[ -n "$NAME" ] || NAME="index"
 OUT="$OUT_DIR/$NAME.png"
-URL="http://127.0.0.1:$PROXY_PORT$PFAD"
 
 # Chromium finden (puppeteer/chromium-Pfad wie im Render-Gate, sonst PATH).
 CHROME=""
