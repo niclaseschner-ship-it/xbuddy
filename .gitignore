@@ -63,3 +63,8 @@ tools/llm/eval/privacy_gate_local.json
 
 # Laufzeit-Artefakt des seiten-Aggregators (landet bei cwd=Repo, z. B. Demo-Stack #1767).
 inventar.json
+
+# Chat-Transcript-Demo (#1768): das Scrub-Mapping trägt echte Namen, der
+# generierte Transcript ist Review-pflichtig (Privacy-Gate) — NIE public.
+tools/demo/chat_transcript/.scrub-map.json
+tools/demo/chat_transcript/transcript.*
