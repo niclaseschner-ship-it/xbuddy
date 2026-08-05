@@ -60,3 +60,6 @@ xbuddy-data-demo/
 # Familien-spezifische Domains fürs Privacy-Gate (#1759) — gitignored, PII-frei
 # bleibt der getrackte Code. Vorlage: privacy_gate_local.example.json.
 tools/llm/eval/privacy_gate_local.json
+
+# Laufzeit-Artefakt des seiten-Aggregators (landet bei cwd=Repo, z. B. Demo-Stack #1767).
+inventar.json
