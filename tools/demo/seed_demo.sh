@@ -32,6 +32,7 @@ SEED_KEYS=(
   "plan/plan.example.json"
   "essen/gerichte.example.json"
   "essen/wuensche.example.json"
+  "essen/einkaufsliste.example.json"
   "routine/routine.example.json"
   "wetter/wetter.example.json"
   "panel/panels.example.json"
@@ -45,6 +46,7 @@ seed_target() {
     "plan/plan.example.json")        echo "plan/plan.json" ;;
     "essen/gerichte.example.json")   echo "essen/gerichte.json" ;;
     "essen/wuensche.example.json")   echo "essen/wuensche.json" ;;
+    "essen/einkaufsliste.example.json") echo "essen/einkaufsliste.json" ;;
     "routine/routine.example.json")  echo "routine/routine_store.json" ;;
     "wetter/wetter.example.json")    echo "wetter/wetter.json" ;;
     "panel/panels.example.json")     echo "panel/panels.json" ;;

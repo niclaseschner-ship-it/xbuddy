@@ -1,0 +1,23 @@
+[
+  {"role":"user","text":"Was kannst du eigentlich alles?"},
+  {"role":"assistant","text":"Einiges 🙂 Ich helfe euch mit: 📅 Familien-Kalender (Termine eintragen, abfragen, aus Fotos lesen) · 🎧 Hörspiele für die Kinder · 🍝 Essensplanung & Einkaufsliste · ☀️ Wetter & Anzieh-Tipps · ✅ Morgen-Routinen. Tippe »Übersicht« für alle Mini-Apps."},
+  {"role":"user","text":"Mach Mia ein neues Hörspiel — die Schnecken aus dem Garten ziehen in ein größeres Terrarium um."},
+  {"role":"assistant","text":"Schöne Idee! 🐌 Ich baue »Das große Schnecken-Umzugsabenteuer« für Mia. Stimme: shimmer (weich). Vertonen? Antworte mit 👍 — dauert 1–5 Minuten."},
+  {"role":"user","text":"👍"},
+  {"role":"assistant","text":"Folge wird gebaut, ich melde mich …"},
+  {"role":"assistant","text":"Fertig! 🎉 »Das große Schnecken-Umzugsabenteuer« ist in der Hörspiel-App für Mia. Viel Spaß beim Zuhören! 🎧"},
+  {"role":"user","text":"Was haben wir die nächsten drei Wochenenden vor?"},
+  {"role":"assistant","text":"Hier die nächsten drei Wochenenden aus eurem Kalender: 📅 Sa 09.–So 10.08. — Sa: Finn hat Fußball (10:00) · So: Familienausflug (ganztags). 📅 Sa 16.–So 17.08. — Sa: Emils Kindergeburtstags-Einladung (15:00). 📅 Sa 23.–So 24.08. — nichts eingetragen, komplett frei! 🎉  Möchtest du für ein Wochenende etwas eintragen?"},
+  {"role":"user","text":"Ja, trag am 23. einen Ausflug zum See ein, 11 Uhr."},
+  {"role":"assistant","text":"Vorschlag: Neuer Termin »Ausflug zum See« am Sa 23.08., 11:00, für die ganze Familie. Eintragen? 👍"},
+  {"role":"user","text":"👍"},
+  {"role":"assistant","text":"Eingetragen ✅ — steht jetzt im Familien-Kalender."},
+  {"role":"user","text":"📷 [Foto vom Kita-Aushang] Kannst du die Termine vom Aushang übernehmen?"},
+  {"role":"assistant","text":"Ich hab 3 Termine erkannt: Mo 25.08. Sommerfest (15:00) · Fr 29.08. Ausflug Bauernhof · Di 02.09. Elternabend (19:30). Alle in den Kalender eintragen? 👍"},
+  {"role":"user","text":"📷 [Foto] Das gab's heute — Kürbissuppe. Leg's als Gericht an."},
+  {"role":"assistant","text":"Lecker 🎃 »Kürbissuppe« ist mit deinem Foto im Essens-Katalog. Beim nächsten Mal kannst du es mit einem Tipp einplanen."},
+  {"role":"user","text":"Was steht auf der Einkaufsliste?"},
+  {"role":"assistant","text":"Aktuell 🛒 Milch · Haferflocken · Äpfel · Nudeln · Karotten. Soll ich etwas hinzufügen?"},
+  {"role":"user","text":"Ich will Emils Morgen-Routine anpassen."},
+  {"role":"assistant","text":"Klar — hier ist der Routine-Editor für Emil: [Routine öffnen]. Schritte und Zeiten kannst du dort per Tipp ändern."}
+]
