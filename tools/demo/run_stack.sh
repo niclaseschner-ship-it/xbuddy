@@ -93,11 +93,16 @@ sleep 2
 cat <<INFO
 
 [demo] Stack läuft — Demo-Basis: http://127.0.0.1:$PROXY_PORT
-  Views (Familie Sonntag, gefüllt, keine Live-Daten):
+  Kiosk-/Display-Views (Familie Sonntag, gefüllt, keine Live-Daten):
     /display/plan/woche            Wochenplan (Demo-Kalender)
     /display/hoerspiel/mia/alben   Hörspiel-Alben
     /display/routine/…             Routine
     /display/wetter/…              Wetter
+  Eltern-Sicht — PWA-Mini-Apps (#1768, observe-Modus, ohne Cookie):
+    /seiten/essen/einkauf/         Einkauf
+    /seiten/plan/einstellungen/    Plan-Einstellungen
+    /seiten/routine/anpassen       Routine-Anpassen
+    /seiten/hoerspiel/mia/eltern   Hörspiel-Eltern
   Screenshots: tools/demo/shoot.sh <pfad>
   Beenden: Ctrl-C (Teardown räumt alle Prozesse + Ports).
 INFO

@@ -123,6 +123,17 @@ Demo-Kalender, ohne Google), `/display/hoerspiel/mia/alben`, `/display/routine/�
 öffnen. `Ctrl-C` räumt alles ab (Teardown). Screenshots:
 `tools/demo/shoot.sh /display/plan/woche`.
 
+Der Stack deckt auch die **Eltern-Sicht** ab (#1768): die PWA-Mini-Apps laufen im
+`observe`-Modus ohne Cookie — `/seiten/essen/einkauf/`, `/seiten/plan/einstellungen/`,
+`/seiten/routine/anpassen`, `/seiten/hoerspiel/mia/eltern`.
+
+Für die **Eltern-Chat-Sicht** (Telegram-Bot, kein Web-View) bäckt
+[`tools/demo/chat_transcript/`](tools/demo/chat_transcript/) einen echten,
+**anonymisierten** Verlauf (Familie Sonntag) zu einer statischen Telegram-Look-Seite.
+⚠️ **Privacy-Gate:** Scrub-Map und die generierte Transcript-Datei sind gitignored;
+die finale Seite geht **nie ohne Hand-Review** ins public Repo (automatischer
+Namens-Scrub reicht nicht — gebeugte Formen / externe Kontakte / Orte).
+
 Details: [`tools/demo/seed_demo.sh`](tools/demo/seed_demo.sh) (#1725),
 [`run_stack.sh`](tools/demo/run_stack.sh) / [`proxy.py`](tools/demo/proxy.py) /
 [`shoot.sh`](tools/demo/shoot.sh) (#1767). Die gebündelten Piktogramme stammen
