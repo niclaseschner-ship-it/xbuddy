@@ -23,7 +23,7 @@ PY="${PYTHON:-python3}"
 PROXY_PORT="${DEMO_PROXY_PORT:-8199}"
 declare -A PORT=(
   [familie]=8110 [plan]=8120 [wetter]=8130 [seiten]=8140
-  [routine]=8150 [essen]=8152 [hoerspiel]=8153
+  [routine]=8150 [essen]=8152 [hoerspiel]=8153 [photo]=8160
 )
 
 # ── Sicherheits-Sperre: NIE einen Live-Port (5000–5099) belegen (#1767-Befund 5).
@@ -71,8 +71,13 @@ start routine   routine.main   ROUTINE_STORE_FILE="$DEMO_DIR/routine/routine_sto
                                ROUTINE_FAMILIE_ORIGIN="$FAM_ORIGIN"
 start wetter    wetter.main    WETTER_CONFIG_FILE="$DEMO_DIR/wetter/wetter.json" \
                                WETTER_FAMILIE_ORIGIN="$FAM_ORIGIN"
-start essen     essen.main     ESSEN_DATA_DIR="$DEMO_DIR/essen" ESSEN_FAMILIE_ORIGIN="$FAM_ORIGIN"
+start essen     essen.main     ESSEN_WUENSCHE_FILE="$DEMO_DIR/essen/wuensche.json" \
+                               ESSEN_EINKAUFSLISTE_FILE="$DEMO_DIR/essen/einkaufsliste.json" \
+                               ESSEN_GERICHTE_FILE="$DEMO_DIR/essen/gerichte.json" \
+                               ESSEN_FAMILIE_ORIGIN="$FAM_ORIGIN"
 start hoerspiel hoerspiel.main HOERSPIEL_DATA_ROOT="$DEMO_DIR/hoerspiel" HOERSPIEL_KIND_ID=mia
+start photo     photo.main     PHOTO_LIBRARY_VERZEICHNIS="$DEMO_DIR/photo/medien" \
+                               PHOTO_FAMILIE_ORIGIN="$FAM_ORIGIN"
 
 # ── Reverse-Proxy: nginx-Pfad-Präfixe same-origin über die Alt-Ports ──────────
 ROUTES="/api/v1/familie/=${PORT[familie]}"
@@ -81,6 +86,7 @@ ROUTES+=";/display/routine/=${PORT[routine]};/api/v1/routine/=${PORT[routine]}"
 ROUTES+=";/display/wetter/=${PORT[wetter]};/api/v1/wetter/=${PORT[wetter]}"
 ROUTES+=";/display/hoerspiel/=${PORT[hoerspiel]};/api/v1/hoerspiel/=${PORT[hoerspiel]}"
 ROUTES+=";/api/v1/essen/=${PORT[essen]}"
+ROUTES+=";/display/photo/=${PORT[photo]};/api/v1/photo/=${PORT[photo]}"
 ROUTES+=";/display/_shared/=${PORT[seiten]};/api/v1/icons/=${PORT[seiten]}"
 ROUTES+=";/shell/=${PORT[seiten]};/seiten/=${PORT[seiten]};/controller/=${PORT[seiten]}"
 ROUTES+=";*=${PORT[seiten]}"   # Default: seiten

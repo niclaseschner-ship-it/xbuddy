@@ -33,6 +33,28 @@ das morgens nicht den Plan zeigt, ist schlechter als kein Board), **Einfachheit*
 Verlassen der Geräte-Ebene — harter Boden), **Offline-Fähigkeit** (mit Hub ohne
 Internet) und **Nicht-invasiv** (keine Push-Notifications, kein Engagement-Design).
 
+## Screenshots
+
+Aus dem reproduzierbaren Demo-Stack — **Familie Sonntag**, generische Demo-Daten,
+keine echten Familieninhalte (`tools/demo/run_stack.sh`):
+
+| Kind-Displays | |
+|---|---|
+| ![Wochenplan](docs/screenshots/plan-woche.png) | ![Morgen-Routine](docs/screenshots/routine-morgen.png) |
+| Wochenplan (wer holt ab, was ist heute) | Morgen-Routine (was muss ich tun) |
+| ![Wetter & Anziehen](docs/screenshots/wetter-heute.png) | ![Hörspiele](docs/screenshots/hoerspiel-alben.png) |
+| Wetter & Anzieh-Empfehlung | Hörspiel-Bibliothek |
+| ![Foto-Rahmen](docs/screenshots/photo-rahmen.png) | ![Einkaufsliste](docs/screenshots/einkauf.png) |
+| Foto-Rahmen | Einkaufsliste (Eltern-Mini-App) |
+
+| Eltern-Sicht | |
+|---|---|
+| ![Plan-Einstellungen](docs/screenshots/plan-einstellungen.png) | ![Eltern-Chat](docs/screenshots/eltern-chat-sonntag.png) |
+| Plan-Einstellungen (Mini-App) | Eltern-Chat (konversationell, Telegram) |
+
+> Alle Views + Neu-Erzeugen: [`docs/screenshots/`](docs/screenshots/). Der Eltern-Chat
+> ist ein **synthetischer** Beispiel-Verlauf (kein echter Chat-Inhalt).
+
 ## Einstieg
 
 **[`AGENTS.md`](AGENTS.md)** ist die tool-neutrale Karte des Repos — was wo liegt

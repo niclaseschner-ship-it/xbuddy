@@ -184,6 +184,32 @@ else
   echo "[demo] WARN: Demo-Foto-Quelle fehlt: $FOTO_SRC" >&2
 fi
 
+# Photo-Buddy-Rahmen (#1773-Folge): /display/photo/rahmen liest Medien aus einer
+# library (tools.medien_store) → für die Demo bauen wir sie aus den gebündelten
+# CC0-Fotos (tools/demo/assets/photos/, Unsplash-Lizenz, keine echten Familien-
+# fotos). Thumbnail = Vollbild (Demo, kein PIL nötig). Austauschbar: eigene Fotos.
+PHOTO_SRC="$REPO/tools/demo/assets/photos"
+PHOTO_DST="$DEMO_DIR/photo/medien"
+mkdir -p "$PHOTO_DST"
+if compgen -G "$PHOTO_SRC/*.jpg" >/dev/null 2>&1; then
+  PYTHONPATH="$REPO" python3 - "$PHOTO_SRC" "$PHOTO_DST" <<'PYPHOTO'
+import glob, os, sys
+from tools.medien_store import store
+src, dst = sys.argv[1], sys.argv[2]
+fotos = sorted(glob.glob(os.path.join(src, "*.jpg")))
+for n, f in enumerate(fotos, 1):
+    with open(f, "rb") as fh:
+        daten = fh.read()
+    mid = "demo%02d" % n
+    store.add(dst, id=mid, typ=store.TYP_FOTO, daten=daten,
+              dateiname="%s.jpg" % mid, thumbnail_daten=daten,
+              thumbnail_name="%s_thumb.jpg" % mid)
+print("[demo] Photo-Demo: %d Fotos → %s" % (len(fotos), dst))
+PYPHOTO
+else
+  echo "[demo] WARN: Photo-Bundle fehlt: $PHOTO_SRC" >&2
+fi
+
 if [ "${1:-}" = "--env" ]; then
   cat <<ENV
 
@@ -197,7 +223,11 @@ export PLAN_CONFIG_FILE="$DEMO_DIR/plan/plan.json"
 export PLAN_KALENDER_DEMO_FILE="$DEMO_DIR/plan/kalender-demo.json"
 export ROUTINE_STORE_FILE="$DEMO_DIR/routine/routine_store.json"
 export WETTER_CONFIG_FILE="$DEMO_DIR/wetter/wetter.json"
-export ESSEN_DATA_DIR="$DEMO_DIR/essen"
+# essen liest per-Datei-ENVs (ESSEN_*_FILE), NICHT ESSEN_DATA_DIR (#1773-Folge).
+export ESSEN_WUENSCHE_FILE="$DEMO_DIR/essen/wuensche.json"
+export ESSEN_EINKAUFSLISTE_FILE="$DEMO_DIR/essen/einkaufsliste.json"
+export ESSEN_GERICHTE_FILE="$DEMO_DIR/essen/gerichte.json"
+export PHOTO_LIBRARY_VERZEICHNIS="$DEMO_DIR/photo/medien"
 export PANEL_REGISTRY_FILE="$DEMO_DIR/panel/panels.json"
 export KIBUDDY_CONFIG_FILE="$DEMO_DIR/kibuddy/kibuddy.json"
 export HOERSPIEL_DATA_ROOT="$DEMO_DIR/hoerspiel"
