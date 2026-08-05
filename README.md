@@ -108,7 +108,26 @@ tools/demo/seed_demo.sh          # populiert das Wegwerf-Dir
 tools/demo/seed_demo.sh --env    # + druckt die ENV-Exports für den Demo-Run
 ```
 
-Details: [`tools/demo/seed_demo.sh`](tools/demo/seed_demo.sh) (#1725).
+**„Try it" — ein Befehl, alle Views (kein Pi/Server nötig):**
+
+```
+tools/demo/run_stack.sh          # seedet + startet alle Display-Services lokal
+                                 # → Demo-Basis: http://127.0.0.1:8199
+```
+
+Der Stack startet die Buddy-Services auf **Alt-Ports** (≥ 8100, strikt außerhalb
+des Live-Bereichs 5000–5099 — verweigert Live-Ports) und bündelt die Views
+same-origin über einen Mini-Reverse-Proxy. Dann z. B.
+`http://127.0.0.1:8199/display/plan/woche` (voller Wochenplan über den lokalen
+Demo-Kalender, ohne Google), `/display/hoerspiel/mia/alben`, `/display/routine/…`
+öffnen. `Ctrl-C` räumt alles ab (Teardown). Screenshots:
+`tools/demo/shoot.sh /display/plan/woche`.
+
+Details: [`tools/demo/seed_demo.sh`](tools/demo/seed_demo.sh) (#1725),
+[`run_stack.sh`](tools/demo/run_stack.sh) / [`proxy.py`](tools/demo/proxy.py) /
+[`shoot.sh`](tools/demo/shoot.sh) (#1767). Die gebündelten Piktogramme stammen
+von [ARASAAC](https://arasaac.org) (CC BY-NC-SA 4.0 · Sergio Palao,
+[`tools/demo/assets/icons/NOTICE`](tools/demo/assets/icons/NOTICE)).
 
 ## Tests & Lint
 
