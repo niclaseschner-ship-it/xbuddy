@@ -64,9 +64,10 @@ dort.
 ## Aufbau
 
 - **[`AGENTS.md`](AGENTS.md)** — Einstiegs-Karte (Map aller Quellen)
-- **Repo `lotse`** (`~/repos/lotse`) — die versionierte Arbeits-Methode (Commands,
-  Subagents, Contracts, Hooks); SSoT im eigenen Repo, `~/.claude` ist Deploy-Ziel
-  (Lotse-Cutover, RAT-23 Stufe 2)
+- **[`lotse`](https://github.com/niclaseschner-ship-it/lotse)** — die versionierte
+  Arbeits-Methode, mit der xbuddy gebaut wird (Commands, Subagents, Contracts, Hooks);
+  eigenes public Repo · [Live-Demo](https://lotse-demo.pages.dev/). `~/.claude` ist das
+  Deploy-Ziel (Lotse-Cutover, RAT-23 Stufe 2)
 - **[`specs/`](specs/)** — lebende Specs, Quelle der Wahrheit fürs Verhalten
   - [`specs/constitution.md`](specs/constitution.md) — Prinzipien
   - [`specs/README.md`](specs/README.md) — Spec-Modell + die eine Sync-Regel
