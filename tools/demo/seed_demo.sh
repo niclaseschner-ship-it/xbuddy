@@ -169,19 +169,16 @@ PYHSP
 # Personen-Fotos (#1764): familie.example.json erwartet emil.jpg/mia.jpg… — ohne
 # die Dateien zeigt das plan-Display kaputte Icons. Wir mappen die generischen
 # Demo-Fotos (specs/mockups/…/fotos/demo-*.jpg) auf die erwarteten Namen.
-FOTO_SRC="$REPO/specs/mockups/plan-einstellungen/assets/fotos"
+FOTO_SRC="$REPO/tools/demo/assets/fotos"
 FOTO_DST="$DEMO_DIR/familie/fotos"
 mkdir -p "$FOTO_DST"
-if [ -d "$FOTO_SRC" ]; then
-  cp "$FOTO_SRC/demo-a1.jpg" "$FOTO_DST/emil.jpg"
-  cp "$FOTO_SRC/demo-a2.jpg" "$FOTO_DST/lena.jpg"
-  cp "$FOTO_SRC/demo-a1.jpg" "$FOTO_DST/jonas.jpg"
-  cp "$FOTO_SRC/demo-a2.jpg" "$FOTO_DST/petra.jpg"
-  cp "$FOTO_SRC/demo-k1.jpg" "$FOTO_DST/mia.jpg"
-  cp "$FOTO_SRC/demo-k2.jpg" "$FOTO_DST/finn.jpg"
-  echo "[demo] Personen-Fotos: 6 Demo-Fotos → $FOTO_DST"
+if compgen -G "$FOTO_SRC/*.jpg" >/dev/null 2>&1; then
+  for id in lena jonas petra mia finn emil; do
+    [ -f "$FOTO_SRC/$id.jpg" ] && cp "$FOTO_SRC/$id.jpg" "$FOTO_DST/$id.jpg"
+  done
+  echo "[demo] Personen-Fotos: 6 KI-Portraits → $FOTO_DST"
 else
-  echo "[demo] WARN: Demo-Foto-Quelle fehlt: $FOTO_SRC" >&2
+  echo "[demo] WARN: Portrait-Bundle fehlt: $FOTO_SRC" >&2
 fi
 
 # Photo-Buddy-Rahmen (#1773-Folge): /display/photo/rahmen liest Medien aus einer

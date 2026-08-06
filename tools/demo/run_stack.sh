@@ -23,7 +23,7 @@ PY="${PYTHON:-python3}"
 PROXY_PORT="${DEMO_PROXY_PORT:-8199}"
 declare -A PORT=(
   [familie]=8110 [plan]=8120 [wetter]=8130 [seiten]=8140
-  [routine]=8150 [essen]=8152 [hoerspiel]=8153 [photo]=8160
+  [routine]=8150 [essen]=8152 [hoerspiel]=8153 [photo]=8160 [kibuddy]=8170
 )
 
 # ── Sicherheits-Sperre: NIE einen Live-Port (5000–5099) belegen (#1767-Befund 5).
@@ -65,6 +65,7 @@ start() {  # start <name> <modul> <env-assignments…>
 start familie   familie.main   FAMILIE_REGISTRY="$DEMO_DIR/familie/familie.json"
 start seiten    seiten.main    ICON_ROOT="$ICON_ROOT" SEITEN_FAMILIE_ORIGIN="$FAM_ORIGIN"
 start plan      plan.main      PLAN_CONFIG_FILE="$DEMO_DIR/plan/plan.json" \
+                               PLAN_FAMILIE_ORIGIN_URL="$FAM_ORIGIN" \
                                PLAN_FAMILIE_ORIGIN="$FAM_ORIGIN" \
                                PLAN_KALENDER_DEMO_FILE="$DEMO_DIR/plan/kalender-demo.json"
 start routine   routine.main   ROUTINE_STORE_FILE="$DEMO_DIR/routine/routine_store.json" \
@@ -78,6 +79,9 @@ start essen     essen.main     ESSEN_WUENSCHE_FILE="$DEMO_DIR/essen/wuensche.jso
 start hoerspiel hoerspiel.main HOERSPIEL_DATA_ROOT="$DEMO_DIR/hoerspiel" HOERSPIEL_KIND_ID=mia
 start photo     photo.main     PHOTO_LIBRARY_VERZEICHNIS="$DEMO_DIR/photo/medien" \
                                PHOTO_FAMILIE_ORIGIN="$FAM_ORIGIN"
+start kibuddy   kibuddy.main   KIBUDDY_CONFIG_FILE="$DEMO_DIR/kibuddy/kibuddy.json" \
+                               KIBUDDY_FAMILIE_ORIGIN="$FAM_ORIGIN" \
+                               ELTERNCHAT_BOT_TOKEN="demo:dummy-not-real"
 
 # ── Reverse-Proxy: nginx-Pfad-Präfixe same-origin über die Alt-Ports ──────────
 ROUTES="/api/v1/familie/=${PORT[familie]}"
@@ -85,8 +89,9 @@ ROUTES+=";/display/plan/=${PORT[plan]};/api/v1/plan/=${PORT[plan]}"
 ROUTES+=";/display/routine/=${PORT[routine]};/api/v1/routine/=${PORT[routine]}"
 ROUTES+=";/display/wetter/=${PORT[wetter]};/api/v1/wetter/=${PORT[wetter]}"
 ROUTES+=";/display/hoerspiel/=${PORT[hoerspiel]};/api/v1/hoerspiel/=${PORT[hoerspiel]}"
-ROUTES+=";/api/v1/essen/=${PORT[essen]}"
+ROUTES+=";/display/essen/=${PORT[essen]};/api/v1/essen/=${PORT[essen]}"
 ROUTES+=";/display/photo/=${PORT[photo]};/api/v1/photo/=${PORT[photo]}"
+ROUTES+=";/display/kibuddy/=${PORT[kibuddy]};/api/v1/kibuddy/=${PORT[kibuddy]}"
 ROUTES+=";/display/_shared/=${PORT[seiten]};/api/v1/icons/=${PORT[seiten]}"
 ROUTES+=";/shell/=${PORT[seiten]};/seiten/=${PORT[seiten]};/controller/=${PORT[seiten]}"
 ROUTES+=";*=${PORT[seiten]}"   # Default: seiten
