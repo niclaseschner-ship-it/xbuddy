@@ -260,8 +260,8 @@ Erst-Bedienungs-Fall.
   Bauplan-Lese-Reihenfolge
 - `conventions/tasks.md` — **TASK-10c Form (b)** (strukturiertes
   Präsentations-Ergebnis für Button/WebApp-Aufsatz)
-- `~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md` —
-  MAD-Vorlage; **MAD-7** (offen für Button + Direktlink), **MAD-10**
+- `conventions/mini-app-design.md` —
+  MAD-Konvention; **MAD-7** (offen für Button + Direktlink), **MAD-10**
   (Launcher-Capability)
 - `specs/platform/einkauf-zeigen.md` — Schwester-Skill EZG (essen-einkauf-
   Mini-App-Türöffner, gleiche Klasse-B-Bauform)
