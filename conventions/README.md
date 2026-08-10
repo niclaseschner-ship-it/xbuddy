@@ -21,6 +21,15 @@ für Verhalten").
   Wie-Vertrag** — `conventions/<name>.md` (z. B. `identifiers.md`,
   `config.md`, `logging.md`, `module-boundaries.md`).
 
+## Provenienz-Zeilen und `brainstorm/`-Pfade
+
+Ältere Konventionen tragen `Quelle:`-Zeilen mit Pfaden nach
+`brainstorm/berater-runde/…` — das private Deliberations-Archiv dieses
+Projekts (nicht Teil dieses Repos; siehe `../decisions/README.md`). Die
+Pfade lösen sich für Außenstehende bewusst nicht auf; die Entscheidung
+selbst steht durable in `../decisions/`. **Neue Einträge referenzieren nur
+den public Anker** (`Governance: decisions/RAT-<n>`).
+
 Eine Konvention darf **maschinell durchgesetzt** werden, wo das geht:
 `module-boundaries.md` (MOD) wird von import-linter (`.importlinter`,
 `make lint`, CI) als Gate geprüft; die Datei beschreibt die Bauregel,

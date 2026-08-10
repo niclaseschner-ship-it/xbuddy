@@ -21,6 +21,18 @@ braucht es nicht, um die Spec synchron zu halten.
   einheitliche Form). Specs zitieren Konventions-IDs (z. B. „folgt
   IDENT-1"), beschreiben selbst kein „Wie".
 
+## Provenienz-Zeilen und `brainstorm/`-Pfade
+
+Ältere Specs tragen `Quelle:`/`Provenanz:`-Zeilen mit Pfaden nach
+`brainstorm/berater-runde/…` — das ist das **private Deliberations-Archiv**
+dieses Projekts (Schwester-Repo, nicht Teil dieses Repos; siehe
+`../decisions/README.md`, Zwei-Naturen-Modell). Diese Pfade lösen sich für
+Außenstehende bewusst nicht auf: Die Entscheidung selbst ist durable in
+`../decisions/` (RAT-Records) dokumentiert, der tote Pfad ist nur die
+historische Evidenz-Spur (Dateiname = Datum + Status + Thema). **Für neue
+Einträge gilt: nur der public Anker** — `Governance: decisions/RAT-<n>` —
+der Deliberations-Link lebt ausschließlich im RAT-Record selbst.
+
 <!-- Buddy-Spec — Gliederungs-Checkliste (optional, kein Pflichtrahmen)
 
    Eine Buddy-Spec ist vollständig, wenn sie View-Verhalten und Tests
