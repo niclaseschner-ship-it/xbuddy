@@ -351,7 +351,7 @@ _HOERSPIEL_PRIMARY = _hoerspiel_primary_slug()
 REGISTRY: dict[str, MantelConfig] = {
     # ── Voll-Mäntel (manifest.json + sw.js auf Platte) ──
     "einkauf": MantelConfig(
-        build_id_source_set=("essen-einkauf.js", "platform.js"),
+        build_id_source_set=("essen-einkauf.js", "essen-einkauf.css", "platform.js"),
         name="XBuddy Einkaufsliste",
         start_url="/seiten/essen/einkauf/",
         icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
@@ -364,7 +364,7 @@ REGISTRY: dict[str, MantelConfig] = {
         sw_scope="/seiten/essen/einkauf/",
     ),
     "plan": MantelConfig(
-        build_id_source_set=("plan-einstellungen.js", "platform.js"),
+        build_id_source_set=("plan-einstellungen.js", "plan-einstellungen.css", "platform.js"),
         name="Plan-Einstellungen · XBuddy",
         start_url="/seiten/plan/einstellungen/",
         icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
@@ -422,14 +422,14 @@ REGISTRY: dict[str, MantelConfig] = {
     #    Platte). Sie tragen NUR build_id_source_set (HTML-Cache-Buster, T1229);
     #    Manifest-/SW-Felder bleiben None — kein Fork, keine Vorrats-Route. ──
     "mini-app-uebersicht": MantelConfig(
-        build_id_source_set=("mini-app-uebersicht.js", "platform.js"),
+        build_id_source_set=("mini-app-uebersicht.js", "mini-app-uebersicht.css", "platform.js"),
     ),
     # ── ROUTINE-20/23 (T1665) — vollstaendiger Voll-Mantel via Lib (PWAM-5) ──
     #    Manifest via build_manifest(), sw.js via render_sw() — kein manifest.json/
     #    sw.js auf Platte. Icons aus seiten/static/routine/ (V1-Platzhalter aus plan,
     #    eigenes Motiv als Mini-Folge). Auth: tma (MAD-7).
     "routine": MantelConfig(
-        build_id_source_set=("routine-anpassen.js", "platform.js"),
+        build_id_source_set=("routine-anpassen.js", "routine-anpassen.css", "platform.js"),
         name="Morgenroutine anpassen · XBuddy",
         short_name="Routine",
         start_url="/seiten/routine/anpassen/",

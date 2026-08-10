@@ -163,6 +163,9 @@ def test_build_id_for_loest_source_set_gegen_base_dir_auf(monkeypatch):
     delegiert an build_id_from_mtimes (die (component)-Ebene aus PWAM-4)."""
     erwartet = {
         os.path.join("/root", "essen-einkauf.js"): 300.0,
+        # T1813: CSS gehoert zum Quell-Set; hier absichtlich NICHT das Maximum,
+        # damit die Aussage des Tests (platform.js gewinnt) unveraendert bleibt.
+        os.path.join("/root", "essen-einkauf.css"): 300.0,
         os.path.join("/root", "platform.js"): 900.0,
     }
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", lambda p: erwartet[p])
@@ -247,3 +250,70 @@ def test_byte_diff_gate_served_gleich_committed_modulo_build_id(
     assert "__BUILD_ID__" not in served, "Platzhalter wurde nicht ersetzt"
     assert served == committed.replace("__BUILD_ID__", "12345"), \
         "Ausgelieferter SW weicht ueber den build_id hinaus von der committed sw.js ab"
+
+
+# ── PWAM-4-Invariante registry-weit (T1813) ──────────────────────────────────
+#
+# Vorgeschichte: T1365-Befund-2 fand genau diesen Fehler fuer `connector` und
+# sicherte ihn mit einem KOMPONENTEN-SPEZIFISCHEN Test ab
+# (test_connector.py::test_pwam4_build_id_bumpt_bei_style_css_aenderung). Der
+# Fehler kam daraufhin in vier weiteren Komponenten wieder — einkauf, plan,
+# mini-app-uebersicht, routine trugen ihre CSS nicht im Quell-Set. Deshalb hier
+# die Invariante ueber die GANZE Registry statt eines fuenften Einzelfalls.
+#
+# Warum das unsichtbar bleibt: der Buster kippt nur dann nicht, wenn eine
+# Aenderung AUSSCHLIESSLICH die CSS betrifft. Jede Aenderung, die auch die JS
+# anfasst, verdeckt den Defekt.
+
+
+def test_pwam4_jede_komponente_traegt_ihre_css_im_quell_set():
+    """PWAM-4 (T1813): traegt ein `build_id_source_set` eine `<name>.js` und
+    liegt in `seiten/static/` eine gleichnamige `<name>.css`, MUSS diese CSS
+    ebenfalls im Quell-Set stehen. Sonst bumpt der Cache-Buster bei einer
+    CSS-only-Aenderung nicht und wiederkehrende Nutzer sehen den alten Stand.
+
+    Gedeckt sind die Komponenten, deren Assets in `seiten/static/` liegen; fuer
+    Komponenten mit eigenem Asset-Root (hoerspiel) greift die Namens-Heuristik
+    bewusst nicht — dort steht die CSS bereits im Set.
+    """
+    fehler = []
+    for name, config in pwa_mantel.REGISTRY.items():
+        quell_set = config.build_id_source_set
+        for datei in quell_set:
+            if not datei.endswith(".js"):
+                continue
+            css = datei[: -len(".js")] + ".css"
+            if not os.path.exists(os.path.join(_STATIC_DIR, css)):
+                continue
+            if css not in quell_set:
+                fehler.append(f"{name}: {css} liegt in static/, fehlt aber im Quell-Set {quell_set}")
+    assert not fehler, (
+        "PWAM-4-Bruch — CSS-only-Aenderungen bumpen den Cache-Buster nicht:\n  "
+        + "\n  ".join(fehler)
+    )
+
+
+def test_pwam4_build_id_bumpt_bei_css_aenderung_der_uebersicht(tmp_path):
+    """PWAM-4 (T1813): der konkrete Fall, an dem der Defekt aufgefallen ist —
+    eine reine CSS-Aenderung an der Mini-App-Uebersicht MUSS die build_id
+    bewegen. Ohne die CSS im Quell-Set bleibt sie auf der JS-mtime stehen."""
+    quell_set = pwa_mantel.REGISTRY["mini-app-uebersicht"].build_id_source_set
+    assert "mini-app-uebersicht.css" in quell_set, (
+        "Vorbedingung: mini-app-uebersicht.css muss im build_id_source_set sein (T1813)"
+    )
+    basis = 1_700_000_000.0
+    for name in quell_set:
+        pfad = tmp_path / name
+        pfad.parent.mkdir(parents=True, exist_ok=True)
+        pfad.write_bytes(b"stub")
+        os.utime(str(pfad), (basis, basis))
+    vorher = pwa_mantel.build_id_for("mini-app-uebersicht", str(tmp_path))
+    assert vorher == str(int(basis))
+    neu = basis + 1000.0
+    os.utime(str(tmp_path / "mini-app-uebersicht.css"), (neu, neu))
+    nachher = pwa_mantel.build_id_for("mini-app-uebersicht", str(tmp_path))
+    assert nachher != vorher, (
+        "PWAM-4: build_id hat sich NICHT geaendert nach CSS-mtime-Update — "
+        "genau der Defekt aus T1813"
+    )
+    assert nachher == str(int(neu))
