@@ -80,6 +80,8 @@ def test_mini_app_build_id_aequivalent_zu_build_id_for(monkeypatch):
     def fake_getmtime(path):
         if path.endswith("essen-einkauf.js"):
             return 400.0
+        if path.endswith("essen-einkauf.css"):
+            return 100.0   # T1813: im Quell-Set, aber nicht das Maximum
         if path.endswith("platform.js"):
             return 200.0
         raise OSError(f"unerwarteter Pfad: {path}")
@@ -104,6 +106,8 @@ def test_mini_app_build_id_platform_bump_via_registry(monkeypatch):
     def fake_getmtime_platform_neuer(path):
         if path.endswith("essen-einkauf.js"):
             return 300.0
+        if path.endswith("essen-einkauf.css"):
+            return 100.0   # T1813: im Quell-Set, aber nicht das Maximum
         if path.endswith("platform.js"):
             return 999.0   # platform.js klar neuer
         raise OSError(path)

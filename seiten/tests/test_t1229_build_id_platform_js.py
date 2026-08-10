@@ -72,6 +72,8 @@ def test_ac1_primary_gewinnt_wenn_neuer(monkeypatch):
     def fake_getmtime(path):
         if path == os.path.join(static_dir, "essen-einkauf.js"):
             return primary_mtime
+        if path.endswith(".css"):
+            return 1.0   # T1813: im Quell-Set, nie das Maximum
         if path == os.path.join(static_dir, "platform.js"):
             return platform_mtime
         raise OSError(f"unerwarteter Pfad im Test: {path}")
@@ -92,6 +94,8 @@ def test_ac1_platform_gewinnt_wenn_neuer(monkeypatch):
     def fake_getmtime(path):
         if path == os.path.join(static_dir, "mini-app-uebersicht.js"):
             return primary_mtime
+        if path.endswith(".css"):
+            return 1.0   # T1813: im Quell-Set, nie das Maximum
         if path == os.path.join(static_dir, "platform.js"):
             return platform_mtime
         raise OSError(f"unerwarteter Pfad im Test: {path}")
@@ -131,6 +135,8 @@ def test_ac2_platform_bump_aendert_build_id(monkeypatch):
             return 300.0
         if path == os.path.join(static_dir, "platform.js"):
             return 100.0
+        if path.endswith(".css"):
+            return 1.0  # T1813: im Quell-Set, nie das Maximum
         raise OSError(path)
 
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", getmtime_phase1)
@@ -144,6 +150,8 @@ def test_ac2_platform_bump_aendert_build_id(monkeypatch):
             return 300.0
         if path == os.path.join(static_dir, "platform.js"):
             return 500.0  # platform.js-Bump
+        if path.endswith(".css"):
+            return 1.0  # T1813: im Quell-Set, nie das Maximum
         raise OSError(path)
 
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", getmtime_phase2)
