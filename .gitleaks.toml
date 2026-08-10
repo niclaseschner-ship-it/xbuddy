@@ -3,7 +3,8 @@
 # Zweck: verhindert, dass versehentlich Privates (Klarnamen, Familien-Mail,
 # Heim-IPs, Tailnet-Identifier, Telegram-Chat-ID) ins Repo — und damit später
 # public — gerät. Recycelt das ratifizierte Gate-1-Pattern-Set aus
-# tools/mirror/build_public_mirror.sh (KEINE neuen Muster erfunden).
+# dem früheren, inzwischen entfernten Mirror-Skript — die Muster leben heute
+# direkt in dieser Datei (KEINE neuen Muster erfunden).
 #
 # Drei Einsatzpunkte, EIN Ruleset (#1724):
 #   1. .pre-commit-config.yaml  → blockt Commit lokal auf dem Pi

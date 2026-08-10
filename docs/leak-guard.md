@@ -3,8 +3,9 @@
 Verhindert, dass versehentlich **Privates** (Klarnamen, Familien-Mail, Heim-IPs,
 Tailnet-Identifier, Telegram-Chat-ID) ins Repo — und damit später **public** —
 gerät. Teil des Verkaufsreife-/Public-Wegs (#1309, Weg A „develop-in-the-open",
-#1724). Das Custom-Ruleset recycelt das ratifizierte **Gate-1-Set** aus
-`tools/mirror/build_public_mirror.sh` (keine neuen Muster erfunden).
+#1724). Das Custom-Ruleset recycelt das ratifizierte **Gate-1-Set** des
+früheren, inzwischen entfernten Mirror-Skripts; die Muster leben heute
+direkt in `.gitleaks.toml` (keine neuen Muster erfunden).
 
 ## Drei Einsatzpunkte, EIN Ruleset (`.gitleaks.toml`)
 

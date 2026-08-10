@@ -977,8 +977,9 @@ Modell. Kostet V1 wenige Zeilen mehr, kostet später keinen Umbau.
 MQTT-Transport (Pub/Sub mit Topic-Hierarchie) ist das Zielbild für die
 Verteiler-Architektur — siehe brainstorm-Architektur
 `brainstorm/ideas/verteilerarchitektur-mqtt/verteilerlogik.md` (Stand
-2026-05-15). Für V1 mit einem Display, das pollen kann, ist Reconnect-
-und State-Recovery-Logik überdimensioniert.
+2026-05-15; internes Deliberations-Artefakt, nicht Teil des public Repos).
+Für V1 mit einem Display, das pollen kann, ist Reconnect- und
+State-Recovery-Logik überdimensioniert.
 
 Display V1 pollt `GET /api/v1/displays/<id>/state`. MQTT kommt als
 eigenes Ticket, sobald ein zweites Display oder ein offline-fähiges

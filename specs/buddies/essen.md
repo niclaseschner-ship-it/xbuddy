@@ -1493,7 +1493,8 @@ alle API-Aufrufe nutzen `platform.authHeaders()` aus
   #474, Gate B): Variante A „Tabbed Single-Canvas" gewählt — drei stets
   sichtbare Bereiche (Tabs oben · Item-Grid Mitte · Wunsch-Liste rechts), kein
   Drill-Down. Mockup-Artefakt:
-  `brainstorm/idee-mvp/essen/mockups/variante-A-tabbed.html`. Spec ESSEN-2 /
+  `brainstorm/idee-mvp/essen/mockups/variante-A-tabbed.html` (internes
+  Deliberations-Artefakt, nicht Teil des public Repos). Spec ESSEN-2 /
   ESSEN-3 / ESSEN-8 / ESSEN-9 / E-ESSEN-7 entsprechend reconcilet.
 
 - **OPEN-ESSEN-F — ARASAAC-Abdeckungsprüfung Lebensmittel-Domäne.** ERLEDIGT
@@ -1501,7 +1502,8 @@ alle API-Aufrufe nutzen `platform.authHeaders()` aus
   drei Lebensmittel-Kategorien (8 Obst&Gemüse · 6 Brotbelag · 6 Sonstiges)
   haben verifizierte ARASAAC-IDs mit CDN-Render-Beleg. Befund-Artefakt:
   `brainstorm/idee-mvp/essen/arasaac-probe/befund.md`. Repo-Default-Vorschlag:
-  `brainstorm/idee-mvp/essen/mockups/katalog.default.json`. Spec ESSEN-12
+  `brainstorm/idee-mvp/essen/mockups/katalog.default.json` (beides interne
+  Deliberations-Artefakte, nicht Teil des public Repos). Spec ESSEN-12
   bleibt unverändert; die konkreten Items werden im Implementierungs-Ticket
   (#474-Impl) ins Repo als `essen/katalog.default.json` aufgenommen.
 
@@ -1602,7 +1604,8 @@ weil Schritt 1 keinen Item-Inhalt mitbringt. **Verworfen:** Sidebar-Layout
 aber „App-artig" (Information-Density) statt kindgerecht-plakativ.
 **Verworfen:** Single-View mit allen Items flach nebeneinander (würde die
 Kategorien-Strukturierung unsichtbar machen). **Artefakt:** Variante-A-Mockup
-unter `brainstorm/idee-mvp/essen/mockups/variante-A-tabbed.html`.
+unter `brainstorm/idee-mvp/essen/mockups/variante-A-tabbed.html` (internes
+Deliberations-Artefakt, nicht Teil des public Repos).
 
 ### E-ESSEN-8 — Personen-Schicht minimal: `quelle ∈ {kind, eltern}`
 *Datum:* 2026-06-09 (Nic) · V1 unterscheidet nur, **woher** ein Wunsch kommt
@@ -1643,7 +1646,8 @@ Tablet-Probe). Bis dahin nichts auf Vorrat.
 **Mini App** ausgeliefert (HTML/CSS/JS-Frontend mit Init-Data-Auth,
 gehostet am selben Pi wie der Display-Service). **Verworfen:** pinned
 Inline-Keyboard in der Familien-Gruppe als Lösungs-Form (Werft-Iteration
-V1–V6 in `brainstorm/idee-mvp/essen-einkauf/mockups/` — Mockup-
+V1–V6 in `brainstorm/idee-mvp/essen-einkauf/mockups/`, internes
+Deliberations-Artefakt, nicht Teil des public Repos — Mockup-
 Konvergenz, aber durch Nic-Tiebreaker 2026-06-11 verworfen, weil
 Werkzeug-Wahl die Lego-Konsistenz mit Routine-/Übersicht-Funktionen
 bricht und ARASAAC-Bilder mit pinned Inline-Keyboard nicht möglich
@@ -1660,7 +1664,8 @@ sind — Telegram-API-Limit).
 **Plattform-Ebene:** Telegram als MVP-Plattform, Matrix vertagt mit Trigger
 (RAT-16, MVP-Sammler #678).
 
-**Werft-Trail:** F1-Rahmung in `brainstorm/idee-mvp/essen-einkauf/gate-a-
+**Werft-Trail** (interne Deliberations-Artefakte, nicht Teil des public
+Repos): F1-Rahmung in `brainstorm/idee-mvp/essen-einkauf/gate-a-
 vorbereitung.md`, Mockup V7 als Gate-B-Wahl `brainstorm/idee-mvp/essen-
 einkauf/mockups/telegram-mini-app-v7-chat-flow.html`, Berater-Runde
 2026-06-11 (Schärfungs-Ergebnis in `brainstorm/berater-runde/
