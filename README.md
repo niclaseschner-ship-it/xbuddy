@@ -1,153 +1,155 @@
 # XBuddy
 
-### ▶︎ Live-Demo — **[xbuddy-demo-mobil.pages.dev](https://xbuddy-demo-mobil.pages.dev/)**
+*[Deutsche Fassung](README.de.md) · the family-facing UI is in German.*
 
-Sieben Karten, die in einer Minute zeigen, worum es geht — läuft ohne Anmeldung
-im Browser.
+### ▶︎ Live demo — **[xbuddy-demo-mobil.pages.dev](https://xbuddy-demo-mobil.pages.dev/)**
+
+Seven cards that show in one minute what this is about — runs in the browser,
+no sign-up.
 
 ---
 
-**Ein selbst-gehostetes Assistenz-System für Familien.** Ein Kind sieht am
-Display, wer es heute abholt, was es zu essen gibt und was es morgens anziehen
-soll — und hört seine Hörspiele, ohne ein Elternteil zu fragen. Eltern sprechen
-mit demselben System über einen Telegram-Chat und kleine Web-Apps: „Setz Brot auf
-die Einkaufsliste", „Wer holt Freitag ab?".
+**A self-hosted assistance system for families.** A child sees on the display
+who picks them up today, what's for lunch and what to wear this morning — and
+listens to their audio plays without asking a parent. Parents talk to the same
+system through a Telegram chat and small web apps: "Put bread on the shopping
+list", "Who picks up on Friday?".
 
-**North Star.** XBuddy ist dann erfolgreich, wenn ein Kind etwas selbst tun kann,
-wofür es vorher ein Elternteil gebraucht hätte. Jede Funktion misst sich daran:
-Verschiebt sie eine Aufgabe vom Elternteil zum Kind — gibt sie Selbstwirksamkeit
-zurück?
+**North Star.** XBuddy succeeds when a child can do something on their own that
+used to require a parent. Every feature is measured against that: does it move
+a task from the parent to the child — does it give self-efficacy back?
 
-Alles läuft auf **eigener Hardware** (ein Raspberry Pi genügt) und bindet die
-Geräte ein, die die Familie schon hat, statt neue zu erzwingen. KI steckt
-darunter als **Infrastruktur, nicht als Feature** — die Familie erlebt nicht
-„KI", sondern die Ergebnisse.
+Everything runs on **your own hardware** (a Raspberry Pi is enough) and brings
+in the devices the family already has instead of forcing new ones. AI sits
+underneath as **infrastructure, not a feature** — the family doesn't experience
+"AI", they experience the results.
 
 ## Screenshots
 
-Aus dem Demo-Stack, den dieses Repo mitbringt (`tools/demo/run_stack.sh`) —
-generische Demo-Familie **Sonntag**, keine echten Familieninhalte.
+From the demo stack that ships with this repo (`tools/demo/run_stack.sh`) —
+generic demo family **Sonntag**, no real family content.
 
-**Was Kinder sehen** — Vollbild-Displays, kein Menü, keine Anmeldung:
-
-| | |
-|---|---|
-| ![Wochenplan](docs/screenshots/plan-woche.png) | ![Morgen-Routine](docs/screenshots/routine-morgen.png) |
-| Wochenplan — wer holt ab, was ist heute | Morgen-Routine — was muss ich tun, wie viel Zeit bleibt |
-| ![Wetter & Anziehen](docs/screenshots/wetter-heute.png) | ![Essens-Wünsche](docs/screenshots/essen-wunsch.png) |
-| Wetter mit Anzieh-Empfehlung | Essens-Wünsche — das Kind schreibt selbst auf die Einkaufsliste |
-| ![Hörspiele](docs/screenshots/hoerspiel-alben.png) | ![Foto-Rahmen](docs/screenshots/photo-rahmen.png) |
-| Hörspiel-Bibliothek | Foto-Rahmen |
-
-**Was Eltern sehen** — der Chat und vier kleine Web-Apps am Handy:
+**What children see** — full-screen displays, no menu, no login:
 
 | | |
 |---|---|
-| ![Eltern-Chat](docs/screenshots/eltern-chat-sonntag.png) | ![Einkaufsliste](docs/screenshots/einkauf.png) |
-| Eltern-Chat in Telegram — die Haupt-Schnittstelle | Einkaufsliste |
-| ![Plan-Einstellungen](docs/screenshots/plan-einstellungen.png) | ![Routine anpassen](docs/screenshots/routine-anpassen.png) |
-| Wochenplan einrichten | Morgenroutine anpassen |
-| ![Hörspiel-Einstellungen](docs/screenshots/hoerspiel-eltern.png) | |
-| Hörspiel-Einstellungen (Tempo, Pausen, Stimme) | |
+| ![Week plan](docs/screenshots/plan-woche.png) | ![Morning routine](docs/screenshots/routine-morgen.png) |
+| Week plan — who picks up, what's on today | Morning routine — what do I need to do, how much time is left |
+| ![Weather & clothing](docs/screenshots/wetter-heute.png) | ![Meal wishes](docs/screenshots/essen-wunsch.png) |
+| Weather with clothing recommendation | Meal wishes — the child writes onto the shopping list themselves |
+| ![Audio plays](docs/screenshots/hoerspiel-alben.png) | ![Photo frame](docs/screenshots/photo-rahmen.png) |
+| Audio-play library | Photo frame |
 
-> Alle Views + Anleitung zum Neu-Erzeugen: [`docs/screenshots/`](docs/screenshots/).
-> Der Eltern-Chat ist ein **erfundener** Beispiel-Verlauf, kein echter Chat.
+**What parents see** — the chat and four small web apps on the phone:
 
-## Selbst ausprobieren — ein Befehl, kein Server nötig
+| | |
+|---|---|
+| ![Parent chat](docs/screenshots/eltern-chat-sonntag.png) | ![Shopping list](docs/screenshots/einkauf.png) |
+| Parent chat in Telegram — the main interface | Shopping list |
+| ![Plan settings](docs/screenshots/plan-einstellungen.png) | ![Adjust routine](docs/screenshots/routine-anpassen.png) |
+| Setting up the week plan | Adjusting the morning routine |
+| ![Audio-play settings](docs/screenshots/hoerspiel-eltern.png) | |
+| Audio-play settings (speed, pauses, voice) | |
+
+> All views + how to regenerate them: [`docs/screenshots/`](docs/screenshots/).
+> The parent chat is an **invented** example transcript, not a real chat.
+
+## Try it yourself — one command, no server needed
 
 ```
-tools/demo/run_stack.sh          # seedet Demo-Daten + startet alle Views lokal
+tools/demo/run_stack.sh          # seeds demo data + starts all views locally
                                  # → http://127.0.0.1:8199
 ```
 
-Dann z. B. `/display/plan/woche`, `/display/hoerspiel/mia/alben` oder die
-Eltern-Apps unter `/seiten/essen/einkauf/` und `/seiten/plan/einstellungen/`
-öffnen. `Ctrl-C` räumt alles wieder ab.
+Then open e.g. `/display/plan/woche`, `/display/hoerspiel/mia/alben` or the
+parent apps at `/seiten/essen/einkauf/` and `/seiten/plan/einstellungen/`.
+`Ctrl-C` tears everything down again.
 
-Der Stack legt seine Daten in ein **Wegwerf-Verzeichnis** `xbuddy-data-demo/` und
-läuft auf Ports ab 8100 — eine echte Instanz auf derselben Maschine bleibt
-unangetastet. Einzelne Bilder machen: `tools/demo/shoot.sh /display/plan/woche`.
+The stack keeps its data in a **throwaway directory** `xbuddy-data-demo/` and
+runs on ports from 8100 upward — a real instance on the same machine stays
+untouched. Single screenshots: `tools/demo/shoot.sh /display/plan/woche`.
 
-Die Eltern-Chat-Sicht ist ein Telegram-Bot und lässt sich nicht als Web-View
-zeigen; dafür liegt eine statische Beispielseite bereit:
+The parent-chat view is a Telegram bot and can't be shown as a web view; a
+static example page stands in for it:
 [`tools/demo/chat_transcript/eltern-chat-sonntag.html`](tools/demo/chat_transcript/eltern-chat-sonntag.html)
-— einfach im Browser öffnen.
+— just open it in the browser.
 
-Die Piktogramme stammen von [ARASAAC](https://arasaac.org) (CC BY-NC-SA 4.0 ·
+The pictograms come from [ARASAAC](https://arasaac.org) (CC BY-NC-SA 4.0 ·
 Sergio Palao, [`NOTICE`](tools/demo/assets/icons/NOTICE)).
 
-## Wie es aufgebaut ist
+## How it is built
 
-XBuddy ist keine Ein-Datei-App, sondern mehrere kleine Dienste — einer je
-„Buddy" (Plan, Routine, Wetter, Essen, Hörspiel, Foto …). Zusammen bilden sie
-eine **Familien-Instanz**. Was von Familie zu Familie verschieden ist, steht in
-Konfigurationsdateien, die nicht im Git liegen; der Code hier ist die Vorlage.
+XBuddy is not a single-file app but several small services — one per
+"buddy" (plan, routine, weather, meals, audio plays, photos …). Together they
+form a **family instance**. Whatever differs from family to family lives in
+configuration files outside of git; the code here is the template.
 
-Qualitätsattribute in Prioritätsreihenfolge: **Zuverlässigkeit** (ein Board, das
-morgens den Plan nicht zeigt, ist schlechter als kein Board), **Einfachheit**,
-**Privacy** (Verarbeitung in Deutschland, Anonymisierung bevor Daten die
-Geräte-Ebene verlassen), **Offline-Fähigkeit** und **nicht-invasiv** (keine
-Push-Benachrichtigungen, kein Engagement-Design).
+Quality attributes in priority order: **reliability** (a board that doesn't
+show the plan in the morning is worse than no board), **simplicity**,
+**privacy** (processing in Germany, anonymisation before data leaves the device
+layer), **offline capability** and **non-invasive** (no push notifications, no
+engagement design).
 
-## Von `git clone` zu einer laufenden Familie
+## From `git clone` to a running family
 
-1. **Umgebung.** `pyproject.toml` ist die einzige Dependency-Quelle:
+1. **Environment.** `pyproject.toml` is the single dependency source:
 
    ```
    python3 -m venv .venv
-   .venv/bin/pip install .        # Laufzeit-Abhängigkeiten
-   .venv/bin/pip install pytest   # nur für die Tests
+   .venv/bin/pip install .        # runtime dependencies
+   .venv/bin/pip install pytest   # tests only
    ```
 
-2. **Per-Instanz-Dateien anlegen.** Jede familienspezifische Datei liegt als
-   Vorlage `*.example.json` neben dem Code ihres Dienstes — kopieren und füllen:
-   - `<dienst>/config.example.json` → `config.json` (Bind-Host/Port, Log-Level,
-     KI-Anbieter/Modell; jeder Wert auch per Umgebungsvariable überschreibbar,
-     z. B. `PLAN_LISTEN_PORT`)
-   - Daten-Vorlagen je Dienst, etwa `familie/familie.example.json` (wer gehört
-     zur Familie), `hoerspiel/hoerspiel.example.json`, `essen/wuensche.example.json`
-   - Der gemeinsame Datenordner kommt aus `XBUDDY_DATA_DIR`
+2. **Create the per-instance files.** Every family-specific file ships as a
+   template `*.example.json` next to its service's code — copy and fill in:
+   - `<service>/config.example.json` → `config.json` (bind host/port, log
+     level, AI provider/model; every value can also be overridden via
+     environment variable, e.g. `PLAN_LISTEN_PORT`)
+   - data templates per service, such as `familie/familie.example.json` (who
+     belongs to the family), `hoerspiel/hoerspiel.example.json`,
+     `essen/wuensche.example.json`
+   - the shared data directory comes from `XBUDDY_DATA_DIR`
 
-3. **Geheimnisse** (KI-Anbieter-Key, Google-OAuth, Telegram-Bot-Token) gehören
-   **nicht** im Klartext in Dateien oder Umgebungsvariablen, sondern in den
-   Zugangsdaten-Speicher: [`tools/zugangsdaten`](tools/zugangsdaten/README.md).
+3. **Secrets** (AI provider key, Google OAuth, Telegram bot token) do **not**
+   belong in files or environment variables in plain text, but in the
+   credentials store: [`tools/zugangsdaten`](tools/zugangsdaten/README.md).
 
-4. **Dienste starten** — jeder Buddy als eigener Prozess (`python3 -m <dienst>`,
-   Details im jeweiligen Verzeichnis). Der `seiten`-Dienst liefert die
-   Eltern-Seiten und die Web-Apps aus.
+4. **Start the services** — each buddy as its own process (`python3 -m
+   <service>`, details in each directory). The `seiten` service serves the
+   parent pages and the web apps.
 
-## Wo was liegt
+## Where things live
 
-- **[`AGENTS.md`](AGENTS.md)** — die Einstiegskarte: was wo liegt und in welcher
-  Reihenfolge man es liest. Wer neu ist (Mensch oder KI-Agent), startet dort.
-- **[`specs/`](specs/)** — lebende Specs, die Quelle der Wahrheit fürs Verhalten;
-  [`constitution.md`](specs/constitution.md) hält die Prinzipien
-- **[`conventions/`](conventions/)** — Bauregeln über Komponenten hinweg
-- **[`decisions/`](decisions/)** — Ledger der Architektur-Entscheidungen: einmal
-  entschieden, festgehalten, nicht neu aufgerollt
-- **[`WORKFLOW.md`](WORKFLOW.md)** — wie Tickets und PRs laufen ·
-  **[`CLAUDE.md`](CLAUDE.md)** — Arbeitsregeln im Repo
-- **[`lotse`](https://github.com/niclaseschner-ship-it/lotse)** — die Methode, mit
-  der XBuddy gebaut wird, als eigenes public Repo
-  ([Live-Demo](https://lotse-demo.pages.dev/))
+- **[`AGENTS.md`](AGENTS.md)** — the entry map: what lives where and in which
+  order to read it. Newcomers (human or AI agent) start there.
+- **[`specs/`](specs/)** — living specs, the source of truth for behavior;
+  [`constitution.md`](specs/constitution.md) holds the principles
+- **[`conventions/`](conventions/)** — build rules across components
+- **[`decisions/`](decisions/)** — ledger of architecture decisions: decided
+  once, written down, not relitigated
+- **[`WORKFLOW.md`](WORKFLOW.md)** — how tickets and PRs work ·
+  **[`CLAUDE.md`](CLAUDE.md)** — working rules inside the repo
+- **[`lotse`](https://github.com/niclaseschner-ship-it/lotse)** — the method
+  XBuddy is built with, as its own public repo
+  ([live demo](https://lotse-demo.pages.dev/))
 
-## Tests & Lint
+## Tests & lint
 
 ```
-make test      # python3 -m pytest -q   — repo-weite Suite
-make lint      # lint-imports           — Modul-Grenzen
-make ruff      # uvx ruff@0.15.15 check — Style-Lint
+make test      # python3 -m pytest -q   — repo-wide suite
+make lint      # lint-imports           — module boundaries
+make ruff      # uvx ruff@0.15.15 check — style lint
 ```
 
-Alle drei sind auch CI-Gates
+All three are CI gates too
 ([`pytest.yml`](.github/workflows/pytest.yml),
 [`lint-imports.yml`](.github/workflows/lint-imports.yml),
-[`ruff.yml`](.github/workflows/ruff.yml)). Wer eine neue Test-Suite anlegt, ohne
-sie in `pytest.ini` einzutragen, wird von einem Guard-Test daran erinnert — so
-fällt keine Suite unbemerkt aus dem Lauf.
+[`ruff.yml`](.github/workflows/ruff.yml)). Whoever adds a new test suite
+without registering it in `pytest.ini` is reminded by a guard test — no suite
+silently drops out of the run.
 
-## Mitarbeit
+## Contributing
 
-Issues und PRs folgen [`WORKFLOW.md`](WORKFLOW.md). Kein Code ohne
-Requirement-ID in der Spec — was das heißt, steht in
+Issues and PRs follow [`WORKFLOW.md`](WORKFLOW.md). No code without a
+requirement ID in the spec — what that means is explained in
 [`specs/README.md`](specs/README.md).
