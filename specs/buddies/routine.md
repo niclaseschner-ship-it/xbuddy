@@ -745,7 +745,7 @@ nochmal" angezeigt.
 `seiten`-Service bound an `127.0.0.1`, Tailscale-Funnel mit Per-Node-Cert);
 API-Calls gegen `127.0.0.1`-bound Routine-Buddy laufen same-host. Eine
 spätere `Authorization: tma <initData>`-Härtung (V1.x) ist gemeinsame
-Mini-App-Aufgabe (siehe `~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md`
+Mini-App-Aufgabe (siehe `conventions/mini-app-design.md`,
 MAD-7-Folge-Ticket „Mini-App-Auth-Header"), kein V1-Blocker hier.
 
 **Launcher (V1.1):** Die Mini-App wird in V1.1 ausschließlich über einen
@@ -842,8 +842,8 @@ gebaut). V1 trägt die manuelle Such-Reibung bewusst.
 
 Die Anpassen-Mini-App ist der **zweite Mini-App-Konsument** der Plattform
 nach essen-einkauf (#653). Sie folgt bewusst dem
-First-Occurrence-Pattern aus
-`~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md`
+First-Occurrence-Pattern der inzwischen ratifizierten
+`conventions/mini-app-design.md`
 (MAD-1..7 + MAD-10 + Anti-Patterns; **Stand 2026-06-12 nach #719**: MAD-7
 ist offen für Button **oder** `t.me`-Direktlink — beide Wege liefern
 `initData`; MAD-8 ausgelagert nach `specs/platform/eltern-chat.md` EC-10
