@@ -80,6 +80,15 @@ _OAUTH_SCOPE = ("https://www.googleapis.com/auth/calendar.events "
 # sichtbar — die effektive Quelle ist `private_chat_session.SESSION_TIMEOUT_SECONDS`
 # (EC-20, Refs #130: Konsolidierung aus FAA/GAA/KAV).
 
+# CLIENT-2 (#1784): HTTP-Timeout für den Plan-Buddy-Call (PLAN-32/APP-3). Das
+# ist ein Loopback-Aufruf an eine XBuddy-Komponente — genau der Fall, für den
+# CLIENT-2 2,0 s vorschreibt (Normalfall sub-ms). Er lief bisher OHNE Timeout,
+# und `urlopen` ohne Timeout blockiert unbegrenzt (`socket.getdefaulttimeout()`
+# ist None) — in einem Worker-Thread, der die `PrivateChatSession` hält. Die
+# Google-Calls oben tragen ihre eigenen, größeren Budgets (8/12 s): externes
+# Netz, nicht Loopback.
+PLAN_HTTP_TIMEOUT_SECONDS = 2.0
+
 
 # ============================================================
 #  Hart-codierte Nachrichten — Wortlaut ist Implementierungs-Detail
@@ -649,7 +658,8 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
                 headers={"Content-Type": "application/json"},
             )
             try:
-                with urllib.request.urlopen(req) as resp:
+                with urllib.request.urlopen(
+                        req, timeout=PLAN_HTTP_TIMEOUT_SECONDS) as resp:
                     if resp.status != 200:
                         raise PlanJsonWriteError(
                             "Plan-Buddy admin/kalender antwortete HTTP %d"
@@ -660,6 +670,14 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
             except urllib.error.URLError as e:
                 raise PlanJsonWriteError(
                     "Plan-Buddy admin/kalender nicht erreichbar: %s" % e)
+            except TimeoutError as e:
+                # #1784: ein Read-Timeout kommt NICHT als `URLError` heraus
+                # (`socket.timeout` ist `TimeoutError`, kein `URLError`) — ohne
+                # diesen Zweig würde er als roher Stacktrace aus dem
+                # Worker-Thread fallen statt als KAV-Fehlermeldung im Chat.
+                raise PlanJsonWriteError(
+                    "Plan-Buddy admin/kalender antwortete nicht innerhalb von "
+                    "%.1fs" % PLAN_HTTP_TIMEOUT_SECONDS) from e
 
     # KAV-2: Live-Berechtigung. Die Prüfung liegt **bei der Funktion**
     # (nicht beim Aufrufer), damit die Trigger-Agnostik erhalten bleibt.

@@ -18,11 +18,18 @@ das `anthropic` mockt). KEIN echter litellm-Call.
 
 import json
 import sys
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tools.llm import public_api
+from tools.llm import (
+    LLM_TIMEOUT_LONGFORM_SECONDS,
+    LLM_TIMEOUT_SECONDS,
+    LLMTimeoutError,
+    ProviderError,
+    public_api,
+)
 from tools.llm._vendor import litellm as litellm_vendor
 
 # ----------------------------------------------------------------------
@@ -70,6 +77,12 @@ def _make_fake_litellm_sdk(response=None, *, side_effect=None,
     fake = MagicMock()
     # litellm.exceptions.APIError als Basisklasse für die ProviderError-Übersetzung.
     fake.exceptions.APIError = _FakeAPIError
+    # #1784: `litellm.exceptions.Timeout` als eigene, von APIError UNABHÄNGIGE
+    # Klasse — genau wie im echten SDK (dort erbt Timeout von
+    # openai.APITimeoutError, nicht von litellm.exceptions.APIError). Damit
+    # beweist der Timeout-Test, dass der Vendor ihn eigens fängt und nicht
+    # zufällig über den APIError-Zweig einsammelt.
+    fake.exceptions.Timeout = _FakeTimeout
     if side_effect is not None:
         fake.completion.side_effect = side_effect
     else:
@@ -84,6 +97,16 @@ def _make_fake_litellm_sdk(response=None, *, side_effect=None,
 
 class _FakeAPIError(Exception):
     """Steht für `litellm.exceptions.APIError` im Test."""
+
+
+class _FakeTimeout(Exception):
+    """Steht für `litellm.exceptions.Timeout` im Test (#1784).
+
+    BEWUSST keine Subklasse von `_FakeAPIError` — spiegelt die echte
+    SDK-Hierarchie (litellm-Timeout erbt von `openai.APITimeoutError`, nicht von
+    `litellm.exceptions.APIError`). Ein Vendor, der nur `except APIError` fährt,
+    lässt ihn durch; genau das prüfen die Tests unten.
+    """
 
 
 @pytest.fixture
@@ -858,6 +881,7 @@ def _make_audio_sdk(*, speech_return=None, transcription_return=None,
     """
     fake = MagicMock()
     fake.exceptions.APIError = _FakeAPIError
+    fake.exceptions.Timeout = _FakeTimeout  # #1784, siehe _make_fake_litellm_sdk
     if speech_side_effect is not None:
         fake.speech.side_effect = speech_side_effect
     else:
@@ -1079,3 +1103,240 @@ def test_emit_telemetry_none_when_no_cost(jsonl_path):
 
     parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
     assert parsed["est_cost_eur"] is None
+
+
+# ----------------------------------------------------------------------
+#  T1784 — Zeit-Budgets: alle Call-Sites, zentrale Konfiguration,
+#  hängender Anbieter
+# ----------------------------------------------------------------------
+
+
+def _make_haengendes_sdk(*, hang_sekunden: float):
+    """Fake-SDK, das einen hängenden Anbieter simuliert (#1784).
+
+    `completion` blockiert `hang_sekunden` lang — aber nur so lange, wie das
+    mitgeschickte `timeout`-Budget erlaubt; danach fliegt `_FakeTimeout`, genau
+    wie der echte HTTP-Client unter litellm es tut.
+
+    Ein Vendor, der KEIN `timeout` mitschickt, blockiert hier die vollen
+    `hang_sekunden` — das ist der Zustand vor #1784 (litellm-Default 600 s). Der
+    Test unten scheitert dann an der Zeit-Assertion statt stillschweigend grün
+    zu bleiben.
+    """
+    def haengen(*_args, timeout=None, **_kwargs):
+        if timeout is None:
+            time.sleep(hang_sekunden)
+            return _make_fake_litellm_response("zu spaet")
+        budget = min(float(timeout), hang_sekunden)
+        time.sleep(budget)
+        if budget < hang_sekunden:
+            raise _FakeTimeout(
+                "Provider antwortete nicht innerhalb von %.2fs" % budget)
+        return _make_fake_litellm_response("gerade noch")
+
+    return _make_fake_litellm_sdk(side_effect=haengen)
+
+
+def test_default_timeout_ist_das_zentrale_budget():
+    """T1784-AC2: der Vendor zieht sein Budget aus EINER Stelle
+    (`_types.LLM_TIMEOUT_SECONDS`), nicht aus einer Vendor-Konstante."""
+    fake_litellm = _make_fake_litellm_sdk(_make_fake_litellm_response("ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+    assert vendor.timeout == LLM_TIMEOUT_SECONDS
+    # Der interaktive Default ist ENDLICH und deutlich unter litellms 600 s.
+    assert 0 < LLM_TIMEOUT_SECONDS < 60
+
+
+def test_konstruktor_timeout_gewinnt_gegen_default():
+    """T1784-AC2/CLIENT-2: `timeout=` am Konstruktor ist der Override — so holt
+    hoerspiel sein Langtext-Budget, ohne den Chat-Default aufzuweichen."""
+    fake_litellm = _make_fake_litellm_sdk(_make_fake_litellm_response("ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(
+            api_key="sk-fake", timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
+    assert vendor.timeout == LLM_TIMEOUT_LONGFORM_SECONDS
+    assert LLM_TIMEOUT_LONGFORM_SECONDS > LLM_TIMEOUT_SECONDS
+
+
+def test_env_ueberschreibt_default_budget(monkeypatch):
+    """T1784-AC2: ENV `XBUDDY_LLM_TIMEOUT_SECONDS` ist der Not-Hebel am Pi."""
+    monkeypatch.setenv("XBUDDY_LLM_TIMEOUT_SECONDS", "7.5")
+    fake_litellm = _make_fake_litellm_sdk(_make_fake_litellm_response("ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+    assert vendor.timeout == 7.5
+
+
+@pytest.mark.parametrize("roher_wert", ["", "abc", "0", "-5"])
+def test_krumme_env_faellt_auf_default_zurueck(monkeypatch, roher_wert):
+    """T1784: eine unbrauchbare ENV darf den Familien-Chat nicht am Boot
+    hindern — sie wird geloggt-ignoriert, der Code-Default gilt."""
+    monkeypatch.setenv("XBUDDY_LLM_TIMEOUT_SECONDS", roher_wert)
+    fake_litellm = _make_fake_litellm_sdk(_make_fake_litellm_response("ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+    assert vendor.timeout == LLM_TIMEOUT_SECONDS
+
+
+def test_timeout_null_am_konstruktor_wird_abgelehnt():
+    """T1784: „kein Timeout" darf nicht über ein 0-Argument zurückkommen — das
+    ist genau der Zustand, den #1784 beseitigt."""
+    fake_litellm = _make_fake_litellm_sdk(_make_fake_litellm_response("ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         pytest.raises(ValueError, match="timeout"):
+        litellm_vendor.LitellmVendor(api_key="sk-fake", timeout=0)
+
+
+def test_alle_sechs_sichten_schicken_das_timeout_mit(jsonl_path):
+    """T1784-AC1: JEDE Call-Site des Vendors trägt ein explizites Timeout — es
+    gibt keinen Pfad mehr, auf dem litellms 600-s-Default gilt.
+
+    Deckt alle sechs SDK-Call-Sites ab: chat_multiturn, agent_step,
+    singleshot_structured, singleshot_text, speech, transcription.
+    """
+    budget = 12.5
+
+    # 1) chat_multiturn
+    fake = _make_fake_litellm_sdk(_make_fake_litellm_response("ok"))
+    with patch.dict(sys.modules, {"litellm": fake}):
+        litellm_vendor.LitellmVendor(
+            api_key="sk-fake", timeout=budget).chat_multiturn(
+                "S.", [], "F?", caller="kibuddy", slot="kibuddy-litellm-api-key")
+    assert fake.completion.call_args.kwargs["timeout"] == budget
+
+    # 2) agent_step
+    fake = _make_fake_litellm_sdk(_make_agent_response(text="ok"))
+    with patch.dict(sys.modules, {"litellm": fake}):
+        litellm_vendor.LitellmVendor(
+            api_key="sk-fake", timeout=budget).agent_step(
+                system="S.", messages=[{"role": "user", "content": "F?"}],
+                tools=[], caller="eltern-chat",
+                slot="eltern-chat-litellm-api-key")
+    assert fake.completion.call_args.kwargs["timeout"] == budget
+
+    # 3) singleshot_structured
+    fake = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis", "arguments": "{}"}]))
+    with patch.dict(sys.modules, {"litellm": fake}):
+        litellm_vendor.LitellmVendor(
+            api_key="sk-fake", timeout=budget).singleshot_structured(
+                "S", "P", {}, caller="hoerspiel",
+                slot="hoerspiel-litellm-claude-api-key")
+    assert fake.completion.call_args.kwargs["timeout"] == budget
+
+    # 4) singleshot_text
+    fake = _make_fake_litellm_sdk(_make_fake_litellm_response("ok"))
+    with patch.dict(sys.modules, {"litellm": fake}):
+        litellm_vendor.LitellmVendor(
+            api_key="sk-fake", timeout=budget).singleshot_text(
+                "S", "U", caller="hoerspiel",
+                slot="hoerspiel-litellm-claude-api-key")
+    assert fake.completion.call_args.kwargs["timeout"] == budget
+
+    # 5) speech
+    speech_resp = MagicMock()
+    speech_resp.content = b"ID3-mp3-bytes"
+    fake = _make_audio_sdk(speech_return=speech_resp)
+    with patch.dict(sys.modules, {"litellm": fake}):
+        litellm_vendor.LitellmVendor(
+            api_key="sk-fake", timeout=budget).speech(
+                "Hallo.", voice="alloy", caller="kibuddy",
+                slot="kibuddy-litellm-tts-key")
+    assert fake.speech.call_args.kwargs["timeout"] == budget
+
+    # 6) transcription
+    stt_resp = MagicMock()
+    stt_resp.text = "Hallo."
+    fake = _make_audio_sdk(transcription_return=stt_resp)
+    with patch.dict(sys.modules, {"litellm": fake}):
+        litellm_vendor.LitellmVendor(
+            api_key="sk-fake", timeout=budget).transcription(
+                b"AUDIO", caller="kibuddy", slot="kibuddy-litellm-stt-key")
+    assert fake.transcription.call_args.kwargs["timeout"] == budget
+
+
+def test_timeout_wird_zu_llm_timeout_error_mit_deutscher_meldung(jsonl_path):
+    """T1784-AC3: ein SDK-Timeout kommt als `LLMTimeoutError` heraus — Subklasse
+    von `ProviderError`, damit der eltern-chat-EC-14-Pfad ihn ohne Code-Änderung
+    als `_PROVIDER_DOWN` behandelt — mit deutschem Klartext statt SDK-Interna.
+
+    Belegt zugleich, dass der Vendor den Timeout EIGENS fängt: `_FakeTimeout` ist
+    KEINE Subklasse von `_FakeAPIError` (Spiegel der echten SDK-Hierarchie); ein
+    reines `except APIError` würde ihn durchlassen.
+    """
+    fake_litellm = _make_fake_litellm_sdk(side_effect=_FakeTimeout("read timeout"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_chat
+        chat = get_chat(slot="kibuddy-litellm-api-key")
+        with pytest.raises(LLMTimeoutError) as excinfo:
+            chat.complete_multiturn(system="S.", turns=[], user_message="F?")
+
+    fehler = excinfo.value
+    # Konsumenten-Vertrag: wer heute ProviderError fängt, fängt auch das.
+    assert isinstance(fehler, ProviderError)
+    # Familientauglich: deutscher Satz, keine SDK-Interna, kein Stacktrace.
+    text = str(fehler)
+    assert "KI-Dienst" in text
+    assert "noch einmal" in text
+    assert "read timeout" not in text
+    assert "Traceback" not in text
+    # Kein Telemetrie-Eintrag: der Fehler fliegt VOR _emit_telemetry.
+    assert not jsonl_path.exists()
+
+
+def test_haengender_provider_kommt_im_budget_mit_definiertem_fehler(jsonl_path):
+    """T1784-AC4: DER Beweis-Test. Ein Anbieter, der 30 s hängen WÜRDE, gibt den
+    Aufrufer-Thread innerhalb des Budgets mit einem definierten Fehler frei.
+
+    Das ist der Schaden aus #1784 im Kleinen: der Call läuft im Worker-Thread,
+    der die `PrivateChatSession` hält (eltern-chat/tasks.py) — hängt er, hängt
+    der Chat-Turn der Familie. Budget hier 0,3 s statt 30 s, damit der Test
+    schnell ist; die Mechanik ist dieselbe.
+    """
+    budget = 0.3
+    hang = 30.0
+    fake_litellm = _make_haengendes_sdk(hang_sekunden=hang)
+
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_agent
+        agent = get_agent("eltern-chat-litellm-api-key", timeout=budget)
+        start = time.monotonic()
+        with pytest.raises(LLMTimeoutError):
+            agent.step(
+                system="S.",
+                messages=[{"role": "user", "content": "F?"}],
+                tools=[],
+            )
+        dauer = time.monotonic() - start
+
+    # Innerhalb des Budgets zurück — nicht nach `hang` Sekunden und schon gar
+    # nicht nach litellms 600-s-Default. Der Puffer ist Scheduling-Rauschen.
+    assert dauer < budget + 2.0, (
+        "Aufruf brauchte %.2fs bei einem Budget von %.2fs — das Timeout greift "
+        "nicht" % (dauer, budget))
+    assert dauer < hang
+    # Und das Budget kam wirklich am SDK an (kein Zufalls-Abbruch).
+    assert fake_litellm.completion.call_args.kwargs["timeout"] == budget
+
+
+def test_langtext_budget_kommt_am_sdk_an(jsonl_path):
+    """T1784: hoerspiels Langtext-Pfad reicht sein größeres Budget bis ans SDK
+    durch (`get_singleshot(..., timeout=…)` → Vendor → `completion`).
+
+    Ohne diese Naht müsste der zentrale Default auf 420 s aufgeweicht werden —
+    und der Familien-Chat wäre wieder minutenlang blockierbar.
+    """
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis", "arguments": '{"t": 1}'}]))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        ss = public_api.get_singleshot(
+            "hoerspiel-litellm-claude-api-key",
+            timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
+        ss.complete_structured("S", "P", {})
+
+    assert (fake_litellm.completion.call_args.kwargs["timeout"]
+            == LLM_TIMEOUT_LONGFORM_SECONDS)

@@ -65,6 +65,7 @@ def _build_vendor(
     required: frozenset[Capability],
     model: str = "",
     max_tokens: int = 0,
+    timeout: float = 0.0,
 ) -> tuple[Any, str, str, frozenset[Capability]]:
     """Slot → (Vendor-Instanz, caller, slot-name, available-caps) mit Capability-
     Boot-Fail (LLMP-S3).
@@ -84,6 +85,15 @@ def _build_vendor(
     0 (Default) bewahrt das alte Verhalten (Vendor-Default). Analog der
     `model`-Logik: nur durchreichen, wenn der Konsument einen Wert wählt —
     Test-Fakes ohne `max_tokens=`-Kwarg bleiben grün.
+
+    `timeout` (T1784-additiv): wenn >0, überschreibt das zentrale Zeit-Budget
+    (`_types.LLM_TIMEOUT_SECONDS`, 30 s interaktiv). 0 (Default) lässt den
+    Vendor den zentralen Default ziehen — genau wie `model`/`max_tokens` wird
+    der Kwarg nur bei explizitem Wunsch durchgereicht, damit Test-Fakes ohne
+    `timeout=`-Kwarg grün bleiben. Einziger heutiger Nutzer: hoerspiel, das für
+    Langtext-Generierung `LLM_TIMEOUT_LONGFORM_SECONDS` setzt (gemessen bis
+    308 s — kein Chat-Turn, deshalb ein eigenes Budget statt eines aufgeweichten
+    Defaults für alle).
 
     Bei Cap-Mismatch oder fehlender `CAPABILITIES`-Konstante: `LLMCapabilityError`
     als erster Fehler vor allem anderen (LLMP-S3, LLMP-4 Watchdog-Regel).
@@ -140,6 +150,8 @@ def _build_vendor(
         kwargs["model"] = model
     if max_tokens > 0:
         kwargs["max_tokens"] = max_tokens
+    if timeout > 0:
+        kwargs["timeout"] = timeout
     instance = vendor_cls(**kwargs)
     # `available` (die Vendor-CAPABILITIES) wandert mit hinaus: die Singleshot-
     # Fassade braucht sie zur Call-Zeit für das multimodal_input-Gate (T1262,
@@ -473,7 +485,8 @@ def get_chat(slot: str) -> LLMProvider:
     return _ChatFacade(vendor, caller, slot_name)
 
 
-def get_singleshot(slot: str, model: str = "", max_tokens: int = 0) -> Any:
+def get_singleshot(slot: str, model: str = "", max_tokens: int = 0,
+                   timeout: float = 0.0) -> Any:
     """Liefert die Structured-Singleshot-Sicht (LLMP-S1, hoerspiel-Heimat).
 
     Required Capabilities (LLMP-3): `structured_output`, `system_message_distinct`.
@@ -489,14 +502,20 @@ def get_singleshot(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     0 (Default) erhält den Vendor-Default (2048 Anthropic / 4096 Mistral).
     hoerspiel reicht hier die Provider-eigenen MAX_TOKENS durch (8192 / 4096),
     damit lange Folgentexte nicht beim DEFAULT_MAX_TOKENS=2048 trunkiert werden.
+
+    `timeout` (T1784-additiv): Zeit-Budget in Sekunden; 0 (Default) nimmt das
+    zentrale interaktive Budget (30 s). hoerspiel setzt hier
+    `LLM_TIMEOUT_LONGFORM_SECONDS`, weil eine Folgen-Generierung gemessen bis
+    zu 121 s (litellm) bzw. 308 s (anthropic-Recherche) läuft.
     """
     vendor, caller, slot_name, caps = _build_vendor(
-        slot, "get_singleshot", REQUIRED_SINGLESHOT, model, max_tokens,
+        slot, "get_singleshot", REQUIRED_SINGLESHOT, model, max_tokens, timeout,
     )
     return _SingleshotFacade(vendor, caller, slot_name, caps)
 
 
-def get_completion(slot: str, model: str = "", max_tokens: int = 0) -> Any:
+def get_completion(slot: str, model: str = "", max_tokens: int = 0,
+                   timeout: float = 0.0) -> Any:
     """Liefert die Freitext-Singleshot-Sicht (LLMP-S1, hoerspiel-Synopse-Heimat).
 
     Ein System + ein User → Freitext-String über `.complete(system, user)`;
@@ -517,14 +536,18 @@ def get_completion(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     (2048 Anthropic / 4096 Mistral). hoerspiel reicht hier die Provider-eigenen
     MAX_TOKENS (8192 / 4096) durch, damit lange Synopse-Freitexte nicht beim
     DEFAULT_MAX_TOKENS=2048 trunkiert werden (T1084-Parität).
+
+    `timeout` (T1784-additiv, analog `get_singleshot`): Zeit-Budget in Sekunden;
+    0 (Default) nimmt das zentrale interaktive Budget (30 s).
     """
     vendor, caller, slot_name, _caps = _build_vendor(
-        slot, "get_completion", REQUIRED_COMPLETION, model, max_tokens,
+        slot, "get_completion", REQUIRED_COMPLETION, model, max_tokens, timeout,
     )
     return _CompletionFacade(vendor, caller, slot_name)
 
 
-def get_agent(slot: str, model: str = "", max_tokens: int = 0) -> Any:
+def get_agent(slot: str, model: str = "", max_tokens: int = 0,
+              timeout: float = 0.0) -> Any:
     """Liefert die Agent-Tool-Loop-Sicht (LLMP-S1, eltern-chat-Heimat).
 
     Required Capabilities (LLMP-3, T1085-Patch): `tool_use`,
@@ -549,9 +572,14 @@ def get_agent(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     eltern-chat reicht hier den alt-treuen MAX_TOKENS (4096, claude.py:32) durch,
     damit lange Antworten nicht beim DEFAULT_MAX_TOKENS=2048 trunkiert werden
     (Spiegel `get_singleshot`, T1084).
+
+    `timeout` (T1784-additiv): Zeit-Budget in Sekunden; 0 (Default) nimmt das
+    zentrale interaktive Budget (30 s) — das ist der richtige Wert für
+    eltern-chat, dessen Agent-Calls gemessen bei max 14,0 s liegen. hoerspiel
+    setzt für den Recherche-Vorschritt das Langtext-Budget.
     """
     vendor, caller, slot_name, caps = _build_vendor(
-        slot, "get_agent", REQUIRED_AGENT, model, max_tokens,
+        slot, "get_agent", REQUIRED_AGENT, model, max_tokens, timeout,
     )
     return _AgentFacade(vendor, caller, slot_name, caps)
 

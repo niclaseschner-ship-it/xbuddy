@@ -13,6 +13,13 @@ gemeinsamen Helfer ist Bruch) ausgelöst haben (T1130):
   - ``_tool_result_block``: neutraler tool_result-Block aus tool_runner-Rückgabe
   - ``agent_run``: Tool-Use-Loop, der pro Iteration ``self.agent_step()`` aufruft
 
+Seit T1784 zusätzlich die zwei Timeout-Helfer, die beide Vendor-Files brauchen
+(n=2, LLMP-S7 — lieber hier einmal als zweimal kopiert):
+
+  - ``_resolve_timeout``: Konstruktor-Override > ENV > zentraler Default
+  - ``_timeout_error_classes``: SDK-Fehlerklassen, die „Budget überschritten"
+    bedeuten, defensiv aus dem SDK-Namensraum gezogen
+
 Vendor-spezifische ProviderError-Strings werden über ``self.name`` gebildet;
 beide Vendor-Klassen deklarieren bereits ``name = "<vendor>"`` auf Klassen-Ebene
 (AC2-Mechanik: vendor-spezifische Strings bleiben getrennt, kein Hard-Code
@@ -21,7 +28,15 @@ hier).
 
 from typing import Any
 
-from .._types import ProviderError
+from .._types import ProviderError, resolve_timeout
+
+# T1784: familientauglicher Klartext, wenn das Zeit-Budget reißt. Kein
+# Stacktrace, keine Provider-Interna, keine Sekundenzahl im Satz — die Zahl
+# gehört ins Log (LOG-4), nicht in den Familien-Chat.
+TIMEOUT_MELDUNG = (
+    "Der KI-Dienst hat zu lange gebraucht und wurde abgebrochen. "
+    "Bitte versuch es gleich noch einmal."
+)
 
 
 class VendorBase:
@@ -36,6 +51,59 @@ class VendorBase:
     """
 
     name: str  # Pflicht-Attribut jeder Vendor-Klasse ("anthropic", "mistral")
+
+    def _resolve_timeout(self, timeout: float | None) -> float:
+        """Zeit-Budget dieser Vendor-Instanz in Sekunden (T1784, CLIENT-2-Form).
+
+        ``None`` (Default) → zentraler Default aus ``_types.resolve_timeout()``
+        (ENV ``XBUDDY_LLM_TIMEOUT_SECONDS`` überschreibbar). Ein explizit
+        übergebener Wert gewinnt immer — das ist der Konstruktor-Override, den
+        CLIENT-2 verlangt, und der Weg, auf dem ein Langtext-Konsument
+        (hoerspiel) sein größeres Budget holt.
+
+        Ein Wert ≤ 0 ist hier ein Programmierfehler des Konsumenten und wird
+        laut abgelehnt: „kein Timeout" ist genau der Zustand, den #1784
+        beseitigt — er darf nicht über die Hintertür eines 0-Arguments
+        zurückkommen. (Eine krumme ENV wird dagegen still auf den Default
+        zurückgesetzt, siehe ``resolve_timeout`` — Umgebung ≠ Code.)
+        """
+        if timeout is None:
+            return resolve_timeout()
+        wert = float(timeout)
+        if wert <= 0:
+            raise ValueError(
+                "%s-vendor: timeout muss > 0 sein (bekam %r) — ein "
+                "unbegrenzter LLM-Call ist der Bug aus #1784" % (self.name, timeout)
+            )
+        return wert
+
+    @staticmethod
+    def _timeout_error_classes(namespace: Any, *names: str) -> tuple[type[BaseException], ...]:
+        """SDK-Fehlerklassen, die „Zeit-Budget überschritten" bedeuten (T1784).
+
+        Warum defensiv über ``getattr`` statt direkt: ``litellm.exceptions.
+        Timeout`` erbt von ``openai.APITimeoutError``, NICHT von
+        ``litellm.exceptions.APIError``. Ein ``except APIError`` fängt den
+        Timeout also **nicht** — er käme heute als roher SDK-Fehler aus dem
+        Vendor heraus. Deshalb wird er eigens und VOR dem APIError-Zweig
+        gefangen.
+
+        ``isinstance(kandidat, type)`` filtert Mocks aus: die Vendor-Tests
+        hängen das SDK als ``MagicMock`` ein, wo jedes Attribut wieder ein Mock
+        ist — und ein Mock in einem ``except``-Tupel wirft ``TypeError:
+        catching classes that do not inherit from BaseException``.
+
+        ``TimeoutError`` (stdlib, ``socket.timeout`` ist seit 3.10 ein Alias)
+        hängt immer mit dran: es ist die anbieter-neutrale Form, die aus tieferen
+        Schichten durchkommen kann.
+        """
+        klassen: list[type[BaseException]] = []
+        for name in names:
+            kandidat = getattr(namespace, name, None)
+            if isinstance(kandidat, type) and issubclass(kandidat, BaseException):
+                klassen.append(kandidat)
+        klassen.append(TimeoutError)
+        return tuple(klassen)
 
     @staticmethod
     def _tool_result_block(tool_use_id: str, runner_result: Any) -> dict[str, Any]:

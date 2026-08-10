@@ -21,8 +21,11 @@ internen Pfaden (LLMP-4 Re-Export-Form analog ZD-5/MOD-5).
 
 from ._resolver import litellm_slot_for_provider, slot_present
 from ._types import (
+    LLM_TIMEOUT_LONGFORM_SECONDS,
+    LLM_TIMEOUT_SECONDS,
     LLMCapabilityError,
     LLMProvider,
+    LLMTimeoutError,
     ProviderCallEvent,
     ProviderError,
 )
@@ -37,8 +40,11 @@ from .public_api import (
 )
 
 __all__ = [
+    "LLM_TIMEOUT_LONGFORM_SECONDS",
+    "LLM_TIMEOUT_SECONDS",
     "LLMCapabilityError",
     "LLMProvider",
+    "LLMTimeoutError",
     "ProviderCallEvent",
     "ProviderError",
     "estimate_cost",
