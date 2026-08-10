@@ -30,6 +30,37 @@ erkannt und beobachtbar bleiben; eine Endlosschleife aus Restart maskiert
 echte Fehler. Wer aus gutem Grund anders entscheiden will, dokumentiert
 das in der Komponenten-Spec.
 
+**Klarstellung (#1785): „der Dienst kann per OOM sterben" ist KEIN Grund für
+`always`.** `on-failure` deckt Signal-Tode bereits ab — ein OOM-Kill ist
+`SIGKILL` (`status=9/KILL`), ein Segfault ist `SIGSEGV` (`status=11/SEGV`), und
+systemd zählt beide als `Result=signal`, also als *failure*. Der **einzige**
+Unterschied von `always` ist der Neustart nach einem **sauberen** `exit 0` — und
+genau der ist der Fall, in dem ein Restart einen echten Bug verdeckt: ein
+HTTP-Service, der sich freiwillig beendet, hat einen Grund dazu, und den will man
+sehen. `always` kauft für den OOM-Fall nichts und kostet Beobachtbarkeit.
+
+Live-Beleg für die Kosten: `xbuddy-plan` und `xbuddy-familie` trugen am Pi
+hand-editiert `always`, ohne Begründung an irgendeiner Stelle. Am 2026-08-10
+starben beide 14× hintereinander mit `SIGSEGV`, sofort beim Start, im
+`RestartSec=10`-Takt — eine Endlosschleife, die niemandem auffiel, weil
+`RestartSec` größer ist als das `StartLimitIntervalSec`-Fenster und die
+Rate-Begrenzung deshalb nie greift. Genau das Maskieren, das SVC-3 verhindern
+soll.
+
+**Verdikt: keine Ausnahme.** Die Abweichung wird auf SVC-3 zurückgeführt; die
+Repo-Vorlagen (`plan/plan.service`, `familie/familie.service`) sagen ohnehin
+schon `on-failure`, die Drift lebt nur in `/etc`. Wer künftig `always` will,
+braucht einen Grund, der über „stirbt manchmal" hinausgeht — und trägt ihn nach
+SVC-3 Satz 3 in die Komponenten-Spec ein, nicht in eine `/etc`-Datei.
+
+Ergänzend gehört zu einem Dienst, der unbeaufsichtigt neu startet, eine
+**Speicher-Obergrenze**, damit ein Restart-Zyklus nicht den Host mitnimmt: die
+gemessene Herleitung und der Ausroll-Weg dieser Grenzwerte stehen in
+`deploy/systemd/README.md` („Drop-Ins im Repo"). Bewusst **keine** eigene
+Convention-ID — bei n=2 Diensten wäre das eine Vorrats-Konvention (CLAUDE.md §6);
+sobald ein dritter Dienst dieselbe Bremse braucht, ist der Moment für eine
+SVC-Regel gekommen.
+
 ### SVC-4 — Logs gehen an stdout/stderr, nicht in Dateien
 Service-Code loggt nach stdout/stderr. `journalctl -u <service>` ist die
 Quelle der Wahrheit für Logs — keine Datei-Logs nebenher. Log-Format

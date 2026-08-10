@@ -41,10 +41,9 @@ id = "xbuddy-vornamen-erwachsene"
 description = "Vornamen der Erwachsenen (Klarnamen)"
 regex = '''(?i)\b(sophia|julian|vera|taro)\b'''
 
-[[rules]]
-id = "xbuddy-kind-slugs"
-description = "Kind-Slugs paula/neko (Klarnamen-Slugs)"
-regex = '''(?i)\b(paula|neko)\b'''
+# Die Kind-Slugs sind seit #1783 im gitignored `.gitleaks-local.toml` — die Regel
+# stand hier mit den Slugs im Regex UND in ihrer description, gab also preis, was
+# sie schützen soll. Guard bleibt scharf: pre-commit nutzt das Supplement.
 
 [[rules]]
 id = "xbuddy-niclas-slug"
@@ -64,8 +63,38 @@ paths = [
 # ── Private Kontaktdaten ─────────────────────────────────────────────────────
 [[rules]]
 id = "xbuddy-github-org"
-description = "GitHub-Org (enthält echten Benutzernamen)"
+# Der Org-Name ist in einem public Repo kein Geheimnis — er steht in der
+# Clone-URL jedes Besuchers. Schützenswert ist er nur als HARTKODIERTE Kopplung:
+# ein Pfad, ein Remote, ein API-Aufruf, der dieses Konto festschreibt, macht das
+# Repo für Fremde unbrauchbar. Als Link in der Doku ist er dagegen die korrekte
+# Adresse.
+#
+# Deshalb die Zeilen-Ausnahme unten statt einer Datei-Liste: eine Datei-Liste
+# driftet mit jeder neuen Doku-Seite und macht den Job dauerhaft rot (#1810).
+description = "GitHub-Org hartkodiert (außerhalb von Doku-Links)"
 regex = '''niclaseschner-ship-it'''
+[[rules.allowlists]]
+# Ausgenommen ist genau EINE Form: der Markdown-Inline-Link `](https://github.com/…`.
+# Das ist die Form, in der die Doku auf public Repos verweist — die korrekte
+# Adresse, kein Leak.
+#
+# Warum nicht `paths = ['\.md$']` plus Zeilen-Regex mit `matchCondition = "AND"`:
+# gitleaks 8.21.2 kennt `matchCondition` noch nicht und verknüpft die Kriterien
+# mit ODER. Die Ausnahme wäre dann viel zu breit — jede .md-Datei UND jede
+# github.com-Zeile im Code wären still. Empirisch mit einer Präzisions-Matrix
+# nachgewiesen (#1810). Der Link-Kontext im Muster selbst erreicht das UND ohne
+# das Feature.
+#
+# `regexTarget = "line"` prüft die ganze Zeile, nicht nur den Treffer — der
+# Treffer ist ja nur der Org-Name, nie der umgebende Link.
+#
+# Es bleibt Treffer: dieselbe URL als nackter String im Code, ein
+# `git@github.com:`-Remote, und der Org-Name ohne Link auch in Markdown. Genau
+# das ist die hartkodierte Kopplung, um die es der Regel geht.
+regexTarget = "line"
+regexes = [
+    '''\]\(https://github\.com/''',
+]
 
 [[rules]]
 id = "xbuddy-tailscale-fqdn"

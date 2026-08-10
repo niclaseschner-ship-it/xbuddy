@@ -1,8 +1,8 @@
-title = "xbuddy Leak-Guard — lokales PII-Supplement (VORLAGE, #1759)"
+title = "xbuddy Leak-Guard — lokales PII-Supplement (VORLAGE, #1759/#1783)"
 #
 # VORLAGE für das gitignored `.gitleaks-local.toml`. Es trägt die familien-
-# SPEZIFISCHEN Detektoren (Wohnort + private Mail/Domain), die NICHT in die
-# public `.gitleaks.toml` gehören. Fresh-Install:
+# SPEZIFISCHEN Detektoren (Wohnort, private Mail/Domain, Kind-Slugs), die NICHT
+# in die public `.gitleaks.toml` gehören. Fresh-Install:
 #
 #   cp .gitleaks-local.example.toml .gitleaks-local.toml
 #   # dann die <PLATZHALTER> durch die echten Familien-Werte ersetzen
@@ -39,3 +39,12 @@ paths = [
 id = "xbuddy-ortsname"
 description = "Wohnort-Name (<PLATZHALTER>)"
 regex = '''(?i)\bMusterstadt\b'''
+
+# ── Kind-Slugs (seit #1783 hier statt in der public Config) ──────────────────
+# Standen bis #1783 in `.gitleaks.toml` — die Regel führte die Slugs im Regex
+# UND in ihrer description und gab damit preis, was sie schützen soll. Sie
+# gehören zur selben Klasse wie Wohnort und Mail: nur lokal, nie public.
+[[rules]]
+id = "xbuddy-kind-slugs"
+description = "Kind-Slugs (<PLATZHALTER1>/<PLATZHALTER2>)"
+regex = '''(?i)\b(kindslug1|kindslug2)\b'''
