@@ -41,10 +41,9 @@ id = "xbuddy-vornamen-erwachsene"
 description = "Vornamen der Erwachsenen (Klarnamen)"
 regex = '''(?i)\b(sophia|julian|vera|taro)\b'''
 
-[[rules]]
-id = "xbuddy-kind-slugs"
-description = "Kind-Slugs paula/neko (Klarnamen-Slugs)"
-regex = '''(?i)\b(paula|neko)\b'''
+# Die Kind-Slugs sind seit #1783 im gitignored `.gitleaks-local.toml` — die Regel
+# stand hier mit den Slugs im Regex UND in ihrer description, gab also preis, was
+# sie schützen soll. Guard bleibt scharf: pre-commit nutzt das Supplement.
 
 [[rules]]
 id = "xbuddy-niclas-slug"
