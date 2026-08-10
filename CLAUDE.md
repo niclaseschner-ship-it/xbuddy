@@ -16,15 +16,17 @@
 - den **Ticket-Workflow** (GitHub Issues + Projects)
 - den **Methoden-Korpus** — die versionierte Arbeits-Methode (Commands,
   Subagents, Contracts, Hooks). SSoT lebt seit dem Lotse-Cutover (RAT-23 Stufe 2)
-  im **eigenen Repo `lotse`** (`~/repos/lotse`), NICHT mehr unter `methode/` hier;
-  `~/.claude` ist Deploy-Ziel (`lotse/deploy.sh`). Modell: `~/repos/lotse/README.md`.
-  Tool-neutraler Einstieg: `AGENTS.md` (Repo-Root).
+  im **eigenen Repo [`lotse`](https://github.com/niclaseschner-ship-it/lotse)**
+  (intern ausgecheckt unter `~/repos/lotse`), NICHT mehr unter `methode/` hier;
+  `~/.claude` ist Deploy-Ziel (`lotse/deploy.sh`). Modell: die `README.md` im
+  lotse-Repo. Tool-neutraler Einstieg: `AGENTS.md` (Repo-Root).
 
-Das *Warum* — Vision, Kontext, Begründung — lebt im Repo `xbuddy-knowledge`
-in `CONTEXT.md`. **Einstieg + Lese-Reihenfolge stehen an einem Ort: `AGENTS.md`
-(Repo-Root).** Wer neu ist, startet dort — die Karte führt von der Vision
-(`xbuddy-knowledge/CONTEXT.md`) über `specs/constitution.md`, `specs/README.md`
-bis `WORKFLOW.md`.
+Das *Warum* — Vision, Kontext, Begründung — lebt im **internen** Schwester-Repo
+`xbuddy-knowledge` in `CONTEXT.md`; der Kern (was XBuddy ist, North Star) ist
+hier in `README.md` gespiegelt. **Einstieg + Lese-Reihenfolge stehen an einem
+Ort: `AGENTS.md` (Repo-Root).** Wer neu ist, startet dort — die Karte führt von
+der Vision (`xbuddy-knowledge/CONTEXT.md`) über `specs/constitution.md`,
+`specs/README.md` bis `WORKFLOW.md`.
 
 ## 2. Die zwei Repos
 
@@ -33,7 +35,7 @@ XBuddy hat zwei Repos mit klar getrenntem Scope:
 | Repo | Inhalt |
 |---|---|
 | `xbuddy` (dieses) | das *Was* + *Wie* — Specs (`specs/`), Code, Tickets (GitHub Issues) |
-| `xbuddy-knowledge` | das *Warum* — Vision, Kontext, Begründung (`CONTEXT.md`) |
+| `xbuddy-knowledge` (intern) | das *Warum* — Vision, Kontext, Begründung (`CONTEXT.md`); Kern hier in `README.md` gespiegelt |
 
 Regel: Warum → Knowledge-Repo. Spec, Code, Umsetzung, offene Punkte →
 dieses Repo. Jeder Fakt hat genau einen Ort. Braucht ein Dokument Inhalt
@@ -93,7 +95,8 @@ Diese Regeln sind nicht verhandelbar. Im Zweifel: nachfragen, nicht raten.
 - **Kopiere niemals Inhalt zwischen Dokumenten.** Hängt ein Dokument von
   einem anderen ab, wird verlinkt. Einzige bewusste Ausnahme:
   `specs/constitution.md` als operative Kurzfassung von
-  `xbuddy-knowledge/CONTEXT.md` — mit dokumentierter Sync-Pflicht.
+  `xbuddy-knowledge/CONTEXT.md` (internes Repo, §2) — mit dokumentierter
+  Sync-Pflicht.
 
 **Daten vs. Code**
 

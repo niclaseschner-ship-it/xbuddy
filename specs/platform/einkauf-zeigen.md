@@ -252,4 +252,5 @@ Mini App — der einzige Ort, wo Pi-Piktogramme + Tap-Toggle sichtbar sind.
 - gh issue 653, gh issue 678
 - `decisions/RAT-16-telegram-mvp-matrix-vertagt.md`
 - `brainstorm/idee-mvp/essen-einkauf/mockups/telegram-mini-app-v7-chat-flow.html`
-  — Chat-Phase 2 zeigt die Übersichts-Bubble mit Inline-Button
+  — Chat-Phase 2 zeigt die Übersichts-Bubble mit Inline-Button (internes
+  Deliberations-Artefakt, nicht Teil des public Repos)

@@ -11,11 +11,14 @@ auf die etablierten Quellen.
 
 ## Wenn du neu bist — Lese-Reihenfolge
 
-1. `xbuddy-knowledge/CONTEXT.md` — das **Warum** (Vision; anderes Repo)
+1. `xbuddy-knowledge/CONTEXT.md` — das **Warum** (Vision; internes
+   Schwester-Repo, der Kern ist hier in `README.md` gespiegelt)
 2. `specs/constitution.md` — operative **Prinzipien**
 3. `specs/README.md` — das **Spec-Modell**
 4. `WORKFLOW.md` — der **Ticket-/PR-Workflow**
-5. Repo **`lotse`** (`~/repos/lotse`, `README.md`) — **wie wir arbeiten** (die Methode)
+5. Repo [**`lotse`**](https://github.com/niclaseschner-ship-it/lotse) — **wie
+   wir arbeiten** (die Methode), Einstieg `README.md` (intern ausgecheckt
+   unter `~/repos/lotse`)
 
 Dann je nach Aufgabe gezielt unten weiterspringen.
 
@@ -23,18 +26,19 @@ Dann je nach Aufgabe gezielt unten weiterspringen.
 
 | Du willst… | Lies |
 |---|---|
-| die **Arbeits-Methode** (wie wir arbeiten: `/werft`, `/arbeitstag`, `/berater-runde`, Subagents, Contracts, Hooks) | Repo **`lotse`** (`~/repos/lotse`) — Einstieg `README.md` |
+| die **Arbeits-Methode** (wie wir arbeiten: `/werft`, `/arbeitstag`, `/berater-runde`, Subagents, Contracts, Hooks) | Repo [**`lotse`**](https://github.com/niclaseschner-ship-it/lotse) — Einstieg `README.md` (intern: `~/repos/lotse`) |
 | die **Repo-Arbeitsregeln** (Code, Sprache, Git, Safety) | `CLAUDE.md` |
 | den **Ticket-/PR-Workflow** | `WORKFLOW.md` |
 | das Soll-**Verhalten** der Komponenten | `specs/` (Modell: `specs/README.md`) |
 | die **Bauregeln** über Komponenten hinweg | `conventions/` |
 | ratifizierte **Architektur-Entscheidungen** | `decisions/INDEX.md` |
-| das **Warum** (Vision/Kontext) | Repo `xbuddy-knowledge` → `CONTEXT.md` |
+| das **Warum** (Vision/Kontext) | Repo `xbuddy-knowledge` → `CONTEXT.md` (internes Schwester-Repo; Kern hier in `README.md` gespiegelt) |
 
 ## Die Methode in einem Satz
 
 Die Methoden-Glue lebt seit dem Lotse-Cutover (decisions/RAT-23, Stufe 2) im
-**eigenen Repo `lotse`** (`~/repos/lotse`) — nicht mehr unter `methode/` in
+**eigenen Repo [`lotse`](https://github.com/niclaseschner-ship-it/lotse)**
+(intern ausgecheckt unter `~/repos/lotse`) — nicht mehr unter `methode/` in
 diesem Repo. Sie wird per `lotse/deploy.sh` nach `~/.claude/` gespiegelt, dem
 Laufzeit-Ort, den der Claude-Code-Harness liest. Bearbeitet wird im lotse-Repo
 (PR + Review + CI-Sicht), ausgeführt aus `~/.claude/`.

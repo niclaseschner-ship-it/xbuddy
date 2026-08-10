@@ -235,4 +235,5 @@ können sie unverändert nutzen.
 - gh issue 678 — MVP-Sammler Telegram-Skill+Widget-Set V1
 - `decisions/RAT-16-telegram-mvp-matrix-vertagt.md` — Plattform-Ratifizierung
 - `brainstorm/idee-mvp/essen-einkauf/mockups/telegram-mini-app-v7-chat-flow.html`
-  — Gate-B-Mockup zeigt Direkt-Modus in Chat-Phase 1
+  — Gate-B-Mockup zeigt Direkt-Modus in Chat-Phase 1 (internes
+  Deliberations-Artefakt, nicht Teil des public Repos)

@@ -847,7 +847,9 @@ Generalisierung (Premature Generalization, RAT-17). Der bestehende
 `deploy/hoerspiel/bootstrap.sh` ist Mia-spezifisch und wird **nicht**
 generalisiert — Finn + spätere Instanzen werden manuell initialisiert.
 
-Quell-Pfade für die **Mia-Instanz** (`xbuddy-data/hoerspiel/mia/…`):
+Quell-Pfade für die **Mia-Instanz** (`xbuddy-data/hoerspiel/mia/…`; die
+`brainstorm/…`-Quellen sind interne Deliberations-Artefakte, nicht Teil
+des public Repos):
 
 - `bible.md` ← Inhalt aus
   `brainstorm/ideas/mia-hoerspiel-app/welt_und_charaktere.md`
@@ -2106,7 +2108,8 @@ Muster: analog `nextKindId` in `hoerspiel/static/player.js`. Kein JS-State
 ## Provenienz
 
 Diese Spec entstand am 2026-06-12 aus einem zweitägigen Brainstorm
-(2026-06-11/12) mit Nic. Werft-Input:
+(2026-06-11/12) mit Nic. Werft-Input (internes Deliberations-Artefakt,
+nicht Teil des public Repos):
 `brainstorm/ideas/mia-hoerspiel-app/spec_entwurf.md` (HSP-* IDs analog
 übernommen), `workflow_album_modell.md` (Album-/Bündel-/Resume-Mechanik),
 Welt-Bible und Folgen-Historie aus 20 Vorgänger-Folgen. Brainstorm-Retro:
