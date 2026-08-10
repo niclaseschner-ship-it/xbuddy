@@ -101,26 +101,35 @@ Nicht aktiviert: `secret_scanning_validity_checks` und
 `secret_scanning_non_provider_patterns` — die schicken Fundstellen zur Prüfung
 an Dritte bzw. erzeugen deutlich mehr Rauschen. Bewusst aus.
 
-## Status des CI-Jobs — noch nicht `required`, und warum
+## Status des CI-Jobs — grün-fähig, noch nicht `required`
 
-Der `leak-guard`-Job ist **nicht** in den required-checks der Branch-Protection
-(dort stehen `closes-guard`, `ruff`, `lint-imports`). Der ursprüngliche Grund war
-der noch laufende Scrub (#1719, inzwischen erledigt). Der heutige Grund ist ein
-anderer:
+`gitleaks dir --config .gitleaks.toml` auf die getrackten Dateien liefert
+**0 Treffer**. Der Job **kann** grün sein (#1810).
 
-`gitleaks dir --config .gitleaks.toml` auf getrackte Dateien liefert **5
-Treffer**, alle von derselben Regel `xbuddy-github-org` (der GitHub-Org-Name in
-`AGENTS.md:19/29/40`, `CLAUDE.md:19`, `README.md:67`).
+Das war bis #1810 anders: 5 Treffer, alle von `xbuddy-github-org`, alle derselbe
+Fall — Markdown-Links auf das public Repo `lotse`. Der Org-Name steht in der
+Clone-URL jedes Besuchers dieses public Repos; er ist die Adresse, kein
+Geheimnis. Ein Guard, der auf die eigene Adresse anschlägt, ist dauerhaft rot,
+und ein dauerhaft roter Job wird ignoriert — dann leistet er auch als Anzeige
+nichts mehr.
 
-Diese Regel kann strukturell nicht grün werden: der Org-Name steht in der
-Clone-URL jedes Besuchers dieses public Repos. Er ist kein Geheimnis, sondern die
-Adresse. Solange die Regel existiert, ist der Job dauerhaft rot und damit als
-required-check unbrauchbar.
+Was die Regel wirklich sucht, ist die **hartkodierte Kopplung**: ein Pfad, ein
+Remote, ein API-Aufruf, der dieses eine Konto festschreibt, macht das Repo für
+eine fremde Familie unbrauchbar. Deshalb ist nur **eine** Form ausgenommen, der
+Markdown-Inline-Link `](https://github.com/…`. Es bleibt Treffer: dieselbe URL
+als String im Code, ein `git@github.com:`-Remote, und der Org-Name ohne Link
+auch in Markdown.
 
-**Offene Entscheidung (Nic):** entweder `xbuddy-github-org` fällt weg bzw. bekommt
-eine Allowlist für Doku-Dateien — dann kann der Job grün und `required` werden.
-Oder die Regel bleibt und der Job bleibt bewusst rot, dann ist er aber nur
-Anzeige und kein Gate. Nicht entschieden, nicht eigenmächtig geändert.
+Wichtig für den nächsten Umbau: **gitleaks 8.21.2 kennt `matchCondition` nicht**
+und verknüpft mehrere Allowlist-Kriterien mit ODER. Der naheliegende Ansatz
+„`paths = ['\.md$']` UND Zeilen-Regex" wäre damit viel zu breit — nachgewiesen
+über eine Präzisions-Matrix in #1810. Der Link-Kontext im Muster selbst erreicht
+das UND ohne das Feature.
+
+**Noch nicht `required`:** die Branch-Protection führt `closes-guard`, `ruff`,
+`lint-imports`. Ob `leak-guard` dazukommt, ist eine Gate-Entscheidung und gehört
+nach **#1803** (Merge-Gate, analog RAT-30) — nicht hierher. Grün-fähig ist die
+Voraussetzung dafür, nicht die Entscheidung selbst.
 
 ## Was der Guard NICHT leistet
 
