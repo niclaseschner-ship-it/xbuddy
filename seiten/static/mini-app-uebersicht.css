@@ -306,6 +306,18 @@ body {
   margin-bottom: 6px;
 }
 
+/* Fallback-Icon: liefert der Aggregator kein icons[], setzt der Client stattdessen
+   ein Typ-Emoji (mini-app-uebersicht.js: _TYP_FALLBACK_EMOJI). Das ist ein <span>
+   mit Text, kein <img> — es braucht daher eigene Maße, damit es auf denselben
+   28px sitzt wie das Bild-Icon darunter und die Kopfzeile nicht verspringt. */
+.url-karte-icon-fallback {
+  font-size: 1.4rem;
+  flex: 0 0 auto;
+  width: 28px;
+  text-align: center;
+  line-height: 28px;
+}
+
 /* SREG-12-konsistent: jede Seite/Display/Panel hat ihr Icon als Erstkennung. */
 .url-karte-icon {
   width: 28px;
