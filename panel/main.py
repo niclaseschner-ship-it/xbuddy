@@ -120,7 +120,7 @@ require_dual_gate = _auth_gate.make_require_dual_gate(
     get_bot_token=_get_bot_token,
     get_client_ip=_client_ip,
     auth_401=_dual_auth_401,
-    default_mode="observe",
+    default_mode="hard",  # AUTH-11 (#1834, Nic-Setzung 2026-08-11): "hart", nicht "observe".
 )
 
 
@@ -135,6 +135,16 @@ _write_lock = threading.Lock()
 # ============================================================
 
 app = Flask(__name__)
+
+
+# AUTH-11 (#1834): Flask legt den impliziten `static`-Endpunkt
+# (`/static/<path:filename>`) für JEDE `Flask(__name__)`-Instanz an, auch ohne
+# `static/`-Verzeichnis (panel/ hat keins — der Endpunkt liefert nur 404,
+# siehe Handoff-Beobachtung). Er steht trotzdem in `app.url_map` und damit unter
+# AUTH-11 — kein `@app.route`, also kein Decorator-Ansatzpunkt; wir tauschen die
+# View-Funktion nach der App-Erzeugung aus (kein `functools.wraps` nötig, der
+# Gate trägt es schon).
+app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
 
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
