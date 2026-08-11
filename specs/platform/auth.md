@@ -694,6 +694,52 @@ ist Verhaltens-Spec.
 
 *Tickets:* #948
 
+### AUTH-11 — Rück-Verriegelung: der Code ist der Ausgangspunkt, nicht die Liste
+
+AUTH-9 prüft in **eine** Richtung: trägt jede *gelistete* Route ihren
+Decorator? Eine Route, die in keiner Liste steht, ist für AUTH-9 unsichtbar
+und damit ungeprüft ungeschützt. AUTH-11 dreht die Richtung um.
+
+**Regel.** Jede Route, die in der Flask-URL-Map eines xbuddy-Services
+existiert, trägt entweder einen Auth-Decorator — oder sie steht namentlich
+in der Ausnahme-Liste dieser Klausel. Eine Route mit weder noch macht den
+Test rot. Die Prüfung geht vom **Code** aus (URL-Map), nicht von der Spec.
+
+**Sammel-Einträge zählen nicht.** Ein Wildcard-Eintrag wie
+`/display/<buddy>/*` (AUTH-4) oder `/api/v1/panels/*` (AUTH-6) erfüllt
+AUTH-11 **nicht**. Jede konkrete Route wird einzeln geführt. Begründung:
+ein Sammel-Eintrag verdeckt genau die Routen, die niemand bedacht hat —
+unter `/display/<buddy>/*` lag ein schreibender Endpunkt, ohne dass es
+auffiel.
+
+**Keine Geräte-Ausnahmen.** Jedes Gerät, das xbuddy konsumiert, trägt ein
+`xbuddy_session`-Cookie; der Pi-Kiosk wird per `pair-kiosk.sh` gepairt
+(RAT-32). „Das Gerät kann kein Cookie" ist deshalb kein zulässiger
+Ausnahme-Grund.
+
+**Zulässige Ausnahmen — abschließend.** Nur strukturelle Gründe, bei denen
+das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
+
+| Route | Grund |
+|---|---|
+| `/healthz` (je Service), `/version` | Die Überwachung fragt vor jeder Anmeldung. Nicht per Cookie, sondern am Ingress auf Loopback/Tailnet einschränken. |
+| `/auth/pair` | Die Adresse, an der das Cookie ausgestellt wird. Hinter dem Cookie unerreichbar. |
+| `/shell/<panel_id>/manifest.json`, `…/sw.js` | Ohne öffentliches Manifest installiert sich keine PWA. RAT-32 führt die Manifest-Publicness als Nicht-Verhandelbares. |
+
+Die Liste erweitert man **nur per Spec-Änderung**, nie im Test-Code — sonst
+wandert die Ausnahme aus der Sicht heraus.
+
+**Begründung.** Am 2026-08-11 waren 62 von 131 Routen ohne Decorator, davon
+vier schreibend; erreichbar war unter anderem das Profil eines Kindes und
+ein unauthentifizierter Rebuild-Trigger. Keine dieser Routen war „falsch
+klassifiziert" — sie waren nirgends klassifiziert. AUTH-9 konnte das
+konstruktionsbedingt nicht sehen.
+
+Die Test-Implementierung ist Aufgabe des Bau-PRs; die Klausel ist
+Verhaltens-Spec.
+
+*Tickets:* #1805
+
 ## 6. Reihenfolge der Phasen
 
 Die Spec wird **phasenweise** ausgebaut, je Power-Flow eine Phase:
