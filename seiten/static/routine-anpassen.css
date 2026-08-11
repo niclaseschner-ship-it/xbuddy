@@ -278,8 +278,14 @@ body {
   width: 58px;
 }
 
+/* T1797: fixe 86px unterbot die native Mindestbreite von <input type="time">
+   (Text "07:00"/"08:30" + Browser-eigenes Uhr-Icon) — letzte Ziffer wurde
+   abgeschnitten, reproduzierbar unabhaengig von der Viewport-Breite (kein
+   Schmal-Effekt, sondern ein zu enger fixer Wert). auto laesst den Browser
+   seine eigene, font-robuste Mindestbreite berechnen statt sie mit einer
+   erneut geratenen fixen Pixelzahl zu unterbieten. */
 .zeit-input-uhr {
-  width: 86px;
+  width: auto;
 }
 
 /* Einheit-Label nach dem Input */
