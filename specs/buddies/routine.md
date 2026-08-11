@@ -703,10 +703,16 @@ Die View rendert **eine einzige Bedien-Fläche** mit zwei Sektionen:
   nicht-negativen Integer validiert (vor `PUT …/config`). **Aufstehen und
   Losgehen sind unverrückbar** (kein Drag, kein Löschen — Verriegelungs-
   Klausel #726); V1.1 zeigt das visuell durch ein **Schloss-Symbol** statt
-  Drag-Handle. Am Listen-Ende sitzt ein **deaktivierter Inline-Add-Button**
-  `＋ Zwischen-Anker hinzufügen — V2 (#726)` — er macht den V2-Aufbohrpunkt
-  in V1.1 visuell, ohne Funktion (V2 schaltet ihn scharf, gleicher Stil wie
-  der Items-Add-Button).
+  Drag-Handle.
+
+  **[GEÄNDERT 2026-08-11 — Nic-Verdikt]** Der frühere deaktivierte
+  Inline-Add-Button am Listen-Ende (`＋ Zwischen-Anker hinzufügen — V2 (#726)`)
+  **entfällt ersatzlos**, samt der V1.1-Hinweiszeile darunter. Zwei Gründe:
+  Eltern bekamen eine interne Ticket-Nummer zu sehen, und das Versprechen war
+  längst eingelöst — die dynamischen Zeit-Anker sind über ROUTINE-24..28
+  (Abschnitt 11) ratifiziert und gebaut, der Zwischen-Anker sitzt im
+  Hinzufügen-Bottom-Sheet. Ein Knopf, der auf eine vorhandene Funktion
+  vertröstet, ist schlechter als kein Knopf.
 
 **V2-Aufbohrpunkt (#726).** Die Zeit-Sektion ist im Frontend bereits als
 **Liste von Zeit-Anker-Einträgen** strukturiert (Items-Card-Form), damit V2

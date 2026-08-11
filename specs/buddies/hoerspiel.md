@@ -420,7 +420,7 @@ gültiger Wert** — der Config-Loader (HSP-26) und `PATCH /config`
 
 **Wenn** der konfigurierte Provider (HSP-26) `claude` ist, **dann** wird
 der Anthropic-SDK-Adapter genutzt mit dem im Provider-Default verankerten
-Modell-Pin (`claude-opus-4-7`) oder dem in der Config überschriebenen
+Modell-Pin (`claude-opus-5`) oder dem in der Config überschriebenen
 Wert.
 
 *Verworfen (E-HSP-3):* Plattform-LLM-Gateway in V1, weil HSP der erste KI-
@@ -622,7 +622,7 @@ das bereits gebaute Album über einen Hash und antwortet mit demselben
   "voices_verfuegbar": ["shimmer", "onyx"],
   "provider_verfuegbar": ["claude", "mistral"],
   "modelle_je_anbieter": {
-    "claude":  [{"id": "claude-opus-4-7", "label": "Opus 4.7 (kreativ, langsamer, teurer)"}, ...],
+    "claude":  [{"id": "claude-opus-5", "label": "Opus 5 (kreativ, langsamer, teurer)"}, ...],
     "mistral": [{"id": "mistral-large-2411", "label": "Large 2.1 (Frontier, kreativ)"}, ...]
   }
 }
@@ -1001,7 +1001,7 @@ Vorbild #84 + #336):**
 | `listen_port` | `5053` (HSP-28) | `listen_port` | n/a (PORT-2) |
 | `log_level` | `INFO` | `log_level` | n/a |
 | `llm_provider` | `claude` | `llm_provider` | Eltern (Mini-App PATCH, HSP-34) |
-| `llm_model` | `claude-opus-4-7` | `llm_model` | Eltern (Mini-App PATCH, HSP-34) |
+| `llm_model` | `claude-opus-5` | `llm_model` | Eltern (Mini-App PATCH, HSP-34) |
 | Default-Voice | `shimmer` | `default_voice` | Eltern (Mini-App PATCH, HSP-34) |
 | Pause nach Absatz | `0.55` | `pause_absatz_sek` | Eltern (Mini-App PATCH, HSP-34) |
 | Pause nach Titel | `1.8` | `pause_titel_sek` | Eltern (Mini-App PATCH, HSP-34) |
@@ -1072,7 +1072,7 @@ gesetzten Providers und antwortet HTTP 422 bei unbekanntem Wert.
 
 | Provider | Modell-ID | UI-Display-Label |
 |---|---|---|
-| claude  | `claude-opus-4-7`      | Opus 4.7 (kreativ, langsamer, teurer) |
+| claude  | `claude-opus-5`        | Opus 5 (kreativ, langsamer, teurer) |
 | claude  | `claude-sonnet-4-6`    | Sonnet 4.6 (ausgewogen) |
 | claude  | `claude-haiku-4-5`     | Haiku 4.5 (schnell, kompakt, günstig) |
 | mistral | `mistral-large-2411`   | Large 2.1 (Frontier, kreativ) |
