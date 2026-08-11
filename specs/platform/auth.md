@@ -747,6 +747,8 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/shell/<panel_id>/<path:asset>` | Der WebAPK-Installer holt die Manifest-Icons **credential-los** — mit Gate schlägt die Installation fehl (#1437). |
 | `/controller/_shared/<path:asset>` | Der Service-Worker legt diese Dateien im Precache ab, **bevor** ein Cookie existiert (ROU-23). |
 | `/display/_shared/design/<path:asset>`, `/display/_shared/icons/<path:asset>` | 7b-Public-Ausnahme aus AUTH-7: die Views laden Design-Tokens und Icons als Asset; mit Gate bleiben sie leer. Seit dem Router-Tod von `seiten` ausgeliefert (RAT-31 E6f, #1568). |
+| `/api/v1/seiten/static/<path:filename>` | Flasks impliziter Static-Endpoint (`static_url_path`, `seiten/main.py:330`) liefert das JS jeder Mini-App aus — genau das Skript, das den `tma`-Header überhaupt erst erzeugt. AUTH-4 führt den Pfad nur als Sammel-Eintrag (`/api/v1/seiten/static/*`); diese Zeile macht ihn namentlich. |
+| `POST /api/v1/init-data/validate` | Die Adresse, an der die Identität geprüft wird (`seiten/main.py:536`). Sie validiert selbst per HMAC (AUTH-4) und kann folglich nicht hinter dem Ergebnis ihrer eigenen Prüfung liegen. |
 
 Alle vier Asset-Zeilen sind dieselbe technische Klasse wie das Manifest:
 Dateien, die Installer oder Service-Worker holen, **bevor** ein Cookie
