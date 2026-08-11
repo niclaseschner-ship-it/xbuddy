@@ -338,6 +338,23 @@ ist ein Regressions-Bug (nie beabsichtigt).
 > Epic #1339), dort geschnitten statt hier decorator-nachgerüstet.
 > [Quelle: `brainstorm/berater-runde/20260727-160000-RATIFIZIERT-auth-cookie-hart-flip.md`]
 
+**[ÜBERHOLT 2026-08-11 — Nic-Setzung, Prüfung am Live-Stand]** Die Ausklammerung
+oben ist erledigt und gilt nicht mehr. Der Abriss ist durch: `router/` und
+`geraete/` sind aus dem Repo gelöscht und ihre Dienste inaktiv, von `display/`
+steht nur noch `display/_shared` (die Asset-Ausnahmen aus AUTH-11). Zwei der
+genannten Dienste waren **nie** Abriss-Ziele und laufen weiter:
+
+- **`panel`** — RAT-31 §2 sagt ausdrücklich „Kachel-Kuratierung … bleibt";
+  nur die `display_id`-Bindung und der Router-Proxy sterben, nicht der Dienst.
+- **`wetter`** — in RAT-31 nirgends genannt, ein regulärer Buddy.
+
+`hoerspiel` fiel bereits per RAT-32-Amendment vom 2026-07-30 heraus; `familie`
+ist extern per nginx-403 dicht (#1638). Damit gilt für alle verbliebenen
+Dienste ohne Ausnahme **AUTH-11**: was echten Inhalt ausliefert, sitzt hinter
+dem Cookie. Nic 2026-08-11: „Wenn kein Abriss mehr kommt, dann muss alles, was
+wirklich Content hat, hinter dem Cookie sein."
+
+
 [Quelle: Rollout-Plan Auth-Funnel #1388 (Epic #1338) + Absicherung, zur
 RAT-27-Ratifizierung; Bezug RATIFIZIERT-1338-auth-flow (#1321 hart, live
 geschlossen)]
