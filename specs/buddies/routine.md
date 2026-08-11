@@ -687,9 +687,11 @@ Die View rendert **eine einzige Bedien-Fläche** mit zwei Sektionen:
   Inline-Add-Geste lebt in der Sektion, in der das Element entsteht
   (siehe ROUTINE-23 Abweichung von MAD-3).
 - **Sektion „Zeiten"** — Card-Liste der Zeit-Anker (gleiche Card-Optik wie
-  Routine-Punkte für visuelle Konsistenz). V1.1 hat genau **drei feste Anker**:
-  Aufstehen (`HH:MM`), Anziehen (Vorlauf in Min vor Losgehen), Losgehen
-  (`HH:MM`). Daten aus `GET /api/v1/routine/config`. **Anker-Piktogramme**
+  Routine-Punkte für visuelle Konsistenz). Die Sektion zeigt die Zeit-Anker
+  aus der Konfiguration. **Der Startbestand sind drei Anker** — Aufstehen
+  (`HH:MM`), Anziehen (Vorlauf in Min vor Losgehen), Losgehen (`HH:MM`) —
+  aber seit ROUTINE-24..28 (Abschnitt 11) sind eigene Zwischen-Anker gebaut
+  und ausgeliefert; „genau drei" ist kein Struktur-Limit mehr. Daten aus `GET /api/v1/routine/config`. **Anker-Piktogramme**
   spiegeln die Display-View — heute ARASAAC `8152` (Aufstehen) / `6627`
   (Anziehen) / `8142` (Losgehen), hartcodiert im Display-Template
   (`routine/templates/morgen.html:84-104`) und in V1.1 zusätzlich im
@@ -701,9 +703,10 @@ Die View rendert **eine einzige Bedien-Fläche** mit zwei Sektionen:
   Per-Wochentag-UI; die API trägt die Map, die V1-UI nicht — Begrenzung wie
   RZS V1-Scope). Eingaben werden im Frontend strikt gegen `HH:MM` /
   nicht-negativen Integer validiert (vor `PUT …/config`). **Aufstehen und
-  Losgehen sind unverrückbar** (kein Drag, kein Löschen — Verriegelungs-
-  Klausel #726); V1.1 zeigt das visuell durch ein **Schloss-Symbol** statt
-  Drag-Handle.
+  Losgehen bleiben unverrückbar** (kein Drag, kein Löschen — sie sind die
+  Klammer, in der alles andere liegt); die Sektion zeigt das visuell durch ein
+  **Schloss-Symbol** statt Drag-Handle. Für Anker **dazwischen** gilt das
+  nicht — die sind seit ROUTINE-24..28 editierbar.
 
   **[GEÄNDERT 2026-08-11 — Nic-Verdikt]** Der frühere deaktivierte
   Inline-Add-Button am Listen-Ende (`＋ Zwischen-Anker hinzufügen — V2 (#726)`)
@@ -714,12 +717,14 @@ Die View rendert **eine einzige Bedien-Fläche** mit zwei Sektionen:
   Hinzufügen-Bottom-Sheet. Ein Knopf, der auf eine vorhandene Funktion
   vertröstet, ist schlechter als kein Knopf.
 
-**V2-Aufbohrpunkt (#726).** Die Zeit-Sektion ist im Frontend bereits als
-**Liste von Zeit-Anker-Einträgen** strukturiert (Items-Card-Form), damit V2
-ohne UI-Umbau nur das Backend-Schema und den aktiven Add-Button +
-Drag-Activation einschaltet. Folge-Ticket trägt das dynamische
-`zeit_anker[]`-Schema, die Verriegelungs-Klausel, das API-Tripel und die
-Display-Re-Render-Logik.
+**Aufbohrpunkt — eingelöst.** Die Zeit-Sektion war im Frontend bewusst als
+**Liste von Zeit-Anker-Einträgen** angelegt (Items-Card-Form), damit die
+dynamischen Anker später ohne UI-Umbau dazukommen konnten. Das ist geschehen:
+ROUTINE-24..28 (Abschnitt 11) sind ratifiziert und ausgeliefert — das
+dynamische `zeit_anker[]`-Schema, die Verriegelung der Randanker, das
+API-Tripel und die Display-Re-Render-Logik stehen. Zwischen-Anker entstehen
+über das Hinzufügen-Bottom-Sheet (ROUTINE-27), nicht über einen eigenen Knopf
+am Listenende.
 
 **Bild-Pfad:** Mini-App fordert die ARASAAC-PNGs **same-origin** unter
 `/display/_shared/icons/arasaac/<id>.png` (ICONS-5, MAD-6) — kein
@@ -901,11 +906,17 @@ oder restrukturiert wird.
 
 ---
 
-## 11. V2 — Dynamische Zeit-Anker (Zwischenschritte editierbar)
+## 11. Dynamische Zeit-Anker (Zwischenschritte editierbar) — GEBAUT
 
-Die V1-Mechanik (drei feste Anker `aufstehzeit` / `anzieh_vorlauf_min` /
-`abfahrtszeit` aus `ROUTINE-12`) reicht für die Morgen-Sicht der ersten
-Familie. Mit dem 2. Familien-Setup wird der Wunsch konkret, eigene
+> **[STATUS 2026-08-11]** Dieses Kapitel beschreibt **gebaute und
+> ausgelieferte** Mechanik, keinen Ausblick. Die frühere Rahmung als „V2"
+> stammt aus der Zeit vor dem Bau und wurde entfernt: sie erzeugte in
+> Abschnitt 9 den Eindruck, die Funktion stehe noch aus — mit einem toten
+> Platzhalter-Knopf in der Eltern-App als Folge (#1796).
+
+Die ursprüngliche Mechanik (drei feste Anker `aufstehzeit` /
+`anzieh_vorlauf_min` / `abfahrtszeit` aus `ROUTINE-12`) reichte für die
+Morgen-Sicht der ersten Familie. Mit dem 2. Familien-Setup wird der Wunsch konkret, eigene
 **Zwischenschritte** einzufügen ("nach Aufstehen 10 Min Hände waschen, dann
 Anziehen, 5 Min vor Aufbruch Schuhe an"). V2 trägt das, **additiv** zur V1.
 items[] (`ROUTINE-4`) bleibt SSoT der Reihenfolge — V2 erweitert das
