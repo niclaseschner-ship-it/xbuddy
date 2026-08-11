@@ -83,6 +83,61 @@ pro Buddy und werden **nicht** angetastet — insbesondere eltern-chats
 Schreibfehler werden geloggt (`warning`) und geschluckt — ein Telemetrie-Bruch
 darf den Konsumenten-Call nicht abreißen (LLMP-S4 Fehler-Verhalten).
 
+## Zeit-Budgets (#1784, CLIENT-2-Form)
+
+Jeder LLM-Call trägt ein **endliches, zentral konfiguriertes** Zeit-Budget.
+Ohne das galten die litellm-Defaults (verifiziert gegen die gepinnte
+`litellm==1.93.0`): 600 s für `completion`, 600 s für `transcription` und
+**6000 s** für `speech` — und weil die Calls im Worker-Thread laufen, der die
+`PrivateChatSession` hält (`eltern-chat/tasks.py`), fror ein hängender Anbieter
+damit den Chat-**Turn** einer Familie ein, nicht bloß den Request.
+
+Die eine Stelle: `_types.py`.
+
+| Budget | Wert | Für | Beleg |
+|---|---|---|---|
+| `LLM_TIMEOUT_SECONDS` | 30,0 s | Default — interaktiv (Chat-Turn) | gemessen p99 13,7 s · max 14,0 s |
+| `LLM_TIMEOUT_LONGFORM_SECONDS` | 420,0 s | Langtext-Generierung (hoerspiel) | gemessen p50 88 s · max 308 s |
+
+Überschreiben, in dieser Reihenfolge (letztes gewinnt):
+
+1. Code-Default (`LLM_TIMEOUT_SECONDS`).
+2. ENV `XBUDDY_LLM_TIMEOUT_SECONDS` — prozessweit, also pro systemd-Unit
+   pro Buddy setzbar. Not-Hebel am Pi. Unbrauchbare Werte (keine Zahl, ≤ 0)
+   werden geloggt-ignoriert, nie boot-fatal.
+3. `timeout=` am `get_*`-Aufruf bzw. am Vendor-Konstruktor — die bewusste
+   Wahl des Konsumenten. So holt sich hoerspiel das Langtext-Budget
+   (`hoerspiel/providers/lib_adapter.py`), ohne den Chat-Default für alle
+   aufzuweichen. `timeout=0` am Konstruktor ist ein `ValueError`: „kein
+   Timeout" darf nicht über die Hintertür zurückkommen.
+
+**Warum nicht die 2,0 s aus CLIENT-2:** CLIENT-2 regelt Loopback-HTTP zwischen
+XBuddy-Komponenten (Normalfall sub-ms). Ein LLM-Call ist eine remote
+Text-Generierung; 2,0 s lägen unter dem gemessenen p50 des Chat-Pfads (3,3 s)
+und würden die Hälfte aller echten Familien-Turns abschneiden. Übernommen ist
+das **Prinzip** von CLIENT-2 (zentrale Modul-Konstante + Konstruktor-Override),
+nicht die Zahl.
+
+**Was das Budget umfasst:** die Gesamt-Antwortzeit **eines Versuchs** (Connect +
+Zeit-bis-erstes-Token + Generierung). Ein eigenes Connect-Budget gibt es
+bewusst nicht — der Connect ist in allen gemessenen Calls unter 1 % der
+Wall-Zeit. Ein Erstes-Token-Budget wäre erst mit Streaming sinnvoll; keine der
+sechs Sichten streamt heute.
+
+**Restrisiko (offen, eigenes Ticket):** litellm nimmt `max_retries =
+litellm.num_retries or openai.DEFAULT_MAX_RETRIES`; `num_retries` ist None,
+also greift openais Default 2 — ein Timeout wird bis zu zweimal wiederholt. Die
+Wall-Zeit im Worst-Case ist damit ~3× das Budget (interaktiv ~90 s statt der
+~1800 s von vorher). Retry-Politik ist nicht Gegenstand von #1784; wer hart
+deckeln will, braucht eine Verfügbarkeits-Entscheidung zu `num_retries=0`.
+
+**Fehler-Verhalten:** ein Timeout kommt als `LLMTimeoutError` heraus, eine
+Subklasse von `ProviderError`. Jeder heutige Konsument fängt schon
+`ProviderError` — der Timeout landet damit ohne Konsumenten-Änderung auf dem
+bestehenden „Anbieter nicht erreichbar"-Pfad (im eltern-chat: EC-14
+`_PROVIDER_DOWN`, ein familientauglicher deutscher Satz, kein Stacktrace). Die
+Sekundenzahl steht im Log, nicht in der Nachricht an die Familie.
+
 ## Slot-Konvention (LLMP-5)
 
 Slot-Namen folgen der `<konsument>-<vendor>-<purpose>`-Form aus ZD-2:
@@ -101,6 +156,7 @@ Entscheidung nicht.
 | Wert | Default | Override |
 |---|---|---|
 | JSONL-Telemetrie | `/home/buddy/xbuddy-data/llm/provider_calls.jsonl` | `$XBUDDY_DATA_DIR` |
+| Zeit-Budget (interaktiv) | 30,0 s | `$XBUDDY_LLM_TIMEOUT_SECONDS`, `timeout=` |
 
 ## Dateien
 
@@ -108,8 +164,11 @@ Entscheidung nicht.
 - `public_api.py` — `get_agent`, `get_singleshot`, `get_chat` mit
   Capability-Boot-Fail (LLMP-S3).
 - `_resolver.py` — Slot-Parsing (LLMP-5) und Vendor-Modul-Import.
-- `_types.py` — `LLMCapabilityError`, `ProviderError`, `LLMProvider`-
-  Protokoll, `ProviderCallEvent`-TypedDict.
+- `_types.py` — `LLMCapabilityError`, `ProviderError`, `LLMTimeoutError`,
+  `LLMProvider`-Protokoll, `ProviderCallEvent`-TypedDict und die Zeit-Budgets
+  (`LLM_TIMEOUT_SECONDS`, `LLM_TIMEOUT_LONGFORM_SECONDS`, `resolve_timeout`).
+- `_vendor/_base.py` — geteilte Vendor-Basis: `agent_run`,
+  `_tool_result_block`, Timeout-Auflösung (LLMP-S7).
 - `_vendor/anthropic.py` — Anthropic-Vendor-Kern mit `CAPABILITIES`-
   Frozenset (LLMP-4).
 - `pricing.py` — Modell-Preis-Tabelle (V1 hardcodet Anthropic, OPEN-LLMP-A).

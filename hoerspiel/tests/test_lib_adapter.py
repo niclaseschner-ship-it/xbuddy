@@ -17,6 +17,7 @@ import pytest
 
 from hoerspiel import llm_service
 from hoerspiel.providers.base import ProviderError
+from tools.llm import LLM_TIMEOUT_LONGFORM_SECONDS
 
 
 def _make_adapter(facade, completion_facade=None):
@@ -74,7 +75,8 @@ def test_recherche_agent_lazy_baut_get_agent_facade():
         second = adapter.recherche_agent()
 
     ga.assert_called_once_with(
-        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192)
+        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
     assert first is agent_facade
     assert second is agent_facade  # gecacht
     assert "web_search" in first.capabilities
@@ -103,12 +105,15 @@ def test_recherche_agent_slot_decoupled_from_singleshot_slot():
 
     # Struktur-/Synopse-Pfad läuft über den litellm-Motor-Slot.
     gs.assert_called_once_with(
-        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=8192)
+        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=8192,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
     gc.assert_called_once_with(
-        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=8192)
+        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=8192,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
     # Recherche-Agent bleibt auf dem anthropic-Slot (web_search-nativ).
     ga.assert_called_once_with(
-        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192)
+        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
 
 
 def test_recherche_agent_slot_defaults_to_slot_when_unset():
@@ -128,7 +133,8 @@ def test_recherche_agent_slot_defaults_to_slot_when_unset():
         adapter.recherche_agent()
 
     ga.assert_called_once_with(
-        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=0)
+        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=0,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
 
 
 def test_complete_structured_translates_signature_drift():
@@ -140,7 +146,9 @@ def test_complete_structured_translates_signature_drift():
     adapter, gs = _make_adapter(facade)
 
     # Fassade EINMAL gebaut, mit Modell-Durchreichung (ohne max_tokens → Default-Pfad 0).
-    gs.assert_called_once_with("hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=0)
+    gs.assert_called_once_with(
+        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=0,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
 
     schema = {"type": "object"}
     out = adapter.complete_structured(
@@ -222,6 +230,7 @@ def test_adapter_passes_max_tokens_to_get_completion():
         )
     gc.assert_called_once_with(
         "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS,
     )
 
 
@@ -290,6 +299,7 @@ def test_adapter_passes_max_tokens_to_get_singleshot():
     # get_singleshot wurde mit max_tokens=8192 gerufen.
     gs.assert_called_once_with(
         "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS,
     )
 
 
@@ -301,4 +311,5 @@ def test_adapter_without_max_tokens_uses_default_path():
 
     gs.assert_called_once_with(
         "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=0,
+        timeout=LLM_TIMEOUT_LONGFORM_SECONDS,
     )

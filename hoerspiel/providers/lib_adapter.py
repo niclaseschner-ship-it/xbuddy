@@ -25,7 +25,13 @@ Beide Lib-Fassaden werden EINMAL im `__init__` gebaut (Slot + effektives Modell
 
 import logging
 
-from tools.llm import LLMCapabilityError, get_agent, get_completion, get_singleshot
+from tools.llm import (
+    LLM_TIMEOUT_LONGFORM_SECONDS,
+    LLMCapabilityError,
+    get_agent,
+    get_completion,
+    get_singleshot,
+)
 from tools.llm import ProviderError as LibProviderError
 
 from .base import LLMProvider, ProviderError
@@ -59,10 +65,21 @@ class LibSingleshotAdapter(LLMProvider):
         # web_search und MUSS auf dem anthropic-Vendor bleiben. Ohne
         # `agent_slot` (Test-/Alt-Pfad) fällt der Recherche-Agent auf `slot`
         # zurück (Rückwärtskompatibilität).
-        self._singleshot = get_singleshot(slot, model, max_tokens=max_tokens)
+        # T1784: alle drei hoerspiel-Sichten fahren das LANGTEXT-Budget, nicht
+        # den interaktiven Default von 30 s. Belegt an der eigenen Telemetrie
+        # (provider_calls.jsonl): eine Folgen-Generierung läuft p50 88 s und
+        # gemessen bis 121 s (litellm) bzw. 308 s (anthropic-Recherche). Hier
+        # sitzt kein Chat-Turn dahinter, sondern ein Hintergrund-Job — deshalb
+        # ein eigenes, größeres Budget statt eines aufgeweichten Defaults für
+        # alle Buddys (der Familien-Chat braucht die 30 s, #1784).
+        self._singleshot = get_singleshot(
+            slot, model, max_tokens=max_tokens,
+            timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
         # #1131: Freitext-Synopse geht über die vierte Sicht `get_completion`
         # (Required-Set nur `system_message_distinct` → trägt Claude UND Mistral).
-        self._completion = get_completion(slot, model, max_tokens=max_tokens)
+        self._completion = get_completion(
+            slot, model, max_tokens=max_tokens,
+            timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
         self._slot = slot
         # T1454: eigener Slot für den Recherche-Agenten (web_search → anthropic).
         # Entkoppelt vom Struktur-/Synopse-Slot, der jetzt auf litellm zeigt.
@@ -110,8 +127,11 @@ class LibSingleshotAdapter(LLMProvider):
         `agent.capabilities`.
         """
         if self._agent is None:
+            # T1784: Langtext-Budget — der Recherche-Agent ist der langsamste
+            # gemessene Pfad im ganzen System (p50 89 s, max 308 s).
             self._agent = get_agent(
-                self._agent_slot, self._model, max_tokens=self._max_tokens)
+                self._agent_slot, self._model, max_tokens=self._max_tokens,
+                timeout=LLM_TIMEOUT_LONGFORM_SECONDS)
         return self._agent
 
     def complete(self, system, user):

@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tools.llm import LLM_TIMEOUT_SECONDS, LLMTimeoutError, ProviderError
+
 
 def _make_fake_anthropic_response(text: str, *, input_tokens: int = 100,
                                    output_tokens: int = 50,
@@ -188,8 +190,11 @@ def test_kibuddy_chat_real_slot_lookup_succeeds(jsonl_path, zd_store_path):
         text = chat.complete_multiturn(system="S.", turns=[], user_message="F?")
 
     assert text == "Hallo."
-    # Der echte API-Key aus der ZD-Datei wurde an das SDK durchgereicht.
-    fake_anthropic.Anthropic.assert_called_once_with(api_key="sk-real-from-zd")
+    # Der echte API-Key aus der ZD-Datei wurde an das SDK durchgereicht — und
+    # seit #1784 auch das zentrale Zeit-Budget (der SDK-Client wendet es auf
+    # jeden `messages.create`-Aufruf an).
+    fake_anthropic.Anthropic.assert_called_once_with(
+        api_key="sk-real-from-zd", timeout=LLM_TIMEOUT_SECONDS)
     # JSONL-Eintrag mit caller=kibuddy (Tier-2-Projektion).
     parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
     assert parsed["caller"] == "kibuddy"
@@ -256,3 +261,63 @@ def test_eltern_chat_slot_caller_is_eltern_chat(jsonl_path, zd_store_path):
     parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
     assert parsed["caller"] == "eltern-chat"
     assert parsed["slot"] == "eltern-chat-anthropic-api-key"
+
+
+# ----------------------------------------------------------------------
+#  T1784 — Zeit-Budget im anthropic-Vendor
+# ----------------------------------------------------------------------
+
+
+class _FakeAnthropicTimeout(Exception):
+    """Steht für `anthropic.APITimeoutError` im Test (#1784)."""
+
+
+def _make_fake_anthropic_sdk(*, create_side_effect=None, response_text="ok"):
+    """Gemocktes anthropic-SDK mit APIError + APITimeoutError als echten Klassen."""
+    fake = MagicMock()
+    client = MagicMock()
+    fake.Anthropic.return_value = client
+    fake.APIError = Exception
+    fake.APITimeoutError = _FakeAnthropicTimeout
+    if create_side_effect is not None:
+        client.messages.create.side_effect = create_side_effect
+    else:
+        client.messages.create.return_value = _make_fake_anthropic_response(
+            response_text)
+    return fake, client
+
+
+def test_anthropic_client_traegt_zentrales_zeitbudget(jsonl_path):
+    """T1784-AC1/AC2: das Budget sitzt am SDK-Client — damit trägt es JEDE
+    `messages.create`-Call-Site dieser Instanz, ohne dass eine vergessen
+    werden kann. Quelle ist die zentrale Konstante, kein Vendor-Literal."""
+    fake_anthropic, _client = _make_fake_anthropic_sdk()
+
+    with patch.dict(sys.modules, {"anthropic": fake_anthropic}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_chat
+        get_chat(slot="kibuddy-anthropic-api-key")
+
+    assert (fake_anthropic.Anthropic.call_args.kwargs["timeout"]
+            == LLM_TIMEOUT_SECONDS)
+
+
+def test_anthropic_timeout_wird_llm_timeout_error_mit_deutscher_meldung(jsonl_path):
+    """T1784-AC3: SDK-Timeout → `LLMTimeoutError` (⊂ `ProviderError`) mit
+    familientauglichem deutschem Satz, keine SDK-Interna."""
+    fake_anthropic, _client = _make_fake_anthropic_sdk(
+        create_side_effect=_FakeAnthropicTimeout("Request timed out."))
+
+    with patch.dict(sys.modules, {"anthropic": fake_anthropic}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_chat
+        chat = get_chat(slot="kibuddy-anthropic-api-key")
+        with pytest.raises(LLMTimeoutError) as excinfo:
+            chat.complete_multiturn(system="S.", turns=[], user_message="F?")
+
+    fehler = excinfo.value
+    assert isinstance(fehler, ProviderError)
+    assert "KI-Dienst" in str(fehler)
+    assert "Request timed out." not in str(fehler)
+    # Kein Telemetrie-Eintrag: der Fehler fliegt VOR _emit_telemetry.
+    assert not jsonl_path.exists()

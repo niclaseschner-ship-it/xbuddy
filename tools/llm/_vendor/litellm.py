@@ -55,8 +55,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .. import pricing, telemetry
-from .._types import ProviderError
-from ._base import VendorBase
+from .._types import LLMTimeoutError, ProviderError
+from ._base import TIMEOUT_MELDUNG, VendorBase
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +242,7 @@ class LitellmVendor(VendorBase):
         api_key: str,
         model: str = "",
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        timeout: float | None = None,
     ):
         # Lazy-Import des SDKs analog `_vendor/anthropic.py` — Tests, die
         # `tools.llm` ohne echte SDK-Last laden (Capability-Boot-Fail, Resolver,
@@ -263,6 +264,38 @@ class LitellmVendor(VendorBase):
         self._api_key = api_key
         self.model = model or DEFAULT_MODEL
         self.max_tokens = max_tokens
+        # T1784: EIN Zeit-Budget für alle sechs SDK-Call-Sites dieses Vendors.
+        # Ohne das greift litellms Default von 600 s — und der Call hängt im
+        # Worker-Thread, der die PrivateChatSession hält (eltern-chat/tasks.py).
+        self.timeout = self._resolve_timeout(timeout)
+        # Die Timeout-Fehlerklassen EINMAL beim Init auflösen (der SDK-Namensraum
+        # ändert sich zur Laufzeit nicht) — `litellm.exceptions.Timeout` erbt
+        # NICHT von `litellm.exceptions.APIError` und muss eigens gefangen werden.
+        self._timeout_errors = self._timeout_error_classes(
+            litellm.exceptions, "Timeout", "APITimeoutError")
+
+    def _sdk_call(self, sdk_fn: Any, *, kontext: str, **kwargs: Any) -> Any:
+        """Ein litellm-SDK-Aufruf mit Zeit-Budget + Fehler-Übersetzung (T1784).
+
+        DIE eine Naht für alle sechs Call-Sites dieses Vendors (LLMP-S7: kein
+        Copy-Paste über die Sichten). `timeout=self.timeout` geht damit an
+        jeden `completion`/`speech`/`transcription`-Aufruf — es gibt keinen
+        Pfad mehr, auf dem litellms 600-s-Default gilt.
+
+        `kontext` ist das Sicht-Kürzel für die Log-Zeile ("chat", "agent",
+        "singleshot", "completion", "speech", "transcription"). Die
+        Sekundenzahl steht im Log (LOG-4-Diagnose), nicht in der Meldung, die
+        beim Konsumenten landet.
+        """
+        try:
+            return sdk_fn(timeout=self.timeout, **kwargs)
+        except self._timeout_errors as e:
+            logger.warning("litellm-vendor: %s-Timeout nach %.1fs: %s",
+                           kontext, self.timeout, e)
+            raise LLMTimeoutError(TIMEOUT_MELDUNG) from e
+        except self._litellm.exceptions.APIError as e:
+            logger.warning("litellm-vendor: %s-API-Fehler: %s", kontext, e)
+            raise ProviderError(str(e)) from e
 
     # ------------------------------------------------------------------
     #  Sicht: get_chat — Multi-Turn-Konversation (KIBuddy, T1082/T1433)
@@ -312,16 +345,14 @@ class LitellmVendor(VendorBase):
         ]
 
         t_start = time.monotonic()
-        try:
-            response = self._litellm.completion(
-                model=self.model,
-                messages=messages,
-                api_key=self._api_key,
-                max_tokens=self.max_tokens,
-            )
-        except self._litellm.exceptions.APIError as e:
-            logger.warning("litellm-vendor: API-Fehler: %s", e)
-            raise ProviderError(str(e)) from e
+        response = self._sdk_call(
+            self._litellm.completion,
+            kontext="chat",
+            model=self.model,
+            messages=messages,
+            api_key=self._api_key,
+            max_tokens=self.max_tokens,
+        )
         wall_ms = int((time.monotonic() - t_start) * 1000)
 
         # LLMP-S4: synchron im selben Call die JSONL-Projektion schreiben.
@@ -372,18 +403,16 @@ class LitellmVendor(VendorBase):
         """
         eff_model = model or self.model
         t_start = time.monotonic()
-        try:
-            response = self._litellm.speech(
-                model=eff_model,
-                voice=voice,
-                input=text,
-                speed=speed,
-                response_format=response_format,
-                api_key=self._api_key,
-            )
-        except self._litellm.exceptions.APIError as e:
-            logger.warning("litellm-vendor: speech-API-Fehler: %s", e)
-            raise ProviderError(str(e)) from e
+        response = self._sdk_call(
+            self._litellm.speech,
+            kontext="speech",
+            model=eff_model,
+            voice=voice,
+            input=text,
+            speed=speed,
+            response_format=response_format,
+            api_key=self._api_key,
+        )
         wall_ms = int((time.monotonic() - t_start) * 1000)
 
         audio_bytes = self._extract_audio_bytes(response)
@@ -432,16 +461,14 @@ class LitellmVendor(VendorBase):
         audio_file.name = filename
 
         t_start = time.monotonic()
-        try:
-            response = self._litellm.transcription(
-                model=eff_model,
-                file=audio_file,
-                language=language,
-                api_key=self._api_key,
-            )
-        except self._litellm.exceptions.APIError as e:
-            logger.warning("litellm-vendor: transcription-API-Fehler: %s", e)
-            raise ProviderError(str(e)) from e
+        response = self._sdk_call(
+            self._litellm.transcription,
+            kontext="transcription",
+            model=eff_model,
+            file=audio_file,
+            language=language,
+            api_key=self._api_key,
+        )
         wall_ms = int((time.monotonic() - t_start) * 1000)
 
         text = self._extract_transcript(response)
@@ -505,11 +532,8 @@ class LitellmVendor(VendorBase):
             completion_kwargs["tools"] = wire_tools
 
         t_start = time.monotonic()
-        try:
-            response = self._litellm.completion(**completion_kwargs)
-        except self._litellm.exceptions.APIError as e:
-            logger.warning("litellm-vendor: agent-API-Fehler: %s", e)
-            raise ProviderError(str(e)) from e
+        response = self._sdk_call(
+            self._litellm.completion, kontext="agent", **completion_kwargs)
         wall_ms = int((time.monotonic() - t_start) * 1000)
 
         self._emit_telemetry(
@@ -620,11 +644,8 @@ class LitellmVendor(VendorBase):
         }
 
         t_start = time.monotonic()
-        try:
-            response = self._litellm.completion(**completion_kwargs)
-        except self._litellm.exceptions.APIError as e:
-            logger.warning("litellm-vendor: singleshot-API-Fehler: %s", e)
-            raise ProviderError(str(e)) from e
+        response = self._sdk_call(
+            self._litellm.completion, kontext="singleshot", **completion_kwargs)
         wall_ms = int((time.monotonic() - t_start) * 1000)
 
         self._emit_telemetry(
@@ -681,16 +702,14 @@ class LitellmVendor(VendorBase):
         messages.append({"role": "user", "content": user})
 
         t_start = time.monotonic()
-        try:
-            response = self._litellm.completion(
-                model=self.model,
-                messages=messages,
-                api_key=self._api_key,
-                max_tokens=self.max_tokens,
-            )
-        except self._litellm.exceptions.APIError as e:
-            logger.warning("litellm-vendor: completion-API-Fehler: %s", e)
-            raise ProviderError(str(e)) from e
+        response = self._sdk_call(
+            self._litellm.completion,
+            kontext="completion",
+            model=self.model,
+            messages=messages,
+            api_key=self._api_key,
+            max_tokens=self.max_tokens,
+        )
         wall_ms = int((time.monotonic() - t_start) * 1000)
 
         self._emit_telemetry(

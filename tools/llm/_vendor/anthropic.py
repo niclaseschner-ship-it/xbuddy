@@ -23,8 +23,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .. import pricing, telemetry
-from .._types import ProviderError
-from ._base import VendorBase
+from .._types import LLMTimeoutError, ProviderError
+from ._base import TIMEOUT_MELDUNG, VendorBase
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +135,7 @@ class AnthropicVendor(VendorBase):
         api_key: str,
         model: str = "",
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        timeout: float | None = None,
     ):
         # Lazy-Import des SDKs analog `kibuddy/providers/claude.py` —
         # Tests, die `tools.llm` ohne echte SDK-Last laden wollen
@@ -143,9 +144,20 @@ class AnthropicVendor(VendorBase):
         import anthropic
 
         self._anthropic = anthropic
-        self._client = anthropic.Anthropic(api_key=api_key)
+        # T1784: das Zeit-Budget sitzt am SDK-Client, nicht an jeder Sicht — das
+        # Anthropic-SDK wendet es damit auf JEDEN `messages.create`-Aufruf dieser
+        # Instanz an, ohne dass ein Pfad vergessen werden kann. Ohne das gilt der
+        # SDK-Default von 600 s.
+        self.timeout = self._resolve_timeout(timeout)
+        self._client = anthropic.Anthropic(api_key=api_key, timeout=self.timeout)
         self.model = model or DEFAULT_MODEL
         self.max_tokens = max_tokens
+        # `anthropic.APITimeoutError` erbt von `APIConnectionError` → `APIError`,
+        # wird also vom APIError-Zweig mitgefangen. Trotzdem eigens und ZUERST
+        # fangen, damit der Timeout die familientaugliche Meldung bekommt statt
+        # eines rohen SDK-Strings (und die Diagnose ihn im Log unterscheiden kann).
+        self._timeout_errors = self._timeout_error_classes(
+            anthropic, "APITimeoutError", "Timeout")
 
     # ------------------------------------------------------------------
     #  Sicht: get_chat — Multi-Turn-Konversation (KIBuddy, T1082)
@@ -186,16 +198,11 @@ class AnthropicVendor(VendorBase):
         }]
 
         t_start = time.monotonic()
-        try:
-            response = self._client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                system=system_blocks,
-                messages=messages,
-            )
-        except self._anthropic.APIError as e:
-            logger.warning("anthropic-vendor: API-Fehler: %s", e)
-            raise ProviderError(str(e)) from e
+        response = self._create(
+            kontext="chat",
+            system=system_blocks,
+            messages=messages,
+        )
         wall_ms = int((time.monotonic() - t_start) * 1000)
 
         # LLMP-S4: synchron im selben Call die JSONL-Projektion schreiben.
@@ -250,14 +257,26 @@ class AnthropicVendor(VendorBase):
         blocks.append({"type": "text", "text": prompt})
         return blocks
 
-    def _create(self, **kwargs: Any) -> Any:
-        """`messages.create` mit APIError→ProviderError (wie `chat_multiturn`)."""
+    def _create(self, *, kontext: str = "singleshot", **kwargs: Any) -> Any:
+        """`messages.create` mit Timeout→LLMTimeoutError, APIError→ProviderError.
+
+        DIE eine SDK-Naht dieses Vendors — alle vier Sichten (chat, agent_step,
+        singleshot_structured, singleshot_text) laufen hierdurch. Das Zeit-Budget
+        selbst sitzt am SDK-Client (siehe `__init__`); hier wird nur noch der
+        Fehler übersetzt (T1784). `kontext` ist das Sicht-Kürzel für die
+        Log-Zeile — die Sekundenzahl steht im Log, nicht in der Meldung, die
+        beim Konsumenten landet.
+        """
         try:
             return self._client.messages.create(
                 model=self.model, max_tokens=self.max_tokens, **kwargs,
             )
+        except self._timeout_errors as e:
+            logger.warning("anthropic-vendor: %s-Timeout nach %.1fs: %s",
+                           kontext, self.timeout, e)
+            raise LLMTimeoutError(TIMEOUT_MELDUNG) from e
         except self._anthropic.APIError as e:
-            logger.warning("anthropic-vendor: API-Fehler: %s", e)
+            logger.warning("anthropic-vendor: %s-API-Fehler: %s", kontext, e)
             raise ProviderError(str(e)) from e
 
     # ------------------------------------------------------------------
@@ -298,6 +317,7 @@ class AnthropicVendor(VendorBase):
 
         t_start = time.monotonic()
         response = self._create(
+            kontext="singleshot",
             system=self._system_blocks(system),
             messages=[{"role": "user", "content": self._user_content(prompt, images)}],
             tools=tools,
@@ -344,6 +364,7 @@ class AnthropicVendor(VendorBase):
         """
         t_start = time.monotonic()
         response = self._create(
+            kontext="completion",
             system=self._system_blocks(system),
             messages=[{"role": "user", "content": user}],
         )
@@ -402,6 +423,7 @@ class AnthropicVendor(VendorBase):
 
         t_start = time.monotonic()
         response = self._create(
+            kontext="agent",
             system=system_blocks,
             messages=list(messages),
             tools=wire_tools,

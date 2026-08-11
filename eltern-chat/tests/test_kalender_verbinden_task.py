@@ -397,8 +397,10 @@ def test_T341_kav_kalender_id_via_http_put(monkeypatch):
         def read(self):
             return b'{"ok": true}'
 
-    def fake_urlopen(req):
-        captured_requests.append(req)
+    def fake_urlopen(req, timeout=None):
+        # #1784: der Plan-Buddy-Call trägt jetzt ein explizites CLIENT-2-Budget
+        # — die Signatur nimmt es auf, die Assertion unten prüft den Wert.
+        captured_requests.append((req, timeout))
         return _FakeResponse()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
@@ -468,10 +470,14 @@ def test_T341_kav_kalender_id_via_http_put(monkeypatch):
     # Genau ein HTTP-PUT an den korrekten Endpoint.
     assert len(captured_requests) == 1, (
         "Erwartet: genau 1 HTTP-Anfrage, got: %d" % len(captured_requests))
-    req = captured_requests[0]
+    req, timeout = captured_requests[0]
     assert req.get_full_url() == plan_origin + "/api/v1/plan/admin/kalender", (
         "Falsche URL: %r" % req.get_full_url())
     assert req.get_method() == "PUT"
     body = json.loads(req.data)
     assert body["kalender_id"] == "kalender-abc@group.calendar.google.com", (
         "Falscher Body: %r" % body)
+    # #1784 / CLIENT-2: der Loopback-Call an den Plan-Buddy trägt ein explizites
+    # Zeit-Budget — ohne das hing er im Worker-Thread der PrivateChatSession.
+    assert timeout == kv_mod.PLAN_HTTP_TIMEOUT_SECONDS, (
+        "Plan-Buddy-PUT ohne CLIENT-2-Timeout: %r" % timeout)
