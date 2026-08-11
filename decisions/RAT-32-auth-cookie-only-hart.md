@@ -53,3 +53,29 @@ Cookie-Lebensdauer nachjustieren.
 `specs/platform/auth.md` (AUTH-3.a Amendment-Block, AUTH-7a-Streichung);
 `router/main.py` + `seiten/main.py` (Decorator: Operator-IP-Branch entfernt,
 `_AUTH_MODE` ENV-Naht); `decisions/INDEX.md`.
+
+---
+
+## [ÜBERHOLT 2026-08-11] Die Dienst-Ausklammerung ist erledigt
+
+Die Scope-Klausel oben klammert `wetter/familie/geraete/panel` mit der
+Begründung aus, sie seien Abriss-Ziele und würden „dort geschnitten statt hier
+decorator-nachgerüstet". Am Live-Stand geprüft, stimmt das für zwei davon nicht:
+
+- **`panel` war nie ein Abriss-Ziel.** RAT-31 §2 hält fest: „Kachel-Kuratierung
+  — panel `tiles` + `config` + `panel_id` + PBE-4-Editor (#1400) **bleiben**."
+  Nur `display_id`-Bindung und Router-Proxy sterben.
+- **`wetter` kommt in RAT-31 überhaupt nicht vor** — regulärer Buddy.
+
+Der tatsächliche Abriss ist durch: `router/` und `geraete/` sind aus dem Repo
+gelöscht, ihre Dienste inaktiv; von `display/` steht nur `display/_shared`.
+`hoerspiel` fiel per Amendment 2026-07-30 heraus, `familie` ist extern per
+nginx-403 dicht (#1638).
+
+**Setzung Nic 2026-08-11:** „Wenn kein Abriss mehr kommt, dann muss alles, was
+wirklich Content hat, hinter dem Cookie sein." Die Ausklammerung entfällt
+ersatzlos; für alle verbliebenen Dienste gilt AUTH-11 ohne Ausnahme.
+
+*Anlass:* #1805 — die Reifeprüfung fand den Widerspruch zwischen dieser Klausel
+und der am selben Tag gemergten AUTH-11.
+
