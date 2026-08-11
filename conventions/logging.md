@@ -20,8 +20,17 @@ situativ aktiviert (Konfigurations-Datei oder ENV-Override, vgl. CONFIG-1).
 
 ### LOG-3 — Keine PII in Logs
 Personen-Namen, Telegram-Chat-IDs, Bot-Tokens, API-Keys, E-Mail-Adressen
-gehören nicht in Log-Zeilen. Eltern-Chat-Nachrichteninhalte erst recht
-nicht. Privacy & Datensicherheit ist Constitution-Qualitätsattribut #3.
+gehören nicht in Log-Zeilen. **Nutzer-Inhalte erst recht nicht — und zwar
+ausdrücklich beides: Eltern-Chat-Nachrichten UND gesprochene Kind-Sprache**
+(Transkripte, Fragen an den Sprach-Buddy, TTS-Eingaben). Privacy &
+Datensicherheit ist Constitution-Qualitätsattribut #3.
+
+Die Nennung der Kind-Sprache ist eine Wortlaut-Schärfung, kein neuer
+Beschluss: die Überschrift sagt „keine PII", und ein Kind, das mit dem
+Buddy spricht, ist der schutzbedürftigste Fall überhaupt. Anlass war
+xbuddy#1806 — drei Stellen protokollierten Transkripte wörtlich auf
+`INFO`. Wo der Inhalt fürs Debugging gebraucht wird, ist `DEBUG` die Bahn
+(LOG-2), nicht `INFO`.
 
 Für notwendige Identifikation reichen anonymisierte IDs (z. B.
 `chat:abcd1234` statt Klarnamen).
