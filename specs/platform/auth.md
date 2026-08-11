@@ -725,6 +725,16 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/healthz` (je Service), `/version` | Die Überwachung fragt vor jeder Anmeldung. Nicht per Cookie, sondern am Ingress auf Loopback/Tailnet einschränken. |
 | `/auth/pair` | Die Adresse, an der das Cookie ausgestellt wird. Hinter dem Cookie unerreichbar. |
 | `/shell/<panel_id>/manifest.json`, `…/sw.js` | Ohne öffentliches Manifest installiert sich keine PWA. RAT-32 führt die Manifest-Publicness als Nicht-Verhandelbares. |
+| `/shell/<panel_id>/<path:asset>` | Der WebAPK-Installer holt die Manifest-Icons **credential-los** — mit Gate schlägt die Installation fehl (#1437). |
+| `/controller/_shared/<path:asset>` | Der Service-Worker legt diese Dateien im Precache ab, **bevor** ein Cookie existiert (ROU-23). |
+| `/display/_shared/design/<path:asset>`, `/display/_shared/icons/<path:asset>` | 7b-Public-Ausnahme aus AUTH-7: die Views laden Design-Tokens und Icons als Asset; mit Gate bleiben sie leer. Seit dem Router-Tod von `seiten` ausgeliefert (RAT-31 E6f, #1568). |
+
+Alle vier Asset-Zeilen sind dieselbe technische Klasse wie das Manifest:
+Dateien, die Installer oder Service-Worker holen, **bevor** ein Cookie
+existieren kann. Sie tragen keine Familiendaten. Verriegelt ist das bereits
+durch `test_display_shared_bleibt_public_ungegatet`
+(`tests/test_auth_decorator_coverage.py`) — diese Tabelle zeichnet den
+ratifizierten Bestand nach, sie schafft keine neue Ausnahme.
 
 Die Liste erweitert man **nur per Spec-Änderung**, nie im Test-Code — sonst
 wandert die Ausnahme aus der Sicht heraus.
