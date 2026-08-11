@@ -188,10 +188,39 @@ der `EventSource` (SSE-Standard) trägt die Wiederverbindung.
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell5_kein_displib_import,
 seiten/tests/test_heim_shell.py::test_shell4_pane_ohne_statischen_src
 
-### SHELL-8 — Render auf 1920×1200
-Bei Rail 280px rendert die Shell auf 1920×1200 ohne Overflow, ohne
-Text-Clipping und mit bedienbaren primären Touch-Zielen in beiden Panes
-(Panel-Tiles 280×115px, einspaltig).
+### SHELL-8 — Render ohne feste Zielauflösung
+Die Shell rendert **auf jeder Gerätebreite** ohne Overflow, ohne
+Text-Clipping und mit bedienbaren primären Touch-Zielen in beiden Panes.
+Maße wachsen mit dem verfügbaren Platz mit; eine feste Zielauflösung gibt
+es nicht.
+
+**[UMGESCHRIEBEN 2026-08-11 — Einlösung des Beschlusses vom 2026-07-30]**
+Die frühere Fassung band SHELL-8 an „1920×1200 bei Rail 280px, Panel-Tiles
+280×115px". Das war der Kiosk-Fix, gegen den sich der Beschluss richtet:
+echter Umbruch statt Herunterskalieren. Die genannten Pixelwerte sind
+seither **Referenz für den Pi-Kiosk**, kein Soll für andere Geräte.
+
+Die Bauform ist im Repo bereits zweimal vorgeführt und gilt als Muster:
+container-basierte Maße mit mitwachsenden Grenzwerten
+(`routine/static/routine.css:134-299`, `controller/app-panel/style.css:94`).
+Die Migration läuft **pro Ansicht**, jede einzeln zurückrollbar; das
+Abbruchkriterium ist die Render-Prüfung je Ansicht.
+
+### SHELL-12 — Device-Fit-Scale (Übergang, stirbt pro Ansicht)
+Solange eine Ansicht noch nicht mitwächst, skaliert die Shell sie als
+Ganzes über einen Faktor `innerWidth/1920` auf die Gerätebreite herunter.
+Das ist eine **Übergangs-Maßnahme**, kein Zielzustand: sie greift global
+über beide Panes, nicht pro Ansicht.
+
+Diese Klausel hatte bis 2026-08-11 **keine Definitionszeile** — sie wurde
+in Code und Tests zitiert und war nirgends definiert (Nic hat die Lücke am
+2026-07-30 in #1594 selbst dokumentiert). Sie wird hier nachgezogen, damit
+sie ordentlich sterben kann: **wenn alle Ansichten nach SHELL-8 mitwachsen,
+entfällt SHELL-12 ersatzlos.** Bis dahin bleibt sie als Netz.
+
+*Hinweis für Bau-Tickets:* SHELL-12 ist nicht pro Ansicht abschaltbar.
+Eine Ansicht mitwachsend zu machen heißt, sie fluid zu bauen — nicht, sie
+aus der Skalierung auszuklinken.
 nicht_automatisiert: physische Render-/Touch-Wirkung auf dem Tablet ·
 manuelle_probe: Render-Gate-Screenshot 1920×1200 mit Rail 280px gegen
 Live-Daten (Kill bei Overflow/Clipping/unbedienbar). Gate-B-Beleg:
