@@ -724,7 +724,9 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 |---|---|
 | `/healthz` (je Service), `/version` | Die Überwachung fragt vor jeder Anmeldung. Nicht per Cookie, sondern am Ingress auf Loopback/Tailnet einschränken. |
 | `/auth/pair` | Die Adresse, an der das Cookie ausgestellt wird. Hinter dem Cookie unerreichbar. |
-| `/shell/<panel_id>/manifest.json`, `…/sw.js` | Ohne öffentliches Manifest installiert sich keine PWA. RAT-32 führt die Manifest-Publicness als Nicht-Verhandelbares. |
+| `/shell/<panel_id>/manifest.json` | Ohne öffentliches Manifest installiert sich keine PWA. RAT-32 führt die Manifest-Publicness als Nicht-Verhandelbares. |
+| `/shell/<panel_id>/sw.js` | Der Browser lädt den Service-Worker, bevor eine Session existiert. |
+| `/api/v1/seiten/static/connector/sw.js` | Service-Worker der Connector-Seite, gleiche Begründung. Eigene Zeile, weil die Klausel Sammel-Einträge ausschließt — auch eine Auslassungs-Ellipse ist keiner. |
 | `/shell/<panel_id>/<path:asset>` | Der WebAPK-Installer holt die Manifest-Icons **credential-los** — mit Gate schlägt die Installation fehl (#1437). |
 | `/controller/_shared/<path:asset>` | Der Service-Worker legt diese Dateien im Precache ab, **bevor** ein Cookie existiert (ROU-23). |
 | `/display/_shared/design/<path:asset>`, `/display/_shared/icons/<path:asset>` | 7b-Public-Ausnahme aus AUTH-7: die Views laden Design-Tokens und Icons als Asset; mit Gate bleiben sie leer. Seit dem Router-Tod von `seiten` ausgeliefert (RAT-31 E6f, #1568). |
@@ -739,7 +741,13 @@ ratifizierten Bestand nach, sie schafft keine neue Ausnahme.
 Die Liste erweitert man **nur per Spec-Änderung**, nie im Test-Code — sonst
 wandert die Ausnahme aus der Sicht heraus.
 
-**Begründung.** Am 2026-08-11 waren 62 von 131 Routen ohne Decorator, davon
+**Messbasis ist die URL-Map, nicht der Quelltext.** Der Test liest
+`app.url_map`, nicht die `@route`-Dekorationen. Beides deckt sich nicht:
+Flasks implizite `static`-Endpunkte und Catch-all-Auslieferer stehen in der
+URL-Map, ohne als Dekoration sichtbar zu sein. Wer nur den Quelltext zählt,
+übersieht sie — genau die Klasse Lücke, die AUTH-11 schließen soll.
+
+**Begründung.** Am 2026-08-11 waren 66 von 131 Routen ohne Decorator, davon
 vier schreibend; erreichbar war unter anderem das Profil eines Kindes und
 ein unauthentifizierter Rebuild-Trigger. Keine dieser Routen war „falsch
 klassifiziert" — sie waren nirgends klassifiziert. AUTH-9 konnte das
