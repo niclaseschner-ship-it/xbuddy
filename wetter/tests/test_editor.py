@@ -26,9 +26,16 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from tools.initdata import session_cookie as sc  # noqa: E402
 from wetter import config as config_mod  # noqa: E402
 from wetter import main as main_mod  # noqa: E402
 from wetter import palette as palette_mod  # noqa: E402
+
+# AUTH-11 (T1844-S2): /display/wetter/heute ist hart Cookie-gated — der
+# DCOMP-2-Roundtrip-Test unten braucht zusätzlich zum configure()-bot_token
+# einen gültigen xbuddy_session-Cookie (Muster tests/test_auth11_kleine_b.py).
+_AUTH11_BOT_TOKEN = "123456:ABCdef_editortesttoken"
+_AUTH11_SUBJECT = "tablet-elias-01"
 
 # Eine palette-konforme Demo-Config (WETTER-29) — Pikto-IDs aus wetter/palette.json.
 DEMO = {
@@ -94,7 +101,8 @@ def editor_setup(tmp_path):
                 rainProb=10, rainAmount=0.0, uv=2.0, uvLabel="", sunscreen=False)
             return w, w
 
-    main_mod.configure(cfg, _Anbindung(), config_path=str(cfg_path))
+    main_mod.configure(cfg, _Anbindung(), config_path=str(cfg_path),
+                       bot_token=_AUTH11_BOT_TOKEN)
     return main_mod.app.test_client(), cfg_path
 
 
@@ -150,7 +158,9 @@ def test_editor_post_gueltig_schreibt_und_dcomp2(editor_setup):
     assert neu["wardrobe"]["regeln"][2]["bedingung"] == {"feels_min": 14}
     assert neu["wardrobe"]["regeln"][2]["hinweis"] == "Mild."
 
-    # DCOMP-2: heute zeigt das neue Stück OHNE erneutes configure().
+    # DCOMP-2: heute zeigt das neue Stück OHNE erneutes configure(). AUTH-11:
+    # /display/wetter/heute ist hart Cookie-gated, hier zusätzlich mint (T1844-S2).
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session(_AUTH11_SUBJECT, _AUTH11_BOT_TOKEN))
     heute = client.get("/display/wetter/heute").get_data(as_text=True)
     assert "Pullover" in heute
 

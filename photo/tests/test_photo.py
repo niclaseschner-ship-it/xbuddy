@@ -30,6 +30,13 @@ from photo import normalize as normalize_mod  # noqa: E402
 from photo import render as render_mod  # noqa: E402
 from photo import store  # noqa: E402
 from photo.tests.conftest import ffmpeg_noetig  # noqa: E402
+from tools.initdata import session_cookie as sc  # noqa: E402
+
+# AUTH-11 (T1844-S2): /display/photo/rahmen ist hart Cookie-gated — Tests
+# unten brauchen zusätzlich zum configure()-bot_token einen gültigen
+# xbuddy_session-Cookie (Muster tests/test_auth11_kleine_b.py).
+_AUTH11_BOT_TOKEN = "123456:ABCdef_phototesttoken"
+_AUTH11_SUBJECT = "tablet-elias-01"
 
 
 def _cfg(tmp_path, **overrides):
@@ -387,7 +394,10 @@ def test_photo6_leere_library_neutral(tmp_path):
 def client(tmp_path):
     import photo.main as pm
     cfg = _cfg(tmp_path)
-    pm.configure(cfg)  # Test-Modus: kein config_path -> Snapshot ist die Quelle
+    # Test-Modus: kein config_path -> Snapshot ist die Quelle. bot_token
+    # (AUTH-11, T1844-S2): Sign-Key für den xbuddy_session-Cookie auf
+    # /display/photo/rahmen (hart Cookie-gated).
+    pm.configure(cfg, bot_token=_AUTH11_BOT_TOKEN)
     return pm.app.test_client()
 
 
@@ -458,6 +468,8 @@ def test_display_rahmen_view(client, jpeg_bytes):
         "/api/v1/photo/medien",
         data={"medium": (io.BytesIO(jpeg_bytes()), "foto.jpg")},
         content_type="multipart/form-data")
+    # AUTH-11 (T1844-S2): /display/photo/rahmen ist hart Cookie-gated.
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session(_AUTH11_SUBJECT, _AUTH11_BOT_TOKEN))
     resp = client.get("/display/photo/rahmen")
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
@@ -467,6 +479,8 @@ def test_display_rahmen_view(client, jpeg_bytes):
 
 def test_display_rahmen_leer_neutral(client):
     """PHOTO-6: leere Library -> die View zeigt den neutralen Zustand, kein Fehler."""
+    # AUTH-11 (T1844-S2): /display/photo/rahmen ist hart Cookie-gated.
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session(_AUTH11_SUBJECT, _AUTH11_BOT_TOKEN))
     resp = client.get("/display/photo/rahmen")
     assert resp.status_code == 200
     assert "Noch keine Fotos" in resp.get_data(as_text=True)
