@@ -196,7 +196,8 @@ def test_reset_observe_ist_rueckroll_default_und_laesst_ohne_cookie_durch(observ
     assert r.status_code == 200, "XBUDDY_AUTH_MODE=observe (Default) muss ohne Cookie durchlassen"
 
 
-def test_env_naht_treibt_reset_wirklich_end_to_end(monkeypatch, _reset_main_env):
+@pytest.mark.usefixtures("_reset_main_env")
+def test_env_naht_treibt_reset_wirklich_end_to_end(monkeypatch):
     """AC3: `@require_dual_gate(mode=_AUTH_MODE)` -- kein hartkodiertes
     mode='hard' an den neuen Gate-Stellen (T1832-S1-Auftrag). Belegt beide
     Richtungen der Naht am selben Endpunkt in einem Testlauf."""
@@ -218,20 +219,20 @@ def test_env_naht_treibt_reset_wirklich_end_to_end(monkeypatch, _reset_main_env)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("method,path", ROUTEN_DUAL_GATE)
+@pytest.mark.parametrize(("method", "path"), ROUTEN_DUAL_GATE)
 def test_dual_gate_route_ohne_cookie_ist_401(hard_client, method, path):
     r = hard_client.open(path, method=method, headers=EXTERN_HEADERS)
     assert r.status_code == 401, "%s %s muss ohne Cookie 401 liefern (require_dual_gate hard)" % (method, path)
 
 
-@pytest.mark.parametrize("method,path", ROUTEN_DUAL_GATE)
+@pytest.mark.parametrize(("method", "path"), ROUTEN_DUAL_GATE)
 def test_dual_gate_route_mit_cookie_laesst_durch(hard_client, method, path):
     mit_session_cookie(hard_client)
     r = hard_client.open(path, method=method, headers=EXTERN_HEADERS)
     assert r.status_code != 401, "%s %s muss mit gueltigem Cookie durchlassen" % (method, path)
 
 
-@pytest.mark.parametrize("method,path", ROUTEN_INIT_DATA)
+@pytest.mark.parametrize(("method", "path"), ROUTEN_INIT_DATA)
 def test_init_data_route_ohne_cookie_und_ohne_loopback_ist_401(hard_client, method, path):
     """require_init_data hat KEIN `mode` -- immer hart, unabhaengig von
     XBUDDY_AUTH_MODE. `hard_client` ist hier nur der bequeme Fixture-Name;
@@ -240,7 +241,7 @@ def test_init_data_route_ohne_cookie_und_ohne_loopback_ist_401(hard_client, meth
     assert r.status_code == 401, "%s %s muss ohne Cookie/tma/Loopback 401 liefern" % (method, path)
 
 
-@pytest.mark.parametrize("method,path", ROUTEN_INIT_DATA)
+@pytest.mark.parametrize(("method", "path"), ROUTEN_INIT_DATA)
 def test_init_data_route_mit_cookie_laesst_durch(hard_client, method, path):
     mit_session_cookie(hard_client)
     r = hard_client.open(path, method=method, headers=EXTERN_HEADERS)
