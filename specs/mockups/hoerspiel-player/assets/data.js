@@ -8,8 +8,8 @@ window.HSP = (function () {
   // Umschalter-Kinder — Foto liefert 404 (FAM-8 real in der App),
   // Mockup nutzt Initialen-Fallback, Ring-Farbe je Kind.
   const KINDER = {
-    mia: { name: "Mia", initiale: "P", ring: "var(--kids-ring-orange, #E58E3F)" },
-    finn:  { name: "Finn",  initiale: "N", ring: "#7E6BB0" },
+    mia: { name: "Mia", initiale: "M", ring: "var(--kids-ring-orange, #E58E3F)" },
+    finn:  { name: "Finn",  initiale: "F", ring: "#7E6BB0" },
   };
 
   async function load() {
