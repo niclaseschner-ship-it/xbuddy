@@ -53,7 +53,10 @@ from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
-from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
+from tools.initdata.auth_gate import (  # noqa: E402
+    make_require_dual_gate,
+    make_require_init_data,
+)
 from tools.service_diagnostics import register_version  # noqa: E402
 from tools.zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
 
@@ -336,6 +339,22 @@ def _get_bot_token():
     return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
 
 
+def _client_ip():
+    """Client-IP fuers AUTH-7-Observe-Log (RAT-32: kein Gate mehr, nur Log).
+
+    Wortgleich zum panel-/seiten-Vorbild: `X-Real-IP` vom Origin-nginx ist die
+    vertrauenswuerdige Quelle; Fallbacks X-Forwarded-For (erstes Token), dann
+    remote_addr.
+    """
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr
+
+
 def _get_familie_client():
     """Liefert den AUTH-3-FAM-Client — gecacht im runtime-Dict oder frisch (T1015).
 
@@ -405,6 +424,30 @@ require_init_data = make_require_init_data(
 )
 
 
+# Decorator: AUTH-7b Dual-Gate (auth.md AUTH-7, RAT-32, #1836 AUTH-11). Die
+# Display-Flaeche (`/display/plan/woche`, ihr implizites Flask-Static) ist ein
+# Browser-Pfad auf dem Kind-Tablet — dort gibt es keinen tma-Header, sondern
+# ein `xbuddy_session`-Cookie (AUTH-7b). `require_init_data` (HART-tma, oben)
+# bleibt fuer die Mini-App-Datenrouten (`/api/v1/plan/*`) zustaendig; dieser
+# zweite Gate deckt die Display-Flaeche. Bot-Token-Getter wird zwischen
+# beiden Gates geteilt (gleicher HMAC-Sign-Key, AUTH-2:62 — kein zweites
+# Geheimnis). `auth_401` teilt sich ebenfalls den bestehenden
+# `_auth_401`-Renderer: der Re-Pair-Text ist bereits generisch "Gerät neu
+# verbinden" formuliert (nicht tma-spezifisch) — ein zweiter, fast
+# identischer 401-Text waere ein Genre-Duplikat ohne Mehrwert (D1 bleibt
+# gewahrt: EIN Renderer pro Buddy, hier fuer beide Gates geteilt). Die
+# 81-KB-Wochenplan-View traegt echte Familien-Namen — die sensibelste der
+# sechs #1836-Routen.
+# default_mode="hard" — Nic-Setzung 2026-08-11 (#1836): jede Adresse hinter
+# dem Cookie, kein Observe-Grace fuer die Display-Flaeche.
+require_dual_gate = make_require_dual_gate(
+    get_bot_token=_get_bot_token,
+    get_client_ip=_client_ip,
+    auth_401=_auth_401,
+    default_mode="hard",
+)
+
+
 # ============================================================
 #  Flask-App
 # ============================================================
@@ -413,6 +456,16 @@ require_init_data = make_require_init_data(
 # Namensraum. So werden sie hinter der einen Origin (URL-12) geroutet —
 # der Flask-Default `/static` läge außerhalb der URL-1-Prefixe (#61).
 app = Flask(__name__, static_url_path="/display/plan/static")
+
+# AUTH-11 (#1836): der implizite Flask-Static-Endpunkt traegt keine
+# `@app.route`-Dekoration (Werkzeug registriert ihn intern als Endpunkt
+# "static") — ein Decorator kann nicht am Pfad ansetzen, der ueber
+# `static_folder`/`static_url_path` entsteht. Einziger Ansatzpunkt ist die
+# View-Funktion selbst: sie wird nach der App-Erzeugung im
+# `view_functions`-Dict durch die gegatete Fassung ersetzt. Bricht nichts,
+# weil die View ihr eigenes JS/CSS ueber denselben Origin nachlaedt und der
+# Browser dabei denselben Cookie mitschickt (Same-Origin).
+app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
 
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
@@ -436,6 +489,7 @@ def _anker_aus_request():
 
 
 @app.route("/display/plan/woche", methods=["GET"])
+@require_dual_gate(mode="hard")  # AUTH-11 (#1836): Display-Flaeche, Cookie-hart
 def woche():
     """View `woche` in zwei Stufen (PLAN-2, PLAN-3, PLAN-21).
 
