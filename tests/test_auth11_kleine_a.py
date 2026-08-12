@@ -268,6 +268,46 @@ def test_kibuddy_healthz_und_version_bleiben_ungegated(kibuddy_client):
     assert kibuddy_client.get("/version", headers=_EXTERN).status_code == 200
 
 
+def test_kibuddy_manifest_und_icons_ohne_cookie_sind_200(kibuddy_client):
+    """AUTH-11-Ausnahme (Watchdog-Fund, Fix-Nachtrag #1836): kibuddy ist der
+    einzige der drei Services mit einem echten PWA-Manifest -- `frage.html`
+    laedt `/display/kibuddy/static/manifest.webmanifest` OHNE
+    `crossorigin="use-credentials"`, der Browser holt es per Fetch-Spec
+    credential-los bei JEDEM Seitenladen (auth.md AUTH-4, #1437-Klasse). Ein
+    gepairter Kiosk, der hier 401 bekaeme, waere bei jedem Laden kaputt --
+    nicht erst bei der Neuinstallation. Manifest + beide maskable-Icons
+    muessen deshalb ohne jede Auth-Quelle 200 liefern; die View selbst
+    (frage.html) bleibt hart gegated (Gegenprobe unten)."""
+    r_manifest = kibuddy_client.get(
+        "/display/kibuddy/static/manifest.webmanifest", headers=_EXTERN)
+    assert r_manifest.status_code == 200, (
+        "PWA-Manifest muss ohne Cookie 200 liefern (credential-loser "
+        "Fetch, sonst 401 bei jedem Seitenladen — #1437-Klasse)"
+    )
+    r_icon_192 = kibuddy_client.get(
+        "/display/kibuddy/static/icons/icon-192.png", headers=_EXTERN)
+    assert r_icon_192.status_code == 200, "icon-192.png muss ohne Cookie 200 liefern"
+    r_icon_512 = kibuddy_client.get(
+        "/display/kibuddy/static/icons/icon-512.png", headers=_EXTERN)
+    assert r_icon_512.status_code == 200, "icon-512.png muss ohne Cookie 200 liefern"
+
+
+def test_kibuddy_frage_view_selbst_bleibt_gegated_trotz_manifest_ausnahme(kibuddy_client):
+    """Gegenprobe zur Manifest-Ausnahme: NUR die zwei benannten Adressen
+    (manifest.webmanifest, icon-192/512.png) sind public — die Display-View
+    selbst bleibt hart hinter dem Cookie. Kein Abrutschen der Ausnahme auf
+    den Rest des Static-Namensraums oder die View."""
+    r = kibuddy_client.get("/display/kibuddy/frage", headers=_EXTERN)
+    assert r.status_code == 401, (
+        "frage.html darf trotz der Manifest-Ausnahme NICHT public sein"
+    )
+    r_css = kibuddy_client.get(
+        "/display/kibuddy/static/frage.css", headers=_EXTERN)
+    assert r_css.status_code == 401, (
+        "frage.css ist kein AUTH-11-Ausnahme-Kandidat — bleibt gegated"
+    )
+
+
 # ---------------------------------------------------------------------------
 # plan — /display/plan/woche (81-KB-Wochenplan, echte Familien-Namen) + ihr
 # impliziter Flask-Static

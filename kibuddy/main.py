@@ -402,6 +402,53 @@ app = Flask(__name__, template_folder="templates", static_url_path="/display/kib
 # Browser dabei denselben Cookie mitschickt (Same-Origin).
 app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
 
+# AUTH-11-Ausnahme (Fix-Nachtrag #1836, Watchdog-Befund; Spec-Zeilen fuer
+# specs/platform/auth.md folgen in einem separaten Spec-PR — die AUTH-11-
+# Tabelle verlangt die zwei Adressen namentlich, keine Sammel-Eintraege).
+#
+# kibuddy ist der einzige der drei Services mit einem echten PWA-Manifest:
+# `frage.html` traegt `<link rel="manifest" href="/display/kibuddy/static/
+# manifest.webmanifest">` OHNE `crossorigin="use-credentials"` — der Browser
+# holt das Manifest per Fetch-Spec credential-los, bei JEDEM Seitenladen
+# (nicht nur bei der Erst-Installation). Der generische Static-Gate-Tausch
+# oben wuerde das Manifest UND seine beiden Icons (maskable, `icons[].src`
+# im Manifest) mitgaten — der gepairte Kind-Tablet-Kiosk bekaeme 401 auf
+# sein Manifest bei jedem Laden, nicht erst beim Neu-Installieren (die
+# #1437-Regression, die auth.md AUTH-4 fuer genau diesen Fall dokumentiert:
+# „credential-los per Fetch-Spec"). essen/plan haben kein Manifest — ihr
+# Static-Tausch bleibt vollstaendig gegated, unveraendert.
+#
+# Eigene, explizite Routen statt einer Bedingung im Wrapper: Werkzeug matcht
+# einen literalen Pfad IMMER vor dem generischen `<path:filename>`-Catch-all
+# des impliziten Static-Endpunkts, unabhaengig von der Registrierungs-
+# reihenfolge — die drei Routen unten greifen vor dem gegateten Fallback.
+_KIBUDDY_PUBLIC_PWA_ASSETS = {
+    "manifest": "manifest.webmanifest",
+    "icon_192": "icons/icon-192.png",
+    "icon_512": "icons/icon-512.png",
+}
+
+
+def _oeffentliches_pwa_asset(relative_path):
+    """Liefert eines der drei public-PWA-Assets aus kibuddy/static/ (kein Gate,
+    AUTH-11-Ausnahme s.o.)."""
+    return send_from_directory(app.static_folder, relative_path)
+
+
+@app.route("/display/kibuddy/static/manifest.webmanifest", methods=["GET"])
+def kibuddy_manifest_public():
+    return _oeffentliches_pwa_asset(_KIBUDDY_PUBLIC_PWA_ASSETS["manifest"])
+
+
+@app.route("/display/kibuddy/static/icons/icon-192.png", methods=["GET"])
+def kibuddy_icon_192_public():
+    return _oeffentliches_pwa_asset(_KIBUDDY_PUBLIC_PWA_ASSETS["icon_192"])
+
+
+@app.route("/display/kibuddy/static/icons/icon-512.png", methods=["GET"])
+def kibuddy_icon_512_public():
+    return _oeffentliches_pwa_asset(_KIBUDDY_PUBLIC_PWA_ASSETS["icon_512"])
+
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
 register_version(app)
