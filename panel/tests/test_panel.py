@@ -24,8 +24,12 @@ from panel import main as panel_main  # noqa: E402
 from panel import registry as registry_mod  # noqa: E402
 from tools.initdata import session_cookie as sc  # noqa: E402
 
-# AUTH-11 (#1834): alle panel-Routen ausser /healthz und /version tragen jetzt
-# den Dual-Gate — jeder Testclient hier braucht einen gültigen Session-Cookie.
+# AUTH-11 (#1834): `GET /api/v1/panels/`, `GET /api/v1/panels/<id>` und
+# `POST /api/v1/panels/` tragen den Dual-Gate — deren Testclients hier
+# brauchen einen gültigen Session-Cookie. `.../config.json`/`.../tiles.json`
+# bleiben ungegated (Watchdog-Befund 2026-08-11/12: laufen live über den
+# PREG-9-Proxy in seiten ohne Cookie, panel/main.py::get_panel_config) — der
+# Cookie schadet ihnen nicht, ist für sie aber nicht die Bedingung.
 _BOT_TOKEN = "123456:ABCdef_panel_test_token"
 
 # ============================================================
@@ -65,8 +69,10 @@ def demo_instanz(tmp_path):
 def read_client(demo_instanz):
     """Lese-Modus: kein `registry_path`, In-Memory. POST liefert hier 503.
 
-    AUTH-11 (#1834): die Routen sind jetzt gegated — der Client trägt einen
-    gültigen Session-Cookie (additiv, ändert keine bestehende Zusicherung)."""
+    AUTH-11 (#1834): der Client trägt einen gültigen Session-Cookie für die
+    gegateten Routen (`GET /api/v1/panels/`, `.../<id>`) — additiv, ändert
+    keine bestehende Zusicherung; für die weiterhin ungegateten
+    `.../config.json`/`.../tiles.json` (s. Kommentar oben) ist er wirkungslos."""
     reg = registry_mod.load(demo_instanz)
     panel_main.configure(reg, bot_token=_BOT_TOKEN)
     panel_main.app.testing = True
@@ -79,8 +85,9 @@ def read_client(demo_instanz):
 def write_client(demo_instanz):
     """Schreib-Modus: `registry_path` gesetzt, POST schreibt auf Disk (PREG-15).
 
-    AUTH-11 (#1834): die Routen sind jetzt gegated — der Client trägt einen
-    gültigen Session-Cookie (additiv, ändert keine bestehende Zusicherung)."""
+    AUTH-11 (#1834): der Client trägt einen gültigen Session-Cookie — nötig
+    für `POST /api/v1/panels/` (literal `mode="hard"`, AUTH-3.a) und die
+    gegateten Lese-Routen (additiv, ändert keine bestehende Zusicherung)."""
     reg = registry_mod.load(demo_instanz)
     panel_main.configure(reg, registry_path=demo_instanz, bot_token=_BOT_TOKEN)
     panel_main.app.testing = True

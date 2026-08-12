@@ -10,12 +10,24 @@
                                                 Nicht-Verhandelbar: End-to-End-
                                                 Beleg der ENV-Naht über einen
                                                 echten Modul-Reload
+  test_post_panel_bleibt_hart_unter_observe  — AUTH-3.a: WRITE ignoriert die
+                                                ENV-Naht, kein Observe-Grace
 
-Alle acht zuvor ungegateten Routen (`POST /api/v1/panels/`, die vier
-Lese-Routen, die drei Editor-Routen) sind inzwischen gegated — siehe
-`panel/tests/test_panel.py` / `test_panel_editor_seite.py` für deren
-Bestandstests mit gesetztem Cookie. `specs/platform/panel-bearbeiten.md`
-PBE-3 ist per Nic-Setzung 2026-08-11 als ÜBERHOLT markiert (#1805/#1834).
+Von den ursprünglich acht ungegateten Routen sind nach dem Watchdog-Befund
+(2026-08-11/12, Live-Reproduktion) **drei** gegated geblieben:
+`GET /api/v1/panels/`, `GET /api/v1/panels/<panel_id>` (laufen live per nginx
+direkt an den Browser-Cookie, `panel:5041`) und `POST /api/v1/panels/`
+(literales `mode="hard"`, AUTH-3.a — wie `PUT .../tiles`, siehe unten). Die
+übrigen fünf (`.../config.json`, `.../tiles.json`, die drei Editor-Routen)
+laufen live über `seiten._proxy_panel_view` / `_proxy_panel_bearbeiten`
+(PREG-9-Proxy, seiten/main.py:2140/2170) — ein Aufruf ohne Cookie/Header.
+Der ÜBERHOLT-Marker in `specs/platform/panel-bearbeiten.md` PBE-3 widerlegt
+nur die "cookieloses Kiosk-Gerät"-Prämisse für das GERÄT (RAT-32-Pairing);
+über den PREG-9-Proxy-Aufrufer (ein Prozess, kein Gerät) sagt er nichts.
+Diese fünf Routen bleiben deshalb UNGEGATED, bis eine separat ticketierte
+Design-Entscheidung (Nic) eine Identität am Proxy-Hop schafft — siehe
+`panel/main.py` (Kommentare bei `get_panel_config` / `get_panel_editor`)
+und `panel/tests/test_panel_editor_seite.py::test_pbe1_editor_route_no_auth_layer`.
 
 RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md:39-46,
 Lehre #1427→#1430): der Hard-Flip ist eine ENV-Naht (`XBUDDY_AUTH_MODE`),
@@ -32,6 +44,7 @@ Lauf: python3 -m pytest panel/tests/test_auth11_panel.py -v
 """
 
 import importlib
+import json
 import os
 import sys
 
@@ -43,6 +56,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from panel import main as panel_main  # noqa: E402
+from panel import registry as registry_mod  # noqa: E402
 from tools.initdata import session_cookie as sc  # noqa: E402
 
 _BOT_TOKEN = "123456:ABCdef_auth11testtoken"
@@ -186,4 +200,52 @@ def test_auth_mode_env_naht_observe_ist_rueckroll_default_bleibt_hart(monkeypatc
     assert r_default.status_code == 401, (
         "ohne ENV-Override muss der Default weiterhin 'hard' sein "
         "(Nic-Setzung 2026-08-11), got %d" % r_default.status_code
+    )
+
+
+# ---------------------------------------------------------------------------
+# AUTH-3.a — WRITE bleibt hart, auch unter XBUDDY_AUTH_MODE=observe
+# (Watchdog-Befund 2026-08-11/12, Live-Reproduktion: ohne diesen literalen
+# mode="hard" legt ein Request OHNE jeden Cookie unter observe eine
+# Panel-Instanz an — genau der "je 200 ohne valide Quelle"-Regressions-Bug,
+# den auth.md AUTH-3.a wörtlich ausschließt)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("_reset_panel_main_env")
+def test_post_panel_bleibt_hart_unter_observe(monkeypatch, tmp_path):
+    """AUTH-3.a (specs/platform/auth.md:300-303/320-323, wörtlich):
+    "WRITE-Routen (POST/PUT/PATCH/DELETE) … bleiben HART ab Tag 0. Keine
+    Grace, kein Observe-Fenster" und "Eine WRITE-/#1321-Route, die je 200
+    ohne valide Quelle liefert, ist ein Regressions-Bug (nie beabsichtigt)."
+
+    `POST /api/v1/panels/` trägt `@require_dual_gate(mode="hard")` literal
+    (panel/main.py, wie `PUT .../tiles`) — NICHT `mode=_AUTH_MODE`. Die
+    ENV-Naht (RAT-32 Nicht-Verhandelbar, s. Testblock oben) gilt für den
+    Rückroll-Pfad der READ-Display-Fläche, nicht für Schreib-Endpunkte:
+    selbst mit `XBUDDY_AUTH_MODE=observe` muss ein POST ohne Cookie 401
+    bleiben, sonst legt ein anonymer Request eine Panel-Instanz an."""
+    monkeypatch.setenv("XBUDDY_AUTH_MODE", "observe")
+    importlib.reload(panel_main)
+    assert panel_main._AUTH_MODE == "observe"
+
+    panels_path = tmp_path / "panels.json"
+    panels_path.write_text('{"panels": []}', encoding="utf-8")
+    reg = registry_mod.load(str(panels_path))
+    panel_main.configure(reg, registry_path=str(panels_path), bot_token=_BOT_TOKEN)
+    panel_main.app.testing = True
+
+    r = panel_main.app.test_client().post(
+        "/api/v1/panels/", json={"slug": "anonym"})
+    assert r.status_code == 401, (
+        "AUTH-3.a: POST /api/v1/panels/ muss auch unter "
+        "XBUDDY_AUTH_MODE=observe ohne Cookie 401 liefern (WRITE hart ab "
+        "Tag 0, kein Observe-Grace), got %d — %r"
+        % (r.status_code, r.get_data(as_text=True))
+    )
+    # Backstop: die Instanz wurde NICHT angelegt.
+    daten = json.loads(panels_path.read_text(encoding="utf-8"))
+    assert daten["panels"] == [], (
+        "AUTH-3.a-Regressions-Bug: POST hat trotz 401 eine Panel-Instanz "
+        "angelegt — panels.json: %r" % daten
     )
