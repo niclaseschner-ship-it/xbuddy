@@ -7,7 +7,7 @@ Abgedeckt:
   test_pbe1_editor_route_unknown_panel_returns_404 — 404 bei unbekannter panel_id
   test_pbe1_editor_route_serves_bearbeiten_js     — Bundle-JS wird ausgeliefert
   test_pbe1_editor_route_serves_bearbeiten_css    — Bundle-CSS wird ausgeliefert
-  test_pbe1_editor_route_no_auth_layer            — PBE-3: keine zusätzliche Auth-Schicht in der Route
+  test_pbe1_editor_route_requires_auth_layer      — AUTH-11 (#1834): Route verlangt jetzt den Cookie (Umkehrung der PBE-3-Zusicherung)
   test_pbe1_html_references_bundle_assets          — HTML lädt bearbeiten.js + bearbeiten.css
   test_pbe1_html_has_safe_area_viewport            — PBE-1 viewport-fit=cover + safe-area-inset-top im CSS
   test_pbe1_html_carries_panel_id_token            — HTML-Quelle trägt das Token __PANEL_ID__ am echten body-Tag (Substitutions-Anker)
@@ -28,9 +28,14 @@ sys.path.insert(0, _REPO_ROOT)
 
 from panel import main as panel_main  # noqa: E402
 from panel import registry as registry_mod  # noqa: E402
+from tools.initdata import session_cookie as sc  # noqa: E402
 
 _BEARBEITEN_DIR = os.path.normpath(os.path.join(
     _REPO_ROOT, "controller", "app-panel"))
+
+# AUTH-11 (#1834): die Editor-Routen tragen jetzt den Dual-Gate — der
+# Testclient braucht einen gültigen Session-Cookie.
+_BOT_TOKEN = "123456:ABCdef_panel_editor_test_token"
 
 
 # ============================================================
@@ -60,11 +65,18 @@ def demo_instanz(tmp_path):
 
 @pytest.fixture
 def editor_client(demo_instanz):
-    """Lese-Modus mit registry_path: GET-Route liefert frisch von Disk."""
+    """Lese-Modus mit registry_path: GET-Route liefert frisch von Disk.
+
+    AUTH-11 (#1834): die Editor-Routen sind jetzt gegated — der Client trägt
+    einen gültigen Session-Cookie (additiv, ändert keine bestehende
+    Zusicherung — `test_pbe1_editor_route_requires_auth_layer` baut bewusst
+    einen eigenen cookie-losen Client, siehe dort)."""
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg, registry_path=demo_instanz)
+    panel_main.configure(reg, registry_path=demo_instanz, bot_token=_BOT_TOKEN)
     panel_main.app.testing = True
-    return panel_main.app.test_client()
+    client = panel_main.app.test_client()
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session("op", _BOT_TOKEN))
+    return client
 
 
 # ============================================================
@@ -160,16 +172,30 @@ def test_pbe1_editor_route_unknown_panel_js_returns_404(editor_client):
 
 
 # ============================================================
-#  AC5 — PBE-3: keine zusätzliche Auth-Schicht in der Route
+#  AC5 — AUTH-11: Editor-Route verlangt jetzt den Dual-Gate-Cookie
 # ============================================================
 
-def test_pbe1_editor_route_no_auth_layer(editor_client):
-    """PBE-3: keine Rollen-/Login-Schicht in V1 — Heimnetz/Tailscale-Grenze
-    ist das Gate (RAT-2). Eigentest: ohne Auth-Header bekommt der Client 200."""
-    r = editor_client.get("/controller/app-panel/kueche-01/bearbeiten")
-    # Keine 401/403 — Auth ist nicht route-seitig.
-    assert r.status_code == 200, \
-        "PBE-3: kein zusätzlicher Auth-Schritt — Heimnetz/Tailscale-Gate ist das Gate"
+def test_pbe1_editor_route_requires_auth_layer(demo_instanz):
+    """AUTH-11 (#1834, Nic-Setzung 2026-08-11): Umkehrung von
+    `test_pbe1_editor_route_no_auth_layer`. Die PBE-3-Prämisse "keine
+    zusätzliche Auth-Schicht, Heimnetz/Tailscale-Grenze trägt den Zugriff"
+    ist in `specs/platform/panel-bearbeiten.md` (direkt unter PBE-3) als
+    ÜBERHOLT markiert — der Live-Stand zeigt, dass das Kiosk-Gerät bereits
+    einen gültigen Cookie trägt (RAT-32-Pairing), AUTH-11 lässt keine
+    Geräte-Ausnahme mehr zu (#1805). Die Route verlangt jetzt den Cookie:
+    ohne ihn 401, kein Bypass mehr über das Heimnetz/Tailscale-Gate.
+
+    Bewusst ein eigener, cookie-loser Client (nicht die `editor_client`-
+    Fixture, die einen Cookie setzt) — das Fehlen des Cookies ist der Kern
+    dieses Tests."""
+    reg = registry_mod.load(demo_instanz)
+    panel_main.configure(reg, registry_path=demo_instanz, bot_token=_BOT_TOKEN)
+    panel_main.app.testing = True
+    cookie_less_client = panel_main.app.test_client()
+    r = cookie_less_client.get("/controller/app-panel/kueche-01/bearbeiten")
+    assert r.status_code == 401, (
+        "AUTH-11: Editor-Route muss ohne Cookie 401 liefern (PBE-3-Ausnahme "
+        "ist ÜBERHOLT), got %d" % r.status_code)
 
 
 # ============================================================

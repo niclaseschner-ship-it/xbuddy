@@ -22,6 +22,11 @@ sys.path.insert(0, _REPO_ROOT)
 
 from panel import main as panel_main  # noqa: E402
 from panel import registry as registry_mod  # noqa: E402
+from tools.initdata import session_cookie as sc  # noqa: E402
+
+# AUTH-11 (#1834): alle panel-Routen ausser /healthz und /version tragen jetzt
+# den Dual-Gate — jeder Testclient hier braucht einen gültigen Session-Cookie.
+_BOT_TOKEN = "123456:ABCdef_panel_test_token"
 
 # ============================================================
 #  Demo-Daten + Fixtures
@@ -58,20 +63,30 @@ def demo_instanz(tmp_path):
 
 @pytest.fixture
 def read_client(demo_instanz):
-    """Lese-Modus: kein `registry_path`, In-Memory. POST liefert hier 503."""
+    """Lese-Modus: kein `registry_path`, In-Memory. POST liefert hier 503.
+
+    AUTH-11 (#1834): die Routen sind jetzt gegated — der Client trägt einen
+    gültigen Session-Cookie (additiv, ändert keine bestehende Zusicherung)."""
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg)
+    panel_main.configure(reg, bot_token=_BOT_TOKEN)
     panel_main.app.testing = True
-    return panel_main.app.test_client()
+    client = panel_main.app.test_client()
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session("op", _BOT_TOKEN))
+    return client
 
 
 @pytest.fixture
 def write_client(demo_instanz):
-    """Schreib-Modus: `registry_path` gesetzt, POST schreibt auf Disk (PREG-15)."""
+    """Schreib-Modus: `registry_path` gesetzt, POST schreibt auf Disk (PREG-15).
+
+    AUTH-11 (#1834): die Routen sind jetzt gegated — der Client trägt einen
+    gültigen Session-Cookie (additiv, ändert keine bestehende Zusicherung)."""
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg, registry_path=demo_instanz)
+    panel_main.configure(reg, registry_path=demo_instanz, bot_token=_BOT_TOKEN)
     panel_main.app.testing = True
-    return panel_main.app.test_client(), demo_instanz
+    client = panel_main.app.test_client()
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session("op", _BOT_TOKEN))
+    return client, demo_instanz
 
 
 # ============================================================
@@ -263,11 +278,15 @@ def test_PREG_15_post_nested_query_in_tiles_returns_400(write_client):
 
 
 def test_PREG_15_post_without_registry_path_returns_503(demo_instanz):
-    """Test-Modus (configure ohne registry_path) → POST liefert 503."""
+    """Test-Modus (configure ohne registry_path) → POST liefert 503.
+
+    AUTH-11 (#1834): gültiger Cookie nötig, damit der Request überhaupt am
+    Gate vorbeikommt und die 503-Aussage (kein registry_path) geprüft wird."""
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg)  # kein registry_path
+    panel_main.configure(reg, bot_token=_BOT_TOKEN)  # kein registry_path
     panel_main.app.testing = True
     client = panel_main.app.test_client()
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session("op", _BOT_TOKEN))
     r = client.post("/api/v1/panels/", json={"slug": "neu"})
     assert r.status_code == 503
     assert "error" in r.get_json()
