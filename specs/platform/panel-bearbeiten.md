@@ -84,6 +84,24 @@ Der **Lesepfad bleibt außerhalb AUTH-3**: die Display-Render-/Registry-Reads
 app-seitiges Gaten würde den Display-Fetch erschlagen (belegter #1338-Bruch). Ihre
 Funnel-Exposition bleibt die separate AUTH-7-Frage.
 
+**[ÜBERHOLT 2026-08-11 — Nic-Setzung, Prüfung am Live-Stand]** Die
+Cookielos-Prämisse oben gilt nicht mehr. `specs/platform/auth.md` AUTH-11
+(2026-08-11, #1805) schließt Geräte-Ausnahmen ausdrücklich aus: „Jedes
+Gerät, das xbuddy konsumiert, trägt ein `xbuddy_session`-Cookie; der
+Pi-Kiosk wird per `pair-kiosk.sh` gepairt (RAT-32). 'Das Gerät kann kein
+Cookie' ist deshalb kein zulässiger Ausnahme-Grund." Der Live-Stand
+bestätigt das für genau dieses Gerät: `/shell/<panel_id>` — die Heim-Shell,
+die Hauptfläche desselben Kiosk-Geräts — trägt den Dual-Gate, und `seiten`
+läuft mit `XBUDDY_AUTH_MODE=hard`
+(`/etc/systemd/system/xbuddy-seiten.service.d/40-auth-mode.conf`); ein
+Gerät ohne gültigen Cookie bekäme dort `401`, die Anzeige läuft aber. Das
+Gerät trägt also einen gültigen Cookie — „cookieloses Kiosk-Gerät"
+beschreibt den Stand vor der RAT-32-Pairing-Mechanik, nicht den heutigen.
+Bei Widerspruch zwischen diesem Absatz und AUTH-11 sticht AUTH-11 (dort die
+konkrete Ausnahme-Tabelle, in der diese Lesepfade nicht stehen). Der Absatz
+oben bleibt als Entscheidungs-Geschichte stehen: er erklärt, warum die
+Lese-Endpunkte am 2026-07-31 (#1400) bewusst ausgeklammert wurden.
+
 ---
 
 ## 2. Schreib-Endpunkt
