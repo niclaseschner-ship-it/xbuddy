@@ -8,6 +8,22 @@ import json
 
 import kibuddy.main as main_mod
 from kibuddy.session_memory import SID_COOKIE, SessionRegistry
+from tools.initdata import session_cookie as _sc
+
+# AUTH-11 (#1836-Nachzug): Sign-Key fuer den Dual-Gate auf /display/kibuddy/frage.
+# Dieselbe Konstante wie kibuddy/tests/test_auth_cookie.py::TEST_BOT_TOKEN.
+_AUTH_TEST_BOT_TOKEN = "123456:ABCdef_testtoken"
+
+
+def _auth_cookie_setzen(client):
+    """AUTH-11 (#1836-Nachzug): setzt einen validen xbuddy_session-Cookie fuer
+    den Dual-Gate auf /display/kibuddy/frage. Additiv -- die `client`-Fixture
+    (conftest.py) traegt keinen bot_token, deshalb wird er hier direkt im
+    runtime-Dict gesetzt (dieselbe Test-Naht, die main_mod.configure() fuellt).
+    Muster wie plan/tests/test_plan.py::_auth_cookie_setzen."""
+    main_mod.runtime["bot_token"] = _AUTH_TEST_BOT_TOKEN
+    client.set_cookie(_sc.COOKIE_NAME,
+                      _sc.sign_session("tablet-kibuddy-test", _AUTH_TEST_BOT_TOKEN))
 
 # ============================================================
 #  NDJSON-Stream-Helfer (KIBUDDY-13/24)
@@ -139,6 +155,7 @@ def test_healthz(client):
 
 def test_display_frage_view(client):
     """KIBUDDY-2: GET /display/kibuddy/frage → 200 (Stub-Template)."""
+    _auth_cookie_setzen(client)
     resp = client.get("/display/kibuddy/frage")
     assert resp.status_code == 200
 

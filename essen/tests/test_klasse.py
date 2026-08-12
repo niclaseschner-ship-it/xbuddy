@@ -23,8 +23,19 @@ _REPO_ROOT = os.path.dirname(
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from essen import main as main_mod  # noqa: E402, I001
+from essen import main as main_mod  # noqa: E402
 from essen import store as store_mod  # noqa: E402
+from essen.tests.conftest import TEST_BOT_TOKEN  # noqa: E402
+from tools.initdata import session_cookie as _sc  # noqa: E402
+
+
+def _auth_cookie_setzen(client):
+    """AUTH-11 (#1836-Nachzug): setzt einen validen xbuddy_session-Cookie fuer
+    den Dual-Gate auf /display/essen/wunsch. Additiv -- die `client`-Fixture
+    (conftest.py) traegt bereits bot_token=TEST_BOT_TOKEN, denselben Sign-Key
+    wie hier. Muster wie plan/tests/test_plan.py::_auth_cookie_setzen."""
+    client.set_cookie(_sc.COOKIE_NAME,
+                      _sc.sign_session("tablet-essen-test", TEST_BOT_TOKEN))
 
 
 # ============================================================
@@ -671,6 +682,7 @@ def test_display_view_zeigt_keine_einkauf_items(client):
               "quelle": "eltern", "kategorie": "sonstiges",
               "klasse": "einkauf"},
     )
+    _auth_cookie_setzen(client)
     resp = client.get("/display/essen/wunsch")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)

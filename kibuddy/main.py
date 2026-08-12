@@ -47,7 +47,10 @@ from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools import logsetup  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
-from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
+from tools.initdata.auth_gate import (  # noqa: E402
+    make_require_dual_gate,
+    make_require_init_data,
+)
 from tools.llm import LLMProvider  # noqa: E402 — LLMP-S8 Migration (T1082)
 from tools.service_diagnostics import register_version  # noqa: E402
 
@@ -214,6 +217,22 @@ def _get_bot_token():
         return None
 
 
+def _client_ip():
+    """Client-IP fuers AUTH-7-Observe-Log (RAT-32: kein Gate mehr, nur Log).
+
+    Wortgleich zum panel-/seiten-Vorbild: `X-Real-IP` vom Origin-nginx ist die
+    vertrauenswuerdige Quelle; Fallbacks X-Forwarded-For (erstes Token), dann
+    remote_addr.
+    """
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr
+
+
 def _secret_preflight(cfg=None):
     """SVC-7 — Startup-Secret-Preflight: Pflicht-Secrets vor app.run prüfen (#1447, #1493).
 
@@ -334,11 +353,101 @@ require_init_data = make_require_init_data(
 )
 
 
+# Decorator: AUTH-7b Dual-Gate (auth.md AUTH-7, RAT-32, #1836 AUTH-11). Die
+# Display-Flaeche (`/display/kibuddy/frage`, ihr implizites Flask-Static) ist
+# ein Browser-Pfad auf dem Kind-Tablet — dort gibt es keinen tma-Header,
+# sondern ein `xbuddy_session`-Cookie (AUTH-7b). `require_init_data` (HART-
+# tma, oben) bleibt fuer die Mini-App-Datenrouten (`/api/v1/kibuddy/*`)
+# zustaendig; dieser zweite Gate deckt die Display-Flaeche. Bot-Token-Getter
+# wird zwischen beiden Gates geteilt (gleicher HMAC-Sign-Key, AUTH-2:62 —
+# kein zweites Geheimnis). `auth_401` teilt sich ebenfalls den bestehenden
+# `_auth_401`-Renderer: der Re-Pair-Text ist bereits generisch "Gerät neu
+# verbinden" formuliert (nicht tma-spezifisch) — ein zweiter, fast
+# identischer 401-Text waere ein Genre-Duplikat ohne Mehrwert (D1 bleibt
+# gewahrt: EIN Renderer pro Buddy, hier fuer beide Gates geteilt).
+# RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md:39-46,
+# Lehre #1427->#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff — der
+# Rueckroll-Pfad ist "XBUDDY_AUTH_MODE=observe + Neustart", nicht "PR + Merge
+# + Deploy". Form wortgleich zum seiten-Vorbild (seiten/main.py:469); Default
+# hier ist "hard" statt seitens "observe" — Nic-Setzung 2026-08-11 (#1836)
+# betrifft den WERT (Display-Flaeche ist Cookie-hart ab Tag 0), nicht den
+# Mechanismus (dieselbe ENV-Naht, derselbe Rueckroll-Pfad wie seiten/routine).
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
+
+# default_mode=_AUTH_MODE (ENV-Naht, s.o.) — Default "hard": jede Adresse
+# hinter dem Cookie, kein Observe-Grace fuer die Display-Flaeche, es sei denn
+# XBUDDY_AUTH_MODE=observe ist gesetzt (Rueckroll-Pfad / Demo-Stack).
+require_dual_gate = make_require_dual_gate(
+    get_bot_token=_get_bot_token,
+    get_client_ip=_client_ip,
+    auth_401=_auth_401,
+    default_mode=_AUTH_MODE,
+)
+
+
 # ============================================================
 #  Flask-App
 # ============================================================
 
 app = Flask(__name__, template_folder="templates", static_url_path="/display/kibuddy/static")
+
+# AUTH-11 (#1836): der implizite Flask-Static-Endpunkt traegt keine
+# `@app.route`-Dekoration (Werkzeug registriert ihn intern als Endpunkt
+# "static") — ein Decorator kann nicht am Pfad ansetzen, der ueber
+# `static_folder`/`static_url_path` entsteht. Einziger Ansatzpunkt ist die
+# View-Funktion selbst: sie wird nach der App-Erzeugung im
+# `view_functions`-Dict durch die gegatete Fassung ersetzt. Bricht nichts,
+# weil die View ihr eigenes JS/CSS ueber denselben Origin nachlaedt und der
+# Browser dabei denselben Cookie mitschickt (Same-Origin).
+app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
+
+# AUTH-11-Ausnahme (Fix-Nachtrag #1836, Watchdog-Befund; Spec-Zeilen fuer
+# specs/platform/auth.md folgen in einem separaten Spec-PR — die AUTH-11-
+# Tabelle verlangt die zwei Adressen namentlich, keine Sammel-Eintraege).
+#
+# kibuddy ist der einzige der drei Services mit einem echten PWA-Manifest:
+# `frage.html` traegt `<link rel="manifest" href="/display/kibuddy/static/
+# manifest.webmanifest">` OHNE `crossorigin="use-credentials"` — der Browser
+# holt das Manifest per Fetch-Spec credential-los, bei JEDEM Seitenladen
+# (nicht nur bei der Erst-Installation). Der generische Static-Gate-Tausch
+# oben wuerde das Manifest UND seine beiden Icons (maskable, `icons[].src`
+# im Manifest) mitgaten — der gepairte Kind-Tablet-Kiosk bekaeme 401 auf
+# sein Manifest bei jedem Laden, nicht erst beim Neu-Installieren (die
+# #1437-Regression, die auth.md AUTH-4 fuer genau diesen Fall dokumentiert:
+# „credential-los per Fetch-Spec"). essen/plan haben kein Manifest — ihr
+# Static-Tausch bleibt vollstaendig gegated, unveraendert.
+#
+# Eigene, explizite Routen statt einer Bedingung im Wrapper: Werkzeug matcht
+# einen literalen Pfad IMMER vor dem generischen `<path:filename>`-Catch-all
+# des impliziten Static-Endpunkts, unabhaengig von der Registrierungs-
+# reihenfolge — die drei Routen unten greifen vor dem gegateten Fallback.
+_KIBUDDY_PUBLIC_PWA_ASSETS = {
+    "manifest": "manifest.webmanifest",
+    "icon_192": "icons/icon-192.png",
+    "icon_512": "icons/icon-512.png",
+}
+
+
+def _oeffentliches_pwa_asset(relative_path):
+    """Liefert eines der drei public-PWA-Assets aus kibuddy/static/ (kein Gate,
+    AUTH-11-Ausnahme s.o.)."""
+    return send_from_directory(app.static_folder, relative_path)
+
+
+@app.route("/display/kibuddy/static/manifest.webmanifest", methods=["GET"])
+def kibuddy_manifest_public():
+    return _oeffentliches_pwa_asset(_KIBUDDY_PUBLIC_PWA_ASSETS["manifest"])
+
+
+@app.route("/display/kibuddy/static/icons/icon-192.png", methods=["GET"])
+def kibuddy_icon_192_public():
+    return _oeffentliches_pwa_asset(_KIBUDDY_PUBLIC_PWA_ASSETS["icon_192"])
+
+
+@app.route("/display/kibuddy/static/icons/icon-512.png", methods=["GET"])
+def kibuddy_icon_512_public():
+    return _oeffentliches_pwa_asset(_KIBUDDY_PUBLIC_PWA_ASSETS["icon_512"])
 
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
@@ -373,6 +482,7 @@ def healthz():
 # ---- Display-View (KIBUDDY-2, Stub für Stück B) ----
 
 @app.route("/display/kibuddy/frage", methods=["GET"])
+@require_dual_gate()  # AUTH-11 (#1836): Display-Flaeche, mode=_AUTH_MODE (ENV-Naht)
 def display_frage():
     cfg = _runtime_cfg()
     # VAD-Konfig an Template übergeben (KIBUDDY-21/AC3, KIBUDDY-7/T864)

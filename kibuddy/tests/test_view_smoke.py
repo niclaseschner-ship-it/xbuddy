@@ -12,6 +12,28 @@ keinen laufenden Service.
 
 import json
 
+import pytest
+
+import kibuddy.main as main_mod
+from tools.initdata import session_cookie as _sc
+
+# AUTH-11 (#1836-Nachzug): Sign-Key fuer den Dual-Gate auf /display/kibuddy/*.
+# Dieselbe Konstante wie kibuddy/tests/test_auth_cookie.py::TEST_BOT_TOKEN.
+_AUTH_TEST_BOT_TOKEN = "123456:ABCdef_testtoken"
+
+
+@pytest.fixture(autouse=True)
+def _auth11_cookie(client):
+    """AUTH-11 (#1836-Nachzug): JEDER Test dieser Datei ruft /display/kibuddy/frage
+    oder /display/kibuddy/static/* auf -- beide sitzen jetzt hinter dem AUTH-7b-
+    Dual-Gate. Additiver autouse-Helfer statt 29 Einzel-Edits: setzt Sign-Key +
+    Cookie VOR jedem Test, aendert keine bestehende Zusicherung dieser Datei.
+    Muster wie plan/tests/test_plan.py::_auth_cookie_setzen."""
+    main_mod.runtime["bot_token"] = _AUTH_TEST_BOT_TOKEN
+    client.set_cookie(_sc.COOKIE_NAME,
+                      _sc.sign_session("tablet-kibuddy-test", _AUTH_TEST_BOT_TOKEN))
+
+
 # ---- GET /display/kibuddy/frage (KIBUDDY-2/4, AC1) ----
 
 def test_display_frage_gibt_200(client):
