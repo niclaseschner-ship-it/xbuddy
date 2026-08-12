@@ -5,6 +5,12 @@ Die Suite läuft OHNE Netz. Die Uhr wird durch injizierbares `now` ersetzt
 
 Auth (MAD-7 / T708-C): client-Fixture setzt Authorization-Header automatisch
 (environ_base), damit bestehende API-Tests ohne Änderung weiterhin 200 erhalten.
+
+AUTH-11 (#1835, T1835-S2): zusätzlich zum tma-Header setzt die client-Fixture
+einen gültigen `xbuddy_session`-Cookie (additiv, ersetzt den tma-Header nicht) —
+die Display-Fläche hängt seit #1835 hinter `require_dual_gate(mode="hard")`
+(nur Cookie, kein tma-Pfad), während `require_init_data` weiterhin den
+tma-Header prüft. Muster: routine/tests/test_auth11_routine.py.
 """
 
 import json
@@ -23,6 +29,24 @@ from routine.tests._test_auth import (  # noqa: E402  # isort:skip
     TEST_BOT_TOKEN,
     patch_client_auth,
 )
+from tools.initdata import session_cookie as sc  # noqa: E402  # isort:skip
+
+# AUTH-11: Cookie-Subjekt der Bestandstests -- opak (Display-Pairing-ID),
+# muss nur zusammen mit TEST_BOT_TOKEN verifizieren (kein Bezug zu einer
+# echten display_id nötig, T1835-S2).
+TEST_DISPLAY_ID = "display-kinderzimmer-01"
+
+
+def mit_session_cookie(flask_client, bot_token=TEST_BOT_TOKEN, subject=TEST_DISPLAY_ID):
+    """Setzt zusätzlich zum tma-Header einen gültigen `xbuddy_session`-Cookie.
+
+    AUTH-11 (#1835, T1835-S2): additiv -- ergänzt den bestehenden tma-Header,
+    ersetzt ihn nicht. Deckt `require_dual_gate(mode="hard")` auf der
+    Display-Fläche. Muster: test_auth11_routine.py::_mit_gueltigem_cookie.
+    """
+    token = sc.sign_session(subject, bot_token)
+    flask_client.set_cookie(sc.COOKIE_NAME, token, domain="localhost")
+    return flask_client
 
 
 # ============================================================
@@ -71,7 +95,7 @@ def make_authed_client(app=None):
     """
     if app is None:
         app = main_mod.app
-    return patch_client_auth(app.test_client())
+    return mit_session_cookie(patch_client_auth(app.test_client()))
 
 
 @pytest.fixture
@@ -87,4 +111,4 @@ def client(demo_config, demo_store):
         bot_token=TEST_BOT_TOKEN,
         init_data_config={"max_age_seconds": 86400},
     )
-    return patch_client_auth(main_mod.app.test_client())
+    return mit_session_cookie(patch_client_auth(main_mod.app.test_client()))

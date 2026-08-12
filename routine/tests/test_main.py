@@ -17,6 +17,7 @@ if _REPO_ROOT not in sys.path:
 from routine import config as config_mod  # noqa: E402  # isort:skip
 from routine import main as main_mod      # noqa: E402  # isort:skip
 from routine.tests._test_auth import TEST_BOT_TOKEN, patch_client_auth  # noqa: E402  # isort:skip
+from routine.tests.conftest import mit_session_cookie  # noqa: E402  # isort:skip
 
 
 # ============================================================
@@ -133,7 +134,7 @@ def v1_client(tmp_path):
     cfg = config_mod.resolve_data(str(data_file))
     store_file = str(tmp_path / "store_v1.json")
     main_mod.configure(cfg, store_path=store_file, bot_token=TEST_BOT_TOKEN)
-    return patch_client_auth(main_mod.app.test_client())
+    return mit_session_cookie(patch_client_auth(main_mod.app.test_client()))
 
 
 def test_ac7_http_smoke_morgen_v1_migration(v1_client):

@@ -25,6 +25,7 @@ from routine.tests._test_auth import (    # noqa: E402  # isort:skip
     TEST_BOT_TOKEN,
     patch_client_auth,
 )
+from routine.tests.conftest import mit_session_cookie  # noqa: E402  # isort:skip
 
 
 # ============================================================
@@ -55,7 +56,8 @@ def data_path_und_client(tmp_path):
     cfg = config_mod.resolve_data(str(data_file))
     main_mod.configure(cfg, data_path=str(data_file), store_path=store_path,
                        bot_token=TEST_BOT_TOKEN, init_data_config={"max_age_seconds": 86400})
-    return str(data_file), patch_client_auth(main_mod.app.test_client())
+    client = mit_session_cookie(patch_client_auth(main_mod.app.test_client()))
+    return str(data_file), client
 
 
 # ============================================================

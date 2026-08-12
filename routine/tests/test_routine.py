@@ -28,6 +28,8 @@ from routine import config as config_mod   # noqa: E402  # isort:skip
 from routine import main as main_mod       # noqa: E402  # isort:skip
 from routine import render as render_mod   # noqa: E402  # isort:skip
 from routine import uhr as uhr_mod         # noqa: E402  # isort:skip
+from routine.tests._test_auth import TEST_BOT_TOKEN  # noqa: E402  # isort:skip
+from routine.tests.conftest import mit_session_cookie  # noqa: E402  # isort:skip
 
 
 # Fester Referenz-Tag für deterministisches Testen
@@ -124,10 +126,10 @@ def test_routine6_tageswechsel_setzt_abhak_zustand_zurueck(demo_config, tmp_path
     """ROUTINE-6: mit injiziertem now über eine Tagesgrenze hinweg ist ein
     zuvor abgehakter Punkt im neuen Tag wieder offen."""
     store_path = str(tmp_path / "routine_store.json")
-    main_mod.configure(demo_config, store_path=store_path)
+    main_mod.configure(demo_config, store_path=store_path, bot_token=TEST_BOT_TOKEN)
 
     # Punkt heute abhaken — POST auf /display/routine/morgen (URL-2)
-    with main_mod.app.test_client() as c:
+    with mit_session_cookie(main_mod.app.test_client()) as c:
         r = c.post("/display/routine/morgen",
                    json={"item_id": "fruehstueck"},
                    content_type="application/json")
@@ -344,9 +346,9 @@ def test_routine12_fehlende_datei_view_liefert_200(tmp_path):
     nicht_existierend = str(tmp_path / "nicht_vorhanden.json")
     cfg = config_mod.resolve_data(nicht_existierend)
     store_p = tmp_path / "routine_store.json"
-    main_mod.configure(cfg, store_path=str(store_p))
+    main_mod.configure(cfg, store_path=str(store_p), bot_token=TEST_BOT_TOKEN)
 
-    with main_mod.app.test_client() as c:
+    with mit_session_cookie(main_mod.app.test_client()) as c:
         resp = c.get("/display/routine/morgen")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
@@ -364,9 +366,9 @@ def test_routine12_fehlende_datei_post_toggle_persistiert(tmp_path):
     nicht_existierend = str(tmp_path / "nicht_vorhanden.json")
     cfg = config_mod.resolve_data(nicht_existierend)
     store_p = tmp_path / "routine_store.json"
-    main_mod.configure(cfg, store_path=str(store_p))
+    main_mod.configure(cfg, store_path=str(store_p), bot_token=TEST_BOT_TOKEN)
 
-    with main_mod.app.test_client() as c:
+    with mit_session_cookie(main_mod.app.test_client()) as c:
         r = c.post("/display/routine/morgen",
                    json={"item_id": "fruehstueck"},
                    content_type="application/json")
@@ -457,8 +459,8 @@ def test_routine19_acht_punkte_erzeugen_acht_karten(tmp_path):
     cfg = config_mod.resolve_data(str(p))
 
     store_p = tmp_path / "routine_store.json"
-    main_mod.configure(cfg, store_path=str(store_p))
-    with main_mod.app.test_client() as c:
+    main_mod.configure(cfg, store_path=str(store_p), bot_token=TEST_BOT_TOKEN)
+    with mit_session_cookie(main_mod.app.test_client()) as c:
         body = c.get("/display/routine/morgen").get_data(as_text=True)
 
     # 8 routine-card-Elemente im Markup
