@@ -42,7 +42,10 @@ if _REPO_ROOT not in sys.path:
 from familie import registry as registry_mod  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
-from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
+from tools.initdata.auth_gate import (  # noqa: E402
+    make_require_dual_gate,
+    make_require_init_data,
+)
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # ============================================================
@@ -210,10 +213,46 @@ require_init_data = make_require_init_data(
 
 
 # ============================================================
+#  AUTH-11 (#1844): Dual-Gate für Flasks impliziten static-Endpunkt
+# ============================================================
+# familie hat keine eigene Browser-Fläche (Datenrouten sind bereits per
+# require_init_data gegatet) — offen war nur Flasks Default-static-Endpunkt
+# (kein eigenes static/-Verzeichnis im Service, liefert also faktisch nichts
+# aus). AUTH-11 geht von der URL-Map aus, nicht von der Nützlichkeit: der
+# Endpunkt existiert in der Map, also trägt er einen Decorator. Bot-Token-
+# Getter und 401-Renderer sind mit require_init_data geteilt.
+
+def _client_ip():
+    """Client-IP fürs AUTH-7-Observe-Log (RAT-32: kein Gate mehr, nur Log)."""
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr
+
+
+require_dual_gate = make_require_dual_gate(
+    get_bot_token=_get_bot_token,
+    get_client_ip=_client_ip,
+    auth_401=_auth_401,
+    default_mode="hard",  # Nic-Setzung 2026-08-11 (AUTH-11), NICHT observe
+)
+
+
+# ============================================================
 #  Flask-App
 # ============================================================
 
 app = Flask(__name__)
+
+# AUTH-11 (#1844): Flasks impliziter static-Endpunkt trägt keine @app.route-
+# Dekoration — einziger Ansatzpunkt ist die View-Funktion nach der
+# App-Erzeugung. familie hat kein eigenes static/-Verzeichnis (liefert also
+# faktisch nichts aus), aber der Endpunkt steht in der URL-Map und AUTH-11
+# prüft von dort aus, nicht von der Nützlichkeit.
+app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
 
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──

@@ -14,6 +14,10 @@ Endpunkte:
   DELETE /api/v1/photo/medien/<id>             — Löschen, atomar (PHOTO-16)
   GET    /display/photo/rahmen                 — View `rahmen` (PHOTO-2)
 
+AUTH-11 (#1844): `/display/photo/rahmen` und der implizite
+`/display/photo/static/<path:filename>`-Endpunkt tragen den AUTH-7b-Dual-Gate
+(`xbuddy_session`-Cookie, hard) — Browser-/Kiosk-Fläche, kein tma-Kontext.
+
 Service-Topologie wie wetter/main.py: eine schlanke eigenständige Flask-App, ein
 Geschwister von router/, familie/, plan/, wetter/. Statische Assets unter
 /display/photo/static/<asset> (URL-13). Port 5051 (PHOTO-20, PORT-2).
@@ -39,7 +43,10 @@ from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
-from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
+from tools.initdata.auth_gate import (  # noqa: E402
+    make_require_dual_gate,
+    make_require_init_data,
+)
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # Das photo-Paket als Paket importieren, damit die relativen Imports in
@@ -209,6 +216,33 @@ require_init_data = make_require_init_data(
 
 
 # ============================================================
+#  AUTH-11 (#1844): Dual-Gate für die Browser-Fläche /display/photo/*
+# ============================================================
+# /display/photo/rahmen ist eine Kiosk-/Browser-Fläche (Tablet), kein
+# Telegram-Mini-App-Kontext — kein tma-Header, sondern der
+# xbuddy_session-Cookie (AUTH-7b). Bot-Token-Getter und 401-Renderer sind mit
+# require_init_data geteilt (kein zweites Geheimnis, kein zweiter 401-Text).
+
+def _client_ip():
+    """Client-IP fürs AUTH-7-Observe-Log (RAT-32: kein Gate mehr, nur Log)."""
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr
+
+
+require_dual_gate = make_require_dual_gate(
+    get_bot_token=_get_bot_token,
+    get_client_ip=_client_ip,
+    auth_401=_auth_401,
+    default_mode="hard",  # Nic-Setzung 2026-08-11 (AUTH-11), NICHT observe
+)
+
+
+# ============================================================
 #  Flask-App
 # ============================================================
 
@@ -216,6 +250,12 @@ require_init_data = make_require_init_data(
 # der einen Origin geroutet werden (der Flask-Default `/static` läge außerhalb
 # der URL-Prefixe).
 app = Flask(__name__, static_url_path="/display/photo/static")
+
+# AUTH-11 (#1844): Flasks impliziter static-Endpunkt trägt keine @app.route-
+# Dekoration — einziger Ansatzpunkt ist die View-Funktion nach der
+# App-Erzeugung. Liefert das echte photo.css/photo.js aus, muss also hinter
+# dem Gate stehen wie die Display-View selbst.
+app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
 
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
@@ -323,6 +363,7 @@ def delete_medium(medium_id):
 # ── Display-View (PHOTO-2) ──────────────────────────────────────────────────
 
 @app.route("/display/photo/rahmen", methods=["GET"])
+@require_dual_gate(mode="hard")  # AUTH-11 (#1844): Kiosk-/Browser-Fläche, Cookie-Gate
 def rahmen():
     """View `rahmen` — gerahmter Bilderrahmen mit Auto-Durchlauf (PHOTO-2..6).
 
