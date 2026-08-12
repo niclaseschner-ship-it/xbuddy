@@ -497,13 +497,24 @@ require_init_data = make_require_init_data(
 # verbinden" formuliert (nicht tma-spezifisch) — ein zweiter, fast
 # identischer 401-Text waere ein Genre-Duplikat ohne Mehrwert (D1 bleibt
 # gewahrt: EIN Renderer pro Buddy, hier fuer beide Gates geteilt).
-# default_mode="hard" — Nic-Setzung 2026-08-11 (#1836): jede Adresse hinter
-# dem Cookie, kein Observe-Grace fuer die Display-Flaeche.
+# RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md:39-46,
+# Lehre #1427->#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff — der
+# Rueckroll-Pfad ist "XBUDDY_AUTH_MODE=observe + Neustart", nicht "PR + Merge
+# + Deploy". Form wortgleich zum seiten-Vorbild (seiten/main.py:469); Default
+# hier ist "hard" statt seitens "observe" — Nic-Setzung 2026-08-11 (#1836)
+# betrifft den WERT (Display-Flaeche ist Cookie-hart ab Tag 0), nicht den
+# Mechanismus (dieselbe ENV-Naht, derselbe Rueckroll-Pfad wie seiten/routine).
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
+
+# default_mode=_AUTH_MODE (ENV-Naht, s.o.) — Default "hard": jede Adresse
+# hinter dem Cookie, kein Observe-Grace fuer die Display-Flaeche, es sei denn
+# XBUDDY_AUTH_MODE=observe ist gesetzt (Rueckroll-Pfad / Demo-Stack).
 require_dual_gate = make_require_dual_gate(
     get_bot_token=_get_bot_token,
     get_client_ip=_client_ip,
     auth_401=_auth_401,
-    default_mode="hard",
+    default_mode=_AUTH_MODE,
 )
 
 
@@ -540,7 +551,7 @@ def healthz():
 # ── Display-View (ESSEN-2/3/8/9) ────────────────────────────────────────
 
 @app.route("/display/essen/wunsch", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1836): Display-Flaeche, Cookie-hart
+@require_dual_gate()  # AUTH-11 (#1836): Display-Flaeche, mode=_AUTH_MODE (ENV-Naht)
 def wunsch_view():
     """View `wunsch` — Tabbed Single-Canvas (ESSEN-2, E-ESSEN-7).
 

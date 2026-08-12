@@ -23,7 +23,7 @@ _REPO_ROOT = os.path.dirname(
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from essen import main as main_mod  # noqa: E402, I001
+from essen import main as main_mod  # noqa: E402
 from essen import store as store_mod  # noqa: E402
 from essen.tests.conftest import TEST_BOT_TOKEN  # noqa: E402
 from tools.initdata import session_cookie as _sc  # noqa: E402

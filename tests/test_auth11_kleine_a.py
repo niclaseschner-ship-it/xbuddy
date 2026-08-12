@@ -9,26 +9,38 @@ Endpunkt:
   kibuddy  GET /display/kibuddy/frage       + /display/kibuddy/static/<path:filename>
 
 Alle sechs laufen jetzt hinter `tools.initdata.auth_gate.make_require_dual_gate`
-mit `default_mode="hard"` (Nic-Setzung 2026-08-11, #1836): kein gueltiger
-`xbuddy_session`-Cookie -> 401 (AUTH-8-Re-Pair-HTML), gueltiger Cookie -> 200
-+ Rolling-Refresh (AUTH-2:78). `/healthz` (essen/kibuddy) und `/version`
-(alle drei) bleiben die einzigen AUTH-11-Ausnahmen und sind hier bewusst NICHT
-Gegenstand (Gegenprobe unten). `plan` hat kein `/healthz`.
+mit `default_mode=_AUTH_MODE` (ENV-Naht `XBUDDY_AUTH_MODE`, Default "hard" --
+Nic-Setzung 2026-08-11, #1836): kein gueltiger `xbuddy_session`-Cookie -> 401
+(AUTH-8-Re-Pair-HTML), gueltiger Cookie -> 200 + Rolling-Refresh (AUTH-2:78).
+`/healthz` (essen/kibuddy) und `/version` (alle drei) bleiben die einzigen
+AUTH-11-Ausnahmen und sind hier bewusst NICHT Gegenstand (Gegenprobe unten).
+`plan` hat kein `/healthz`.
 
 Der Dual-Gate hat -- anders als `require_init_data` (AUTH-5) -- KEINEN
 Loopback-Bypass und akzeptiert auch KEINEN tma-Header (MAD-7): die
 Display-Flaeche ist ein Browser-Pfad auf dem Kind-/Eltern-Tablet, kein
 Mini-App-Pfad. Ein Test je Service belegt das explizit als Regressions-Schutz.
 
+RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md:39-46,
+Lehre #1427->#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff. Je ein
+Test pro Service belegt das End-to-End ueber einen echten Modul-Reload (nicht
+nur den Attribut-Wert wie tests/test_dual_gate_7b.py::test_auth_mode_env_seam_default_observe
+bei seiten): `XBUDDY_AUTH_MODE=observe` -> 200 ohne Cookie (Rueckroll-Pfad),
+sowohl auf der Display-View als auch auf ihrem impliziten Flask-Static-
+Endpunkt (der Static-Tausch `app.view_functions["static"] = require_dual_gate()(...)`
+haengt an derselben `_AUTH_MODE`-Naht -- ein Static-Endpunkt, der hart bleibt,
+waehrend der Rest zurueckrollt, waere ein halber Rueckroll).
+
 Vorbild: tests/test_dual_gate_7b.py (seiten-Seite), routine/tests/test_auth11_routine.py
-(#1835 Geschwister-Track), essen/plan/kibuddy/tests/test_auth_cookie.py
-(Service-Konfig-Aufbau).
+(#1835 Geschwister-Track -- Quelle des importlib.reload-Musters unten),
+essen/plan/kibuddy/tests/test_auth_cookie.py (Service-Konfig-Aufbau).
 
 Lauf: python3 -m pytest tests/test_auth11_kleine_a.py -q
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sys
@@ -79,8 +91,10 @@ def _mit_gueltigem_cookie(client, subject=DISPLAY_ID):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def essen_client(tmp_path):
+def _configure_essen(tmp_path):
+    """Baut einen essen-Testclient (Test-Naht, keine Fixture) -- wiederverwendbar
+    nach einem `importlib.reload(essen_main)` im ENV-Naht-Test unten, wo eine
+    pytest-Fixture nicht ohne Weiteres neu anspringt."""
     real_default = os.path.join(_REPO_ROOT, "essen", "katalog.default.json")
     paths = {
         "wuensche_file":        str(tmp_path / "wuensche.json"),
@@ -102,6 +116,11 @@ def essen_client(tmp_path):
     )
     essen_main.app.testing = True
     return essen_main.app.test_client()
+
+
+@pytest.fixture
+def essen_client(tmp_path):
+    return _configure_essen(tmp_path)
 
 
 def test_essen_wunsch_ohne_cookie_ist_401(essen_client):
@@ -156,11 +175,15 @@ def test_essen_healthz_und_version_bleiben_ungegated(essen_client):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def kibuddy_client(tmp_path):
+def _configure_kibuddy(tmp_path):
+    """Baut einen kibuddy-Testclient (Test-Naht, keine Fixture) -- wiederverwendbar
+    nach einem `importlib.reload(kibuddy_main)` im ENV-Naht-Test unten."""
     data_root = tmp_path / "kibuddy-data"
-    data_root.mkdir()
-    (data_root / "audio").mkdir()
+    # exist_ok=True: der ENV-Naht-Test ruft diesen Helfer zweimal mit demselben
+    # tmp_path auf (vor/nach dem Reload) -- ohne exist_ok kollidiert der zweite
+    # Aufruf mit dem schon angelegten Verzeichnis (FileExistsError).
+    data_root.mkdir(exist_ok=True)
+    (data_root / "audio").mkdir(exist_ok=True)
     cfg = kibuddy_config_mod.RuntimeConfig(
         listen_host="127.0.0.1",
         listen_port=5054,
@@ -196,6 +219,11 @@ def kibuddy_client(tmp_path):
     )
     kibuddy_main.app.testing = True
     return kibuddy_main.app.test_client()
+
+
+@pytest.fixture
+def kibuddy_client(tmp_path):
+    return _configure_kibuddy(tmp_path)
 
 
 def test_kibuddy_frage_ohne_cookie_ist_401(kibuddy_client):
@@ -246,8 +274,9 @@ def test_kibuddy_healthz_und_version_bleiben_ungegated(kibuddy_client):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def plan_client(tmp_path):
+def _configure_plan(tmp_path):
+    """Baut einen plan-Testclient (Test-Naht, keine Fixture) -- wiederverwendbar
+    nach einem `importlib.reload(plan_main)` im ENV-Naht-Test unten."""
     cfg_path = tmp_path / "plan.json"
     data = dict(DEMO_CONFIG)
     data["db_datei"] = str(tmp_path / "plan.db")
@@ -274,6 +303,11 @@ def plan_client(tmp_path):
     )
     plan_main.app.testing = True
     return plan_main.app.test_client()
+
+
+@pytest.fixture
+def plan_client(tmp_path):
+    return _configure_plan(tmp_path)
 
 
 def test_plan_woche_ohne_cookie_ist_401(plan_client):
@@ -332,3 +366,135 @@ def test_plan_version_bleibt_ungegated(plan_client):
     """Gegenprobe: /version ist die einzige AUTH-11-Ausnahme fuer plan (kein
     /healthz bei plan, Auftragstext) und bleibt ohne jede Auth-Quelle erreichbar."""
     assert plan_client.get("/version", headers=_EXTERN).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# ENV-Naht XBUDDY_AUTH_MODE -- RAT-32 Nicht-Verhandelbar (Nic-Nachtrag #1836)
+# ---------------------------------------------------------------------------
+#
+# `_AUTH_MODE` und der daraus gebaute `require_dual_gate`-Decorator werden
+# EINMAL beim Modul-Import aus `os.environ` gelesen (wie beim seiten-/routine-
+# Vorbild) -- ein live laufender Prozess flippt nicht mit, genau wie in
+# Produktion (ENV-Aenderung + systemd-Neustart, nie ein Live-Toggle).
+# `importlib.reload` simuliert diesen Neustart im Testprozess. Da
+# `essen.main`/`kibuddy.main`/`plan.main` Singletons in `sys.modules` sind und
+# andere Testdateien (essen/plan/kibuddy/tests/*) dieselbe Modul-Referenz
+# halten, stellt jede Fixture unten den Default-Zustand (kein ENV-Override,
+# mode="hard") garantiert wieder her -- sonst wuerde ein liegen gebliebener
+# Reload andere Testdateien der Suite stumm brechen (genau der Fehler, den
+# der Watchdog am routine-Vorbild fand).
+
+
+@pytest.fixture
+def _reset_essen_main_env():
+    yield
+    os.environ.pop("XBUDDY_AUTH_MODE", None)
+    importlib.reload(essen_main)
+
+
+@pytest.mark.usefixtures("_reset_essen_main_env")
+def test_essen_auth_mode_env_naht_observe_ist_rueckroll_default_bleibt_hart(
+    monkeypatch, tmp_path
+):
+    """RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md:39-46,
+    Lehre #1427->#1430, Kill-Kriterium der Entscheidung: "gepairtes Geraet
+    bekommt 401 -> ENV sofort zurueck auf observe"): der Hard-Flip ist eine
+    ENV-Naht, kein Code-Diff. `XBUDDY_AUTH_MODE=observe` muss sowohl die
+    Display-View als auch ihren impliziten Flask-Static-Endpunkt ohne Cookie
+    auf 200 zurueckrollen (ein Static-Endpunkt, der hart bleibt, waere ein
+    halber Rueckroll); ohne ENV-Override bleibt der Default "hard"
+    (Nic-Setzung 2026-08-11 -- Unterschied zum seiten-Vorbild, dessen Default
+    "observe" ist, seiten/main.py:469)."""
+    monkeypatch.setenv("XBUDDY_AUTH_MODE", "observe")
+    importlib.reload(essen_main)
+    assert essen_main._AUTH_MODE == "observe"
+    client = _configure_essen(tmp_path)
+    r_view = client.get("/display/essen/wunsch", headers=_EXTERN)
+    assert r_view.status_code == 200, \
+        "XBUDDY_AUTH_MODE=observe muss die Display-View ohne Cookie durchlassen (RAT-32-Rueckroll-Pfad)"
+    r_static = client.get("/display/essen/static/essen.css", headers=_EXTERN)
+    assert r_static.status_code == 200, (
+        "XBUDDY_AUTH_MODE=observe muss auch den impliziten Static-Endpunkt "
+        "ohne Cookie durchlassen — sonst waere der Rueckroll nur halb"
+    )
+
+    monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+    importlib.reload(essen_main)
+    assert essen_main._AUTH_MODE == "hard"
+    client = _configure_essen(tmp_path)
+    r_default = client.get("/display/essen/wunsch", headers=_EXTERN)
+    assert r_default.status_code == 401, \
+        "ohne ENV-Override muss der Default weiterhin 'hard' sein (Nic-Setzung 2026-08-11)"
+
+
+@pytest.fixture
+def _reset_kibuddy_main_env():
+    yield
+    os.environ.pop("XBUDDY_AUTH_MODE", None)
+    importlib.reload(kibuddy_main)
+
+
+@pytest.mark.usefixtures("_reset_kibuddy_main_env")
+def test_kibuddy_auth_mode_env_naht_observe_ist_rueckroll_default_bleibt_hart(
+    monkeypatch, tmp_path
+):
+    """Wie test_essen_auth_mode_env_naht_... -- derselbe Rueckroll-Pfad fuer
+    kibuddy (essen/kibuddy/plan teilen dieselbe ENV-Naht-Form)."""
+    monkeypatch.setenv("XBUDDY_AUTH_MODE", "observe")
+    importlib.reload(kibuddy_main)
+    assert kibuddy_main._AUTH_MODE == "observe"
+    client = _configure_kibuddy(tmp_path)
+    r_view = client.get("/display/kibuddy/frage", headers=_EXTERN)
+    assert r_view.status_code == 200, \
+        "XBUDDY_AUTH_MODE=observe muss die Display-View ohne Cookie durchlassen (RAT-32-Rueckroll-Pfad)"
+    r_static = client.get("/display/kibuddy/static/frage.css", headers=_EXTERN)
+    assert r_static.status_code == 200, (
+        "XBUDDY_AUTH_MODE=observe muss auch den impliziten Static-Endpunkt "
+        "ohne Cookie durchlassen — sonst waere der Rueckroll nur halb"
+    )
+
+    monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+    importlib.reload(kibuddy_main)
+    assert kibuddy_main._AUTH_MODE == "hard"
+    client = _configure_kibuddy(tmp_path)
+    r_default = client.get("/display/kibuddy/frage", headers=_EXTERN)
+    assert r_default.status_code == 401, \
+        "ohne ENV-Override muss der Default weiterhin 'hard' sein (Nic-Setzung 2026-08-11)"
+
+
+@pytest.fixture
+def _reset_plan_main_env():
+    yield
+    os.environ.pop("XBUDDY_AUTH_MODE", None)
+    importlib.reload(plan_main)
+
+
+@pytest.mark.usefixtures("_reset_plan_main_env")
+def test_plan_auth_mode_env_naht_observe_ist_rueckroll_default_bleibt_hart(
+    monkeypatch, tmp_path
+):
+    """Wie test_essen_auth_mode_env_naht_... -- derselbe Rueckroll-Pfad fuer
+    plan (essen/kibuddy/plan teilen dieselbe ENV-Naht-Form). Static-Probe
+    nutzt denselben nicht-existenten Pfad wie test_plan_static_asset_*: der
+    Beleg ist "!= 401" (Gate passiert), nicht 200 (plan hat keinen
+    Static-Ordner im Repo)."""
+    monkeypatch.setenv("XBUDDY_AUTH_MODE", "observe")
+    importlib.reload(plan_main)
+    assert plan_main._AUTH_MODE == "observe"
+    client = _configure_plan(tmp_path)
+    r_view = client.get("/display/plan/woche", headers=_EXTERN)
+    assert r_view.status_code == 200, \
+        "XBUDDY_AUTH_MODE=observe muss die Display-View ohne Cookie durchlassen (RAT-32-Rueckroll-Pfad)"
+    r_static = client.get("/display/plan/static/nicht-vorhanden.css", headers=_EXTERN)
+    assert r_static.status_code != 401, (
+        "XBUDDY_AUTH_MODE=observe muss auch den impliziten Static-Endpunkt "
+        "ohne Cookie durchlassen — sonst waere der Rueckroll nur halb"
+    )
+
+    monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+    importlib.reload(plan_main)
+    assert plan_main._AUTH_MODE == "hard"
+    client = _configure_plan(tmp_path)
+    r_default = client.get("/display/plan/woche", headers=_EXTERN)
+    assert r_default.status_code == 401, \
+        "ohne ENV-Override muss der Default weiterhin 'hard' sein (Nic-Setzung 2026-08-11)"
