@@ -41,9 +41,15 @@ def _auth_cookie_setzen(client):
 #  Helpers
 # ============================================================
 
-def make_client(demo_config, demo_registry, transport):
-    """Flask-Testclient mit konfiguriertem Plan-Buddy."""
-    plan_main.configure(demo_config, demo_registry, transport)
+def make_client(demo_config, demo_registry, transport, bot_token=None):
+    """Flask-Testclient mit konfiguriertem Plan-Buddy.
+
+    `bot_token` (optional, additiv #1836-Nachzug): Sign-Key fuer den
+    AUTH-7b-Dual-Gate auf /display/plan/woche. Ohne ihn bleibt configure()
+    wie zuvor -- API-Routen-Tests (Loopback-Bypass via require_init_data,
+    AUTH-5) bleiben unveraendert.
+    """
+    plan_main.configure(demo_config, demo_registry, transport, bot_token=bot_token)
     plan_main.app.testing = True
     return plan_main.app.test_client()
 
@@ -91,7 +97,9 @@ def test_PLAN_1_app_owns_data_and_function(demo_config, demo_registry):
 
 def test_PLAN_2_view_woche_path(demo_config, demo_registry):
     """Die Wochen-View liegt unter /display/plan/woche (URL-2)."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     assert b"mein Plan" in r.data
@@ -105,7 +113,9 @@ def test_PLAN_2_view_woche_path(demo_config, demo_registry):
 
 def test_PLAN_3_lesekind_default_shows_full_window_and_appts(demo_config, demo_registry):
     """Ohne Parameter: Lese-Kind — 7 Spalten, Termin-Leiste sichtbar."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     # 7 Day-Chips → 7 Spalten.
@@ -116,7 +126,9 @@ def test_PLAN_3_lesekind_default_shows_full_window_and_appts(demo_config, demo_r
 
 def test_PLAN_3_kleinkind_three_columns_no_appts(demo_config, demo_registry):
     """?ansicht=klein: 3 Spalten, keine Termin-Leiste."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ansicht=klein")
     assert r.status_code == 200
     assert r.data.count(b'class="day-chip ') == 3
@@ -158,7 +170,9 @@ def test_PLAN_4_window_starts_today(demo_config, demo_registry):
 
 def test_PLAN_4_ab_shifts_anchor(demo_config, demo_registry):
     """?ab=<iso> verschiebt den Anker auf das angegebene Datum."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     anker = "2026-08-03"  # ein Montag
     r = client.get("/display/plan/woche?ab=" + anker)
     assert r.status_code == 200
@@ -168,7 +182,9 @@ def test_PLAN_4_ab_shifts_anchor(demo_config, demo_registry):
 
 def test_PLAN_4_invalid_ab_falls_back_to_today(demo_config, demo_registry):
     """Ein ungültiger ?ab=-Wert fällt auf heute zurück, ohne Crash."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=kein-datum")
     assert r.status_code == 200
 
@@ -589,7 +605,9 @@ def test_layout_grid_reserviert_termin_bar_bei_8_slots(tmp_path, demo_registry):
     (Handoff-watchdog_hint).
     """
     cfg = _config_mit_slots(tmp_path, _n_erwachsenen_slots(8))
-    client = make_client(cfg, demo_registry, FakeTransport())
+    client = make_client(cfg, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data
@@ -697,7 +715,9 @@ def test_termin_ueberschuss_zeigt_counter(demo_config, demo_registry):
     assert len(view["appointments"][iso]) == n, "auf höhen-basiertes N gekürzt"
     assert view["appointment_overflow"][iso] == ueberschuss
     # Entry-Path: Counter im HTML.
-    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    client = make_client(demo_config, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=%s" % iso)
     assert r.status_code == 200
     assert ("+%d weitere" % ueberschuss).encode() in r.data, (
@@ -762,7 +782,9 @@ def test_n_sichtbar_nichts_clippt_ueber_1fr(tmp_path, demo_registry):
     assert len(view["appointments"][iso]) == n, "View kappt auf N — nichts clippt"
     assert view["appointment_overflow"][iso] == ueberschuss
     # Entry-Path: gerenderte HTML trägt genau N Termin-Pillen am Tag + Counter.
-    client = make_client(cfg, demo_registry, FakeTransport(raw))
+    client = make_client(cfg, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=%s" % iso)
     assert r.status_code == 200
     # Termin-Pillen tragen `pill-label`; spans/activity nicht in dieser Probe.
@@ -808,7 +830,9 @@ def test_vorlauf_spalte_einer_spanne_traegt_tagestermine(demo_config, demo_regis
     assert tag0[0]["row"] == 0, "span-freie Spalte → Termin in oberster Zeile (row 0)"
     # Entry-Path: das entfallene Band-Konstrukt taucht nirgends mehr auf, die
     # Zahnarzt-Pille trägt eine explizite grid-row, und die Span berührt 3/5.
-    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    client = make_client(demo_config, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=%s" % iso0)
     assert r.status_code == 200
     html = r.data.decode("utf-8")
@@ -879,7 +903,9 @@ def test_span_lanes_im_view_und_template(demo_config, demo_registry):
                                 heute, 7, True, heute=heute)
     conn.close()
     assert view["span_lanes"] == 1, "nicht-überlappende Spans → 1 Lane im View"
-    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    client = make_client(demo_config, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
     assert r.status_code == 200
     html = r.data.decode("utf-8")
@@ -918,10 +944,12 @@ def test_template_nutzt_server_termin_row(demo_config, demo_registry):
         "event_id": "srv1",
     }]
 
-    plan_main.configure(demo_config, demo_registry, FakeTransport())
+    plan_main.configure(demo_config, demo_registry, FakeTransport(),
+                        bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     with patch.object(plan_main.render_mod, "baue_view", return_value=fake_view):
         client = plan_main.app.test_client()
+        _auth_cookie_setzen(client)
         r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
     assert r.status_code == 200
     assert b"grid-row: 5;" in r.data, (
@@ -1065,7 +1093,9 @@ def test_1146_AC2_loch_fuellung_ueber_balken(demo_config, demo_registry):
         "Di–Do-Balken) — Lane 0 ist von der Theaterwoche belegt"
     )
     # Entry-Path: die Zahnarzt-Pille trägt grid-row: 2 (row 1 + 1).
-    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    client = make_client(demo_config, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=%s" % iso0)
     assert r.status_code == 200
     assert b"grid-row: 2;" in r.data, "Loch-Termin nicht in Lane-Zelle 1 (grid-row 2)"
@@ -1124,7 +1154,9 @@ def test_1146_AC3_ueberschuss_pro_spalte(demo_config, demo_registry):
     assert view["appointment_overflow"][tag1.isoformat()] == 0
     assert len(view["appointments"][heute.isoformat()]) == R
     # Entry-Path: genau ein Counter im HTML, mit korrektem N und bündig unten.
-    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    client = make_client(demo_config, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
     assert r.status_code == 200
     html = r.data.decode("utf-8")
@@ -1161,7 +1193,9 @@ def test_1146_counter_r0_kein_crash(tmp_path, demo_registry):
     assert view["appointments"][iso] == [], "R=0: keine Termine platziert"
     assert view["appointment_overflow"][iso] == 3, "R=0: alle 3 im Overflow"
     # Entry-Path: Template darf nicht crashen; Counter erscheint.
-    client = make_client(cfg, demo_registry, FakeTransport(raw))
+    client = make_client(cfg, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=%s" % iso)
     assert r.status_code == 200, "R=0: Template-Crash bei leerem max-Filter"
     assert b"+3 weitere" in r.data, "R=0: Counter fehlt im HTML"
@@ -1171,7 +1205,9 @@ def test_headline_mein_plan_nicht_sichtbar(demo_config, demo_registry):
     """#1092 Defekt 3: Die sichtbare Headline „mein Plan" (.brand-title) ist
     entfernt — die Kopf-Zeile schrumpft (Platz für den 1fr-Termin-Bereich).
     Der <title> des Dokuments darf „mein Plan" weiter tragen (Tab-Name)."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data.decode("utf-8")
@@ -1188,7 +1224,9 @@ def test_headline_mein_plan_nicht_sichtbar(demo_config, demo_registry):
 def test_headline_subtitle_nicht_im_render(demo_config, demo_registry):
     """QW1: Der Headline-Subtitle ('heute und die nächsten Tage') ist entfernt
     — weder der Text noch die `.brand-subtitle`-Klasse stehen im HTML."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     assert "heute und die nächsten Tage".encode() not in r.data, (
@@ -1203,7 +1241,9 @@ def test_cycle_iteriert_alle_personen(demo_config, demo_registry):
     """PLAN-7 V1.3 (Toggle-All): Der Klick-Cycle (JS ADULTS-Array) iteriert über
     ALLE Personen der Registry — Erwachsene UND Kinder, Registry-Reihenfolge —
     die frühere `art == 'erwachsene'`-Beschränkung ist entfernt."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data.decode("utf-8")
@@ -1305,7 +1345,9 @@ def test_template_rendert_slot_icon_direkt(demo_config, demo_registry):
 
     Der Parser reicht `slot.icon` unverändert durch; das Template baut die URL
     `arasaac/<icon>.png`. `SLOT_ICON_ID` darf nicht mehr im Output erscheinen."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data
@@ -1420,7 +1462,9 @@ def test_PLAN_20_missing_credentials_empty_read(demo_registry):
 def test_PLAN_20_view_works_without_calendar(demo_config, demo_registry):
     """Ohne Kalender bleibt die View funktionsfähig — die Termin-Leiste ist
     leer, alles andere funktioniert."""
-    client = make_client(demo_config, demo_registry, FakeTransport(creds=False))
+    client = make_client(demo_config, demo_registry, FakeTransport(creds=False),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     assert b"mein Plan" in r.data
@@ -1511,7 +1555,9 @@ def test_PLAN_24_no_person_names_in_rendered_view(demo_config, demo_registry):
     db_mod.init_week(conn, ws, demo_config.default_verantwortlichkeiten)
     db_mod.set_assignment(conn, ws, heute.weekday(), "cook", "emil")
     conn.close()
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     text = r.data.decode("utf-8")
     # Kein Personenname taucht als eigenständiges Wort auf — \b schließt
@@ -1530,7 +1576,9 @@ def test_PLAN_24_no_person_names_in_rendered_view(demo_config, demo_registry):
 def test_PLAN_25_empty_slots_carry_plus_and_all_cells_tappable(demo_config, demo_registry):
     """Leere Erwachsenen-Slots tragen ein Plus (empty-face), jede Slot-Zelle
     ist tippbar (data-slot)."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     text = r.data.decode("utf-8")
     assert "empty-face" in text
@@ -1544,7 +1592,9 @@ def test_PLAN_25_empty_slots_carry_plus_and_all_cells_tappable(demo_config, demo
 def test_PLAN_26_stage_dimensions(demo_config, demo_registry):
     """Lese-Kind: 7 Spalten + Termin-Leiste. Kleinkind: 3 Spalten, XL, keine
     Termin-Leiste."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     lese = client.get("/display/plan/woche").data
     klein = client.get("/display/plan/woche?ansicht=klein").data
     assert lese.count(b'class="day-chip ') == 7
@@ -1602,7 +1652,9 @@ def test_URL_16_css_link_lives_under_display_namespace(demo_config, demo_registr
     mehr buddy-lokal unter /display/plan/, und nicht unter dem Flask-Default
     /static/, der hinter der einen Origin (URL-12) nicht geroutet würde
     (#323, #61)."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     text = client.get("/display/plan/woche").data.decode("utf-8")
     # Der Stylesheet-<link> zeigt in den geteilten Display-Namensraum.
     assert "/display/_shared/design/tokens.css" in text
@@ -1698,9 +1750,11 @@ def test_PLAN_29_render_probe_neuer_eintrag_arasaac_icon(tmp_path, demo_registry
 
     cfg = config_mod.resolve(str(cfg_path))
     transport = FakeTransport()
-    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path),
+                        bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
+    _auth_cookie_setzen(client)
 
     # Freitag im Fenster.
     freitag = date(2026, 5, 22)
@@ -1745,9 +1799,11 @@ def test_PLAN_29_render_probe_termin_icon_aus_katalog(tmp_path, demo_registry):
                       heute.isoformat() + "T09:00:00+02:00",
                       heute.isoformat() + "T10:00:00+02:00")]
     transport.raw_events = raw
-    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path),
+                        bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
+    _auth_cookie_setzen(client)
 
     r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
     assert r.status_code == 200
@@ -1887,7 +1943,9 @@ def test_PLAN_29_arasaac_migration_template_kein_svg_icon_macro(
     Nach E-PLAN-5 V1.2 sind die Wireframe-SVG-Macros entfernt. Das gerenderte
     HTML darf keinen der alten SVG-Pfade enthalten, die den Macros eindeutig
     zugeordnet waren."""
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data
@@ -2157,7 +2215,9 @@ def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
     # ── Positiv-Probe: Klavier Mia → Musik-ARASAAC im Chip ───────────
     MUSIK_ARASAAC_URL = b"arasaac/2746.png"
     raw = [gcal_allday("mu2", "Klavier Mia", "2026-05-20")]
-    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    client = make_client(demo_config, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=2026-05-20")
     assert r.status_code == 200
     # Die Musik-ARASAAC-URL kommt ZWEIMAL vor: Chip + Picker.
@@ -2171,7 +2231,9 @@ def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
 
     # ── Negativ-Kontrolle: Turnen Mia → Fallback-Piktogramm, kein Musik ─
     raw_negativ = [gcal_allday("tu1", "Turnen Mia", "2026-05-20")]
-    client_neg = make_client(demo_config, demo_registry, FakeTransport(raw_negativ))
+    client_neg = make_client(demo_config, demo_registry, FakeTransport(raw_negativ),
+                             bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client_neg)
     r_neg = client_neg.get("/display/plan/woche?ab=2026-05-20")
     assert r_neg.status_code == 200
     # Nur 1× — allein aus dem Picker; kein Musik-Chip.
@@ -2209,7 +2271,9 @@ def test_PLAN_13_child_named_timed_event_board_html_shows_time(
     raw = [gcal_timed("kt2", "Klaviertermin Mia",
                       "2026-05-20T16:00:00+02:00",
                       "2026-05-20T17:00:00+02:00")]
-    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    client = make_client(demo_config, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche?ab=2026-05-20")
     assert r.status_code == 200
     assert b"16:00" in r.data
@@ -2272,9 +2336,10 @@ def test_PLAN_19_render_reflects_external_registry_mutation(demo_config):
     client_obj = familie_client_mod.FamilieClient(
         "http://127.0.0.1:5010", transport=transport)
     plan_main.configure(demo_config, registry=None, transport=FakeTransport(),
-                        familie_client=client_obj)
+                        familie_client=client_obj, bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
+    _auth_cookie_setzen(client)
 
     # Erst-Render: Emil ist drin.
     r1 = client.get("/display/plan/woche")
@@ -2383,6 +2448,10 @@ def reload_client(tmp_path, demo_registry):
                         bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
+    # AUTH-11 (#1836-Nachzug): Dual-Gate auf /display/plan/woche braucht einen
+    # Cookie zusaetzlich zum Loopback-Bypass der Admin-Routen -- additiv, aendert
+    # die bisherigen Loopback-403-Zusicherungen dieser Fixture nicht.
+    _auth_cookie_setzen(client)
     return client, cfg_path, built_transports
 
 
@@ -2911,9 +2980,10 @@ def test_DCOMP_1_familie_unreachable_view_returns_200(demo_config):
     fc = familie_client_mod.FamilieClient(
         "http://127.0.0.1:5010", transport=transport)
     plan_main.configure(demo_config, registry=None, transport=FakeTransport(),
-                        familie_client=fc)
+                        familie_client=fc, bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
 
@@ -4419,7 +4489,9 @@ def test_PLAN_19_render_probe_multi_person_event_zwei_avatare(demo_registry, dem
     raw = [gcal_timed("schwimm1", "Schwimmkurs Mia Finn",
                       "2026-05-20T10:00:00+02:00", "2026-05-20T11:00:00+02:00")]
     transport = FakeTransport(raw)
-    client = make_client(demo_config, demo_registry, transport)
+    client = make_client(demo_config, demo_registry, transport,
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
 
     r = client.get("/display/plan/woche?ab=2026-05-20")
     assert r.status_code == 200, "View gab %d zurück" % r.status_code
@@ -4488,7 +4560,9 @@ def test_PLAN_6_schedule_rail_act_slots_zeigen_kalender_3071(
     Werft #578 Revision (Nic 2026-06-10): SLOT_ICON_ID['star'] = '3071'.
     Das HTML der Wochen-View muss arasaac/3071.png für die act-Slots enthalten.
     """
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data
@@ -4533,9 +4607,10 @@ def test_PLAN_12_picker_zeigt_alle_aktivitaeten_aus_config(tmp_path, demo_regist
     cfg_path.write_text(json.dumps(data))
     cfg = config_mod.resolve(str(cfg_path))
     plan_main.configure(cfg, demo_registry, FakeTransport(),
-                        config_path=str(cfg_path))
+                        config_path=str(cfg_path), bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
+    _auth_cookie_setzen(client)
 
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
@@ -4565,9 +4640,10 @@ def test_PLAN_12_picker_tint_fallback_fuer_unbekannte_art(tmp_path, demo_registr
     cfg_path.write_text(json.dumps(data))
     cfg = config_mod.resolve(str(cfg_path))
     plan_main.configure(cfg, demo_registry, FakeTransport(),
-                        config_path=str(cfg_path))
+                        config_path=str(cfg_path), bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
+    _auth_cookie_setzen(client)
 
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
@@ -4594,7 +4670,9 @@ def test_PLAN_12_leerer_kinder_aktivitaets_slot_plus_symbol(
     Mit Klettern-Mia → act1-Slot ist gefüllt → activity-chip im HTML, kein Plus mehr.
     """
     # ── Leerer Kinder-Slot: Plus-Symbol erwartet ──────────────
-    client_leer = make_client(demo_config, demo_registry, FakeTransport())
+    client_leer = make_client(demo_config, demo_registry, FakeTransport(),
+                              bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client_leer)
     r_leer = client_leer.get("/display/plan/woche")
     assert r_leer.status_code == 200
     html_leer = r_leer.data.decode("utf-8")
@@ -4605,7 +4683,9 @@ def test_PLAN_12_leerer_kinder_aktivitaets_slot_plus_symbol(
     # ── Voller Kinder-Slot: activity-chip statt Plus ───────────
     heute = date(2026, 5, 20)
     raw = [gcal_allday("k1", "Klettern Mia", heute.isoformat())]
-    client_voll = make_client(demo_config, demo_registry, FakeTransport(raw))
+    client_voll = make_client(demo_config, demo_registry, FakeTransport(raw),
+                              bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client_voll)
     r_voll = client_voll.get("/display/plan/woche?ab=%s" % heute.isoformat())
     assert r_voll.status_code == 200
     html_voll = r_voll.data.decode("utf-8")
@@ -4622,7 +4702,9 @@ def test_PLAN_12_erwachsenen_slot_unveraendert(demo_config, demo_registry):
     Kinder-Slot-Pfad). Belegte Erwachsenen-Slots tragen das face-Div.
     Das Plus-Symbol darf nicht in Erwachsenen-Slots auftauchen.
     """
-    client = make_client(demo_config, demo_registry, FakeTransport())
+    client = make_client(demo_config, demo_registry, FakeTransport(),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data.decode("utf-8")

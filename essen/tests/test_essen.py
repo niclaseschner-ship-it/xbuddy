@@ -20,8 +20,19 @@ from essen import katalog as katalog_mod  # noqa: E402, I001
 from essen import main as main_mod  # noqa: E402
 from essen import render as render_mod  # noqa: E402
 from essen import store as store_mod  # noqa: E402
+from essen.tests.conftest import TEST_BOT_TOKEN  # noqa: E402
+from tools.initdata import session_cookie as _sc  # noqa: E402
 # T814: EssenPhotoClient-Import entfällt — Validierung läuft seit ESSEN-22 V1.2
 # über tools.medien_store gegen den lokalen Essen-Fotos-Index (siehe Stub unten).
+
+
+def _auth_cookie_setzen(client):
+    """AUTH-11 (#1836-Nachzug): setzt einen validen xbuddy_session-Cookie fuer
+    den Dual-Gate auf /display/essen/wunsch. Additiv -- die `client`-Fixture
+    (conftest.py) traegt bereits bot_token=TEST_BOT_TOKEN, denselben Sign-Key
+    wie hier. Muster wie plan/tests/test_plan.py::_auth_cookie_setzen."""
+    client.set_cookie(_sc.COOKIE_NAME,
+                      _sc.sign_session("tablet-essen-test", TEST_BOT_TOKEN))
 
 
 # ============================================================
@@ -618,6 +629,7 @@ def test_wunsch_view_uebergibt_foto_overrides_pfad(client, monkeypatch, demo_pat
                                foto_overrides_pfad=foto_overrides_pfad)
 
     monkeypatch.setattr(main_mod.render_mod, "baue_view", _fake_baue_view)
+    _auth_cookie_setzen(client)
 
     resp = client.get("/display/essen/wunsch")
     assert resp.status_code == 200
@@ -631,6 +643,7 @@ def test_wunsch_view_uebergibt_foto_overrides_pfad(client, monkeypatch, demo_pat
 
 def test_essen2_view_rendert_vier_tabs(client):
     """ESSEN-2/ESSEN-8: GET /display/essen/wunsch rendert vier Kategorien-Tabs."""
+    _auth_cookie_setzen(client)
     resp = client.get("/display/essen/wunsch")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
@@ -641,6 +654,7 @@ def test_essen2_view_rendert_vier_tabs(client):
 
 def test_essen2_view_rendert_item_grid_und_liste(client):
     """ESSEN-2/ESSEN-8: View zeigt Item-Grid und Wunsch-Liste in einer Canvas."""
+    _auth_cookie_setzen(client)
     resp = client.get("/display/essen/wunsch")
     body = resp.get_data(as_text=True)
     assert 'id="item-grid"' in body
@@ -649,6 +663,7 @@ def test_essen2_view_rendert_item_grid_und_liste(client):
 
 def test_essen9_default_tab_obst_gemuese_aktiv(client):
     """ESSEN-9: Default-aktiver Tab ist obst_gemuese (ohne ?tab= Parameter)."""
+    _auth_cookie_setzen(client)
     resp = client.get("/display/essen/wunsch")
     body = resp.get_data(as_text=True)
     # Der aktive Tab trägt die Klasse 'aktiv'.
@@ -660,6 +675,7 @@ def test_essen9_default_tab_obst_gemuese_aktiv(client):
 
 def test_essen9_leere_gerichte_kachel_hat_hinweis(client):
     """ESSEN-9: leerer Gerichte-Tab zeigt ehrliche Leer-Meldung, kein Fehler."""
+    _auth_cookie_setzen(client)
     resp = client.get("/display/essen/wunsch?tab=gericht")
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
@@ -673,6 +689,7 @@ def test_essen8_brotbelag_tab_endpoint_smoke(client):
     Smoke-Test des echten Flask-Pfads: Tab-Slug-Routing bricht hier auf, bevor
     render.baue_view gerufen wird — ein reiner Helper-Test würde das nicht fangen.
     """
+    _auth_cookie_setzen(client)
     resp = client.get("/display/essen/wunsch?tab=brotbelag")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
@@ -687,6 +704,7 @@ def test_essen8_brotbelag_tab_endpoint_smoke(client):
 def test_essen11_icons_ueber_geteilte_plattform(client):
     """ESSEN-11/ICONS-5: Piktogramme werden über /display/_shared/icons/arasaac/
     referenziert, KEIN buddy-eigener ARASAAC-Bezug."""
+    _auth_cookie_setzen(client)
     resp = client.get("/display/essen/wunsch")
     body = resp.get_data(as_text=True)
     assert "/display/_shared/icons/arasaac/" in body
@@ -708,6 +726,7 @@ def test_essen11_render_icon_url():
 def test_essen3_tabs_und_kacheln_haben_tap_handler(client):
     """ESSEN-3: nur .tab und .item-kachel tragen einen Tap-Handler (button oder
     click-Handler in JS)."""
+    _auth_cookie_setzen(client)
     resp = client.get("/display/essen/wunsch")
     body = resp.get_data(as_text=True)
     # Tabs als button.
@@ -719,6 +738,7 @@ def test_essen3_tabs_und_kacheln_haben_tap_handler(client):
 
 def test_essen3_liste_eintraege_nicht_interaktiv(client_mit_wuenschen):
     """ESSEN-3: Wunsch-Einträge in der Liste sind nicht interaktiv (kein button)."""
+    _auth_cookie_setzen(client_mit_wuenschen)
     resp = client_mit_wuenschen.get("/display/essen/wunsch")
     body = resp.get_data(as_text=True)
     # liste-eintrag darf kein button sein.
@@ -763,6 +783,7 @@ def test_essen8_render_tab_wechsel(demo_paths):
 def test_essen27_entfernen_symbol_sichtbar(client_mit_wuenschen):
     """ESSEN-27: jede liste-eintrag-Kachel trägt das Entfernen-Symbol ARASAAC 11751
     über die geteilte Plattform und data-wunsch-id."""
+    _auth_cookie_setzen(client_mit_wuenschen)
     resp = client_mit_wuenschen.get("/display/essen/wunsch")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
@@ -826,6 +847,7 @@ def test_essen27_data_wunsch_id_traegt_korrekte_id(client_mit_wuenschen):
     wunsch_ids_aus_api = {w["id"] for w in api_resp.get_json()["wuensche"]}
 
     # HTML-Render.
+    _auth_cookie_setzen(client_mit_wuenschen)
     resp = client_mit_wuenschen.get("/display/essen/wunsch")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
@@ -882,6 +904,7 @@ def test_essen28_view_html_zeigt_kachel_gesperrt_klasse(client_mit_wuenschen):
 
     client_mit_wuenschen hat Apfel (bild_ref 2462, obst_gemuese) und
     Milch (bild_ref 2445, sonstiges) auf der Liste."""
+    _auth_cookie_setzen(client_mit_wuenschen)
     # Obst-Tab: Apfel ist auf der Liste → kachel-gesperrt erwartet.
     resp = client_mit_wuenschen.get("/display/essen/wunsch?tab=obst_gemuese")
     assert resp.status_code == 200
@@ -896,6 +919,7 @@ def test_essen28_view_html_zeigt_kachel_gesperrt_klasse(client_mit_wuenschen):
 def test_essen28_kachel_wieder_frei_nach_delete(client_mit_wuenschen):
     """ESSEN-28(c): nach DELETE /api/v1/essen/wuensche/<id> rendert die
     Kachel beim nächsten GET ohne .kachel-gesperrt (Reload-on-Read, ESSEN-20)."""
+    _auth_cookie_setzen(client_mit_wuenschen)
     # Zustand vorher: Apfel auf der Liste → Kachel gesperrt.
     resp_vor = client_mit_wuenschen.get("/display/essen/wunsch?tab=obst_gemuese")
     body_vor = resp_vor.get_data(as_text=True)
@@ -936,6 +960,7 @@ def test_essen28_roundtrip_post_get_zeigt_kachel_gesperrt(client):
     )
     assert resp_post.status_code == 201
     wunsch_id = resp_post.get_json()["id"]
+    _auth_cookie_setzen(client)
 
     # GET Display-View im obst_gemuese-Tab.
     resp_get = client.get("/display/essen/wunsch?tab=obst_gemuese")
