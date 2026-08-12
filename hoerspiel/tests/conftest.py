@@ -21,6 +21,7 @@ from hoerspiel import config as config_mod  # noqa: E402
 from hoerspiel import main as main_mod  # noqa: E402
 from hoerspiel.providers.base import LLMProvider, ProviderError  # noqa: E402
 from hoerspiel.tts.azure import TTSError  # noqa: E402
+from tools.initdata import session_cookie as _sc  # noqa: E402
 
 # ============================================================
 #  FakeLLM — die kontrollierte Provider-Doppelung (HSP-32)
@@ -114,6 +115,56 @@ def _instanzen_config(tmp_path, monkeypatch):
     cfg.write_text(json.dumps(_TEST_INSTANZEN), encoding="utf-8")
     monkeypatch.setenv(_instanzen_mod.ENV_CONFIG_FILE, str(cfg))
     return str(cfg)
+
+
+# ============================================================
+#  AUTH-11 (#1805, T1833) — Dual-Gate-Cookie fuer JEDEN Test-Client
+# ============================================================
+#
+# `require_dual_gate` (anders als `require_init_data`) hat KEINEN
+# Loopback-Bypass — er prueft NUR den `xbuddy_session`-Cookie (kein tma,
+# kein Server-zu-Server-Pass-through). Die `/display/hoerspiel/…`-Routen
+# (samt dem impliziten Flask-static-Endpunkt) sitzen seit T1833 hinter
+# diesem Gate. Ohne Cookie faellt jeder Test-Client-Request gegen eine
+# dieser Routen jetzt auf 401 — auch aus den zusaetzlichen `client_*`-
+# Fixtures in `hoerspiel/tests/test_main.py`, die NICHT in dieser
+# Whitelist stehen (T1833-Contract) und deshalb nicht einzeln angefasst
+# werden koennen/sollen.
+#
+# Additiv statt jede Fixture zu duplizieren (Muster `tests/test_dual_gate_7b.py`
+# setzt den Cookie sonst pro Client-Objekt): diese autouse-Fixture patcht
+# `main_mod.app.test_client` selbst, sodass JEDER ueber die Suite erzeugte
+# Test-Client — egal aus welcher Fixture oder direkt in einer Testfunktion
+# via `main_mod.app.test_client()` — den Cookie automatisch traegt. Der
+# bestehende tma-Header-/Loopback-Pfad (`bot_token="TEST"`) bleibt
+# unberuehrt; der Cookie kommt ZUSAETZLICH dazu (additiv, keine Test-
+# Aussage wird abgeschwaecht — kein bestehender Test behauptet, eine
+# Route sei ohne Identitaet erreichbar).
+#
+# Bot-Token: `hat_gueltigen_cookie` braucht denselben Sign-Key wie
+# `_get_bot_token()` zur Pruefzeit liefert. Alle Fixtures in dieser Suite
+# rufen `configure(bot_token="TEST", ...)` — der Cookie wird deshalb mit
+# demselben Literal signiert; Faelle ohne bot_token (z. B.
+# `client_mini_no_auth`) treffen nur require_init_data-Routen (Loopback-
+# Bypass greift dort ohnehin zuerst) und sind von diesem Patch unberuehrt.
+
+_DUAL_GATE_TEST_DEVICE_ID = "hoerspiel-test-device"
+_DUAL_GATE_TEST_BOT_TOKEN = "TEST"
+
+
+@pytest.fixture(autouse=True)
+def _dual_gate_cookie_fuer_alle_test_clients(monkeypatch):
+    orig_test_client = main_mod.app.test_client
+
+    def _test_client_mit_cookie(*args, **kwargs):
+        c = orig_test_client(*args, **kwargs)
+        c.set_cookie(
+            _sc.COOKIE_NAME,
+            _sc.sign_session(_DUAL_GATE_TEST_DEVICE_ID, _DUAL_GATE_TEST_BOT_TOKEN),
+        )
+        return c
+
+    monkeypatch.setattr(main_mod.app, "test_client", _test_client_mit_cookie)
 
 
 # ============================================================
