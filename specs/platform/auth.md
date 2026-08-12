@@ -594,6 +594,39 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 /api/v1/displays/<id>/state                   (Trigger: Phase 4)
 ```
 
+**Zehn ungegatete Telegram-Shell-Routen — Auth-11-Anlass (#1805).** AUTH-11
+verlangt für jede ungegatete Route entweder einen Decorator oder eine
+namentliche Ausnahme; für diese zehn ist **keins von beiden** angemessen,
+weil `require_dual_gate` cookie-only prüft und unbelegt ist, ob der
+Telegram-WebView beim HTML-Initial-Load überhaupt einen `xbuddy_session`-
+Cookie mitschickt (MAD-11, `conventions/mini-app-design.md`, hält fest: der
+WebView schickt beim HTML-Initial-Load keinen `Authorization`-Header — JS
+prüft erst beim Mount via `ensureAuth()`/`init-data/validate`). Ein Gate auf
+Verdacht risikiert, den Anmelde-Pfad selbst zu brechen — deshalb Schuldstand
+statt Ausnahme, mit eigenem Auflösungs-Trigger:
+
+```
+/seiten/essen/einkauf                         (Trigger: #1859 Cookie-Probe)
+/seiten/essen/einkauf/                        (Trigger: #1859 Cookie-Probe)
+/seiten/plan/einstellungen                    (Trigger: #1859 Cookie-Probe)
+/seiten/plan/einstellungen/                   (Trigger: #1859 Cookie-Probe)
+/seiten/routine/anpassen                      (Trigger: #1859 Cookie-Probe)
+/seiten/routine/anpassen/                     (Trigger: #1859 Cookie-Probe)
+/seiten/wetter/regeln                         (Trigger: #1859 Cookie-Probe)
+/seiten/wetter/regeln/                        (Trigger: #1859 Cookie-Probe)
+/seiten/hoerspiel/<kind_id>/eltern            (Trigger: #1859 Cookie-Probe)
+/api/v1/seiten/mini-app-uebersicht            (Trigger: #1859 Cookie-Probe)
+```
+
+**Trigger #1859:** Nic tippt den Telegram-Button auf einem gepairten
+Elterngerät an und belegt live, ob der WebView den `xbuddy_session`-Cookie
+mitschickt. Trägt er ihn, wandern alle zehn Routen mit dem Factory-Decorator
+nach AUTH-3 (derselbe same-origin-Cookie-Pfad wie die übrigen
+Eltern-Mini-Apps); trägt er ihn nicht, braucht es eine eigene Auth-Lösung
+für den Telegram-Fall, bevor sie gaten können. Bis dahin sind sie hier
+geführt, nicht in AUTH-11s Ausnahme-Tabelle — eine Ausnahme wäre eine
+Entscheidung, dies ist eine offene Frage mit Verfallsdatum.
+
 **familie-Datenrouten sind KEIN AUTH-6-Migrations-Backlog (RAT-32-Amendment, #1638).**
 `/api/v1/familie/personen*` und `/api/v1/familie/foto/*` tragen keinen Defer-Trigger
 mehr: `familie` ist ein RAT-31-Abriss-Ziel — es kommt keine extern erreichbare
@@ -811,6 +844,26 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/display/kibuddy/static/manifest.webmanifest` | `kibuddy/templates/frage.html:15` lädt das Manifest ohne `crossorigin="use-credentials"` — per Fetch-Spec credential-los. Gegatet bekäme ein gepairtes Gerät bei jedem Laden 401 auf sein Manifest; keine Installation (gleiche Klasse wie `/shell/<panel_id>/manifest.json`). |
 | `/display/kibuddy/static/icons/icon-192.png` | Vom Manifest referenziertes Icon (`kibuddy/static/manifest.webmanifest`); der WebAPK-Installer holt Manifest-Icons **credential-los** — mit Gate schlägt die Installation fehl (gleiche Klasse wie `/shell/<panel_id>/<path:asset>`, #1437). |
 | `/display/kibuddy/static/icons/icon-512.png` | Zweites vom Manifest referenziertes Icon, gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/essen/einkauf/manifest.json` | Ausgeliefert über den ungegateten `einkauf_asset_view` (`seiten/main.py:780`); Icon-Set aus `REGISTRY["einkauf"].icons` (`seiten/pwa_mantel.py:357`). Browser holt PWA-Manifeste credential-los (Fetch-Spec, dokumentiert analog `seiten/main.py:1084`) — gegatet bekäme ein gepairtes Gerät bei jedem Laden 401, keine Installation. |
+| `/seiten/essen/einkauf/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["einkauf"].icons`, `seiten/pwa_mantel.py:357`); WebAPK-Installer holt Icons credential-los — gleiche Klasse wie `/shell/<panel_id>/<path:asset>` (#1437). |
+| `/seiten/essen/einkauf/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/essen/einkauf/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/plan/einstellungen/manifest.json` | Ausgeliefert über den ungegateten `plan_einstellungen_asset_view` (`seiten/main.py:864`); Icon-Set aus `REGISTRY["plan"].icons` (`seiten/pwa_mantel.py:370`). Gleiche Begründung wie `/seiten/essen/einkauf/manifest.json` oben. |
+| `/seiten/plan/einstellungen/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["plan"].icons`, `seiten/pwa_mantel.py:370`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
+| `/seiten/plan/einstellungen/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/plan/einstellungen/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/routine/anpassen/manifest.json` | Ausgeliefert über den ungegateten `routine_anpassen_asset_view` (`seiten/main.py:1118`); Icon-Set aus `REGISTRY["routine"].icons` (`seiten/pwa_mantel.py:436`). SW + Manifest sind „technisch-public … Browser-Fetch credential-los wie bei plan" (`seiten/main.py:1084`). |
+| `/seiten/routine/anpassen/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["routine"].icons`, `seiten/pwa_mantel.py:436`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
+| `/seiten/routine/anpassen/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/routine/anpassen/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/wetter/regeln/manifest.json` | Ausgeliefert über den ungegateten `wetter_regeln_asset_view` (`seiten/main.py:1172`); Icon-Set aus `REGISTRY["wetter-regeln"].icons` (`seiten/pwa_mantel.py:455`). Gleiche Begründung wie `/seiten/essen/einkauf/manifest.json` oben. |
+| `/seiten/wetter/regeln/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["wetter-regeln"].icons`, `seiten/pwa_mantel.py:455`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
+| `/seiten/wetter/regeln/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/wetter/regeln/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/hoerspiel/<kind_id>/eltern/manifest.json` | Ausgeliefert über den ungegateten `hoerspiel_eltern_asset_view` (`seiten/main.py:1285`); Icon-Set aus `REGISTRY["hoerspiel-eltern"].icons` (`seiten/pwa_mantel.py:477`). „SW/manifest: credential-los" (`seiten/main.py:1204`, `:1293`). |
+| `/seiten/hoerspiel/<kind_id>/eltern/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["hoerspiel-eltern"].icons`, `seiten/pwa_mantel.py:477`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
+| `/seiten/hoerspiel/<kind_id>/eltern/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/hoerspiel/<kind_id>/eltern/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 
 Die Asset-Zeilen oben (Manifest, Service-Worker, Icon-/Design-Assets sowie
 die beiden Bootstrap-Zeilen `/api/v1/seiten/static/<path:filename>` und
