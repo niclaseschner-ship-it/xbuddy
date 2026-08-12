@@ -9,15 +9,27 @@ routine-URL-Map
   GET       /display/routine/static/<path:filename>  (impliziter Flask-Static)
 
 laufen jetzt hinter `tools.initdata.auth_gate.make_require_dual_gate` mit
-`default_mode="hard"` (Nic-Setzung 2026-08-11, #1835): kein gueltiger
-`xbuddy_session`-Cookie -> 401 (AUTH-8-Re-Pair-HTML), gueltiger Cookie -> 200
-+ Rolling-Refresh (AUTH-2:78). `/healthz` und `/version` bleiben die einzigen
-AUTH-11-Ausnahmen fuer routine und sind hier bewusst NICHT Gegenstand.
+`default_mode=_AUTH_MODE` (ENV-Naht `XBUDDY_AUTH_MODE`, Default "hard" --
+Nic-Setzung 2026-08-11, #1835): kein gueltiger `xbuddy_session`-Cookie -> 401
+(AUTH-8-Re-Pair-HTML), gueltiger Cookie -> 200 + Rolling-Refresh (AUTH-2:78).
+`/healthz` und `/version` bleiben die einzigen AUTH-11-Ausnahmen fuer routine
+und sind hier bewusst NICHT Gegenstand.
 
 Der Dual-Gate hat -- anders als `require_init_data` (AUTH-5) -- KEINEN
 Loopback-Bypass und akzeptiert auch KEINEN tma-Header (MAD-7): die
 Display-Flaeche ist ein Browser-Pfad auf dem Kind-Tablet, kein Mini-App-Pfad.
 Ein eigener Test belegt das explizit als Regressions-Schutz.
+
+RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md, Lehre
+#1427->#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff. Ein eigener
+Test belegt das End-to-End ueber einen echten Modul-Reload (nicht nur den
+Attribut-Wert wie tests/test_dual_gate_7b.py::test_auth_mode_env_seam_default_observe
+bei seiten): `XBUDDY_AUTH_MODE=observe` -> 200 ohne Cookie (Rueckroll-Pfad).
+
+Und ein AUTH-11-Backstop ueber `app.url_map` selbst (statt vier Routen von
+Hand aufzuzaehlen): jede Regel traegt entweder einen Auth-Decorator oder
+steht in der Ausnahmemenge -- eine morgen hinzugefuegte Route faellt sonst
+wieder durchs Raster (genau der Fehler, den AUTH-11 beheben soll).
 
 Vorbild: tests/test_dual_gate_7b.py (seiten-Seite), routine/tests/test_auth_hart.py
 (Fixture-/Konfig-Aufbau der routine-Suite).
@@ -25,6 +37,7 @@ Vorbild: tests/test_dual_gate_7b.py (seiten-Seite), routine/tests/test_auth_hart
 Lauf: python3 -m pytest routine/tests/test_auth11_routine.py -q
 """
 
+import importlib
 import json
 import os
 import sys
@@ -173,3 +186,78 @@ def test_healthz_und_version_bleiben_ungegated(app_client):
     dieses Tickets und bleiben ohne jede Auth-Quelle erreichbar."""
     assert app_client.get("/healthz", headers=_EXTERN).status_code == 200
     assert app_client.get("/version", headers=_EXTERN).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# ENV-Naht XBUDDY_AUTH_MODE -- RAT-32 Nicht-Verhandelbar (Fix-Auftrag Befund 1)
+# ---------------------------------------------------------------------------
+#
+# `_AUTH_MODE` und der daraus gebaute `require_dual_gate`-Decorator werden
+# EINMAL beim Modul-Import aus `os.environ` gelesen (wie beim seiten-Vorbild)
+# -- ein live laufender Prozess flippt nicht mit, genau wie in Produktion
+# (ENV-Aenderung + systemd-Neustart, nie ein Live-Toggle). `importlib.reload`
+# simuliert diesen Neustart im Testprozess. Da `routine.main` ein Singleton
+# in `sys.modules` ist und andere Testdateien dieselbe Modul-Referenz halten,
+# stellt die Fixture den Default-Zustand (kein ENV-Override, mode="hard")
+# garantiert wieder her -- sonst wuerde ein liegen gebliebener Reload AC3 in
+# JEDER anderen Testdatei dieser Suite stumm brechen.
+
+
+@pytest.fixture
+def _reset_routine_main_env(monkeypatch):
+    yield
+    monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+    importlib.reload(main_mod)
+
+
+@pytest.mark.usefixtures("_reset_routine_main_env")
+def test_auth_mode_env_naht_observe_ist_rueckroll_default_bleibt_hart(
+    monkeypatch, tmp_path
+):
+    """Fix-Auftrag Befund 1 / RAT-32 Nicht-Verhandelbar: der Hard-Flip ist
+    eine ENV-Naht, kein Code-Diff (Lehre #1427->#1430, Kill-Kriterium der
+    Entscheidung: "gepartes Geraet bekommt 401 -> ENV sofort zurueck auf
+    observe"). `XBUDDY_AUTH_MODE=observe` muss /display/routine/morgen ohne
+    Cookie auf 200 zurueckrollen; ohne ENV-Override bleibt der Default "hard"
+    (Nic-Setzung 2026-08-11 -- Unterschied zum seiten-Vorbild, dessen Default
+    "observe" ist, seiten/main.py:469)."""
+    monkeypatch.setenv("XBUDDY_AUTH_MODE", "observe")
+    importlib.reload(main_mod)
+    assert main_mod._AUTH_MODE == "observe"
+    _configure(tmp_path)
+    r_observe = main_mod.app.test_client().get("/display/routine/morgen", headers=_EXTERN)
+    assert r_observe.status_code == 200, \
+        "XBUDDY_AUTH_MODE=observe muss ohne Cookie durchlassen (RAT-32-Rueckroll-Pfad)"
+
+    monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+    importlib.reload(main_mod)
+    assert main_mod._AUTH_MODE == "hard"
+    _configure(tmp_path)
+    r_default = main_mod.app.test_client().get("/display/routine/morgen", headers=_EXTERN)
+    assert r_default.status_code == 401, \
+        "ohne ENV-Override muss der Default weiterhin 'hard' sein (Nic-Setzung 2026-08-11)"
+
+
+# ---------------------------------------------------------------------------
+# AUTH-11-Backstop ueber app.url_map (Fix-Auftrag Befund 3)
+# ---------------------------------------------------------------------------
+
+_AUTH11_AUSNAHMEN = {"/healthz", "/version"}
+
+
+def test_url_map_jede_regel_gegated_oder_auth11_ausnahme(app_client):
+    """AUTH-11 (specs/platform/auth.md): Messbasis ist `app.url_map`, nicht
+    der Quelltext -- eine morgen hinzugefuegte Route waere per Hand-Aufzaehlung
+    (die vier Tests oben) unsichtbar. Jede Regel traegt entweder einen
+    Auth-Decorator (`__wrapped__` am view_function, functools.wraps-Heuristik
+    wie im Auftrags-Messbefehl) oder steht namentlich in der
+    AUTH-11-Ausnahmemenge fuer routine."""
+    for rule in main_mod.app.url_map.iter_rules():
+        if rule.rule in _AUTH11_AUSNAHMEN:
+            continue
+        vf = main_mod.app.view_functions.get(rule.endpoint)
+        assert hasattr(vf, "__wrapped__"), (
+            "Route %r (endpoint=%r) traegt keinen Auth-Decorator und steht "
+            "nicht in der AUTH-11-Ausnahmemenge %r"
+            % (rule.rule, rule.endpoint, _AUTH11_AUSNAHMEN)
+        )

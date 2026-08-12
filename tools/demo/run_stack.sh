@@ -46,6 +46,18 @@ ICON_ROOT="$_HERE/assets/icons"
 
 FAM_ORIGIN="http://127.0.0.1:${PORT[familie]}"
 
+# ── Auth-ENV-Naht (RAT-32, #1835-Fix-Auftrag Befund 2) ───────────────────────
+# Seit #1835 haengen die Display-Flaechen von Buddies mit AUTH-7b-Dual-Gate
+# (routine zuerst, weitere Buddies uebernehmen dasselbe Muster/dieselbe
+# ENV-Naht `XBUDDY_AUTH_MODE`) standardmaessig HART hinter einem
+# `xbuddy_session`-Cookie. Der Demo-Stack zeigt Demo-Daten ohne Familienbezug
+# same-origin über `http://127.0.0.1` — kein Cookie waere `Secure` sendbar,
+# und kein Demo-Client mintet ohnehin einen. `XBUDDY_AUTH_MODE=observe` ist
+# genau der von RAT-32 vorgesehene Rueckroll-Pfad (ENV, kein Code-Diff) und
+# gilt hier fuer ALLE per `start` gestarteten Dienste (export wird an jeden
+# Subprozess vererbt). Overridebar: XBUDDY_AUTH_MODE=hard vorab exportieren.
+export XBUDDY_AUTH_MODE="${XBUDDY_AUTH_MODE:-observe}"
+
 PIDS=()
 teardown() {
   echo "[demo] Teardown — beende ${#PIDS[@]} Prozesse …"

@@ -282,6 +282,16 @@ def _client_ip():
     return request.remote_addr
 
 
+# RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md, Lehre
+# #1427→#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff — der
+# Rueckroll-Pfad ist "XBUDDY_AUTH_MODE=observe + Neustart", nicht "PR + Merge
+# + Deploy". Form wortgleich zum seiten-Vorbild (seiten/main.py:469); Default
+# hier ist "hard" statt seitens "observe" — Nic-Setzung 2026-08-11 (#1835)
+# betrifft den WERT (Display-Flaeche ist Cookie-hart ab Tag 0), nicht den
+# Mechanismus (dieselbe ENV-Naht, derselbe Rueckroll-Pfad wie seiten).
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
+
 def _get_familie_client():
     """Liefert einen FamilieClient (Test-Naht oder frisch aus ENV, T1015).
 
@@ -360,13 +370,14 @@ require_init_data = make_require_init_data(
 # generisch "Gerät neu verbinden" formuliert (nicht tma-spezifisch) — ein
 # zweiter, fast identischer 401-Text waere ein Genre-Duplikat ohne Mehrwert
 # (D1 bleibt gewahrt: EIN Renderer pro Buddy, hier fuer beide Gates geteilt).
-# default_mode="hard" — Nic-Setzung 2026-08-11 (#1835): jede Adresse hinter
-# dem Cookie, kein Observe-Grace fuer die Display-Flaeche.
+# default_mode=_AUTH_MODE (ENV-Naht, s.o.) — Default "hard": jede Adresse
+# hinter dem Cookie, kein Observe-Grace fuer die Display-Flaeche, es sei denn
+# XBUDDY_AUTH_MODE=observe ist gesetzt (Rueckroll-Pfad / Demo-Stack).
 require_dual_gate = make_require_dual_gate(
     get_bot_token=_get_bot_token,
     get_client_ip=_client_ip,
     auth_401=_auth_401,
-    default_mode="hard",
+    default_mode=_AUTH_MODE,
 )
 
 
@@ -395,7 +406,7 @@ register_version(app)
 
 
 @app.route("/display/routine/morgen", methods=["GET", "POST"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1835): Display-Flaeche, Cookie-hart
+@require_dual_gate()  # AUTH-11 (#1835): Display-Flaeche, mode=_AUTH_MODE (ENV-Naht)
 def morgen():
     """View `morgen` — Routine-Checkliste + ablaufende Uhr (ROUTINE-2).
 
@@ -480,7 +491,7 @@ def morgen():
 
 @app.route("/display/routine/")
 @app.route("/display/routine")
-@require_dual_gate(mode="hard")  # AUTH-11 (#1835): Display-Flaeche, Cookie-hart
+@require_dual_gate()  # AUTH-11 (#1835): Display-Flaeche, mode=_AUTH_MODE (ENV-Naht)
 def index():
     """Weiterleitung zur View `morgen` (BUD-1, ROUTINE-2)."""
     return redirect(url_for("morgen"))
