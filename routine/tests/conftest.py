@@ -8,8 +8,8 @@ Auth (MAD-7 / T708-C): client-Fixture setzt Authorization-Header automatisch
 
 AUTH-11 (#1835, T1835-S2): zusätzlich zum tma-Header setzt die client-Fixture
 einen gültigen `xbuddy_session`-Cookie (additiv, ersetzt den tma-Header nicht) —
-die Display-Fläche hängt seit #1835 hinter `require_dual_gate(mode="hard")`
-(nur Cookie, kein tma-Pfad), während `require_init_data` weiterhin den
+die Display-Fläche hängt seit #1835 hinter `require_dual_gate(default_mode=_AUTH_MODE)`
+(ENV-Naht) (nur Cookie, kein tma-Pfad), während `require_init_data` weiterhin den
 tma-Header prüft. Muster: routine/tests/test_auth11_routine.py.
 """
 
@@ -41,8 +41,8 @@ def mit_session_cookie(flask_client, bot_token=TEST_BOT_TOKEN, subject=TEST_DISP
     """Setzt zusätzlich zum tma-Header einen gültigen `xbuddy_session`-Cookie.
 
     AUTH-11 (#1835, T1835-S2): additiv -- ergänzt den bestehenden tma-Header,
-    ersetzt ihn nicht. Deckt `require_dual_gate(mode="hard")` auf der
-    Display-Fläche. Muster: test_auth11_routine.py::_mit_gueltigem_cookie.
+    ersetzt ihn nicht. Deckt `require_dual_gate(default_mode=_AUTH_MODE)`
+    (ENV-Naht) auf der Display-Fläche. Muster: test_auth11_routine.py::_mit_gueltigem_cookie.
     """
     token = sc.sign_session(subject, bot_token)
     flask_client.set_cookie(sc.COOKIE_NAME, token, domain="localhost")
