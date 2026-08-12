@@ -22,6 +22,7 @@ Lauf: python3 -m pytest tests/test_auth11_kleine_b.py -q
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sys
@@ -150,3 +151,64 @@ def test_familie_static_mit_cookie_ist_404_nicht_401(familie_client):
     familie_client.set_cookie(sc.COOKIE_NAME, sc.sign_session(SUBJECT, BOT_TOKEN))
     resp = familie_client.get("/static/irgendwas.css")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# ENV-Naht XBUDDY_AUTH_MODE — RAT-32 Nicht-Verhandelbar (T1844-S3)
+# ---------------------------------------------------------------------------
+#
+# `_AUTH_MODE` und der daraus gebaute `require_dual_gate`-Decorator werden
+# EINMAL beim Modul-Import aus `os.environ` gelesen (Form wortgleich zum
+# seiten-Vorbild, seiten/main.py:469) — ein live laufender Prozess flippt
+# nicht mit, genau wie in Produktion (ENV-Änderung + systemd-Neustart, nie
+# ein Live-Toggle). `importlib.reload` simuliert diesen Neustart im
+# Testprozess. Da `wetter.main` ein Singleton in `sys.modules` ist und andere
+# Testdateien dieselbe Modul-Referenz halten, stellt die Fixture den
+# Default-Zustand (kein ENV-Override, mode="hard") garantiert wieder her —
+# sonst würde ein liegen gebliebener Reload andere Testdateien dieser Suite
+# (u. a. wetter/tests/test_wetter.py) stumm brechen (Muster
+# routine/tests/test_auth11_routine.py, Watchdog-geprüft).
+
+
+@pytest.fixture
+def _reset_wetter_main_env(monkeypatch):
+    yield
+    monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+    importlib.reload(wetter_main)
+
+
+@pytest.mark.usefixtures("_reset_wetter_main_env")
+def test_auth_mode_env_naht_observe_ist_rueckroll_default_bleibt_hart(monkeypatch, tmp_path):
+    """AC3 (T1844-S3) / RAT-32 Nicht-Verhandelbar: der Hard-Flip ist eine
+    ENV-Naht, kein Code-Diff (Lehre #1427→#1430; Kill-Kriterium wörtlich:
+    „gepaartes Gerät bekommt nach dem Flip 401 → ENV sofort zurück auf
+    observe"). `XBUDDY_AUTH_MODE=observe` muss /display/wetter/heute ohne
+    Cookie auf 200 zurückrollen; ohne ENV-Override bleibt der Default „hard"
+    (Nic-Setzung 2026-08-11 — Unterschied zum seiten-Vorbild, dessen Default
+    „observe" ist, seiten/main.py:469)."""
+    cfg_path = tmp_path / "wetter.json"
+    cfg_path.write_text(json.dumps(WETTER_DEMO_CONFIG), encoding="utf-8")
+
+    def _configure():
+        cfg = wetter_config_mod.resolve(str(cfg_path))
+        anbindung = wetter_meteo_mod.WetterAnbindung(
+            _WetterFakeTransport(fail=True),
+            cfg.stunde_morgens, cfg.stunde_mittags, cfg.sunscreen_uv)
+        wetter_main.configure(cfg, anbindung, config_path=str(cfg_path),
+                              bot_token=BOT_TOKEN)
+
+    monkeypatch.setenv("XBUDDY_AUTH_MODE", "observe")
+    importlib.reload(wetter_main)
+    assert wetter_main._AUTH_MODE == "observe"
+    _configure()
+    r_observe = wetter_main.app.test_client().get("/display/wetter/heute")
+    assert r_observe.status_code == 200, \
+        "XBUDDY_AUTH_MODE=observe muss ohne Cookie durchlassen (RAT-32-Rückroll-Pfad)"
+
+    monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+    importlib.reload(wetter_main)
+    assert wetter_main._AUTH_MODE == "hard"
+    _configure()
+    r_default = wetter_main.app.test_client().get("/display/wetter/heute")
+    assert r_default.status_code == 401, \
+        "ohne ENV-Override muss der Default weiterhin 'hard' sein (Nic-Setzung 2026-08-11)"

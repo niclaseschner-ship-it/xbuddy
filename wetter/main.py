@@ -166,11 +166,20 @@ def _client_ip():
     return request.remote_addr
 
 
+# RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md, Lehre
+# #1427→#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff — der
+# Rueckroll-Pfad ist "XBUDDY_AUTH_MODE=observe + Neustart", nicht "PR + Merge
+# + Deploy". Form wortgleich zum seiten-Vorbild (seiten/main.py:469); Default
+# hier ist "hard" statt seitens "observe" — Nic-Setzung 2026-08-11 (AUTH-11)
+# betrifft den WERT (Display-Fläche ist Cookie-hart ab Tag 0), nicht den
+# Mechanismus (dieselbe ENV-Naht, derselbe Rückroll-Pfad wie seiten).
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
 require_dual_gate = make_require_dual_gate(
     get_bot_token=_get_bot_token,
     get_client_ip=_client_ip,
     auth_401=_auth_401,
-    default_mode="hard",  # Nic-Setzung 2026-08-11 (AUTH-11), NICHT observe
+    default_mode=_AUTH_MODE,
 )
 
 
@@ -292,7 +301,7 @@ def _jetzt(cfg):
 
 
 @app.route("/display/wetter/heute", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1844): Kiosk-/Browser-Fläche, Cookie-Gate
+@require_dual_gate()  # AUTH-11 (#1844): Kiosk-/Browser-Fläche, mode=_AUTH_MODE (ENV-Naht)
 def heute():
     """View `heute` als Diptychon, Stufe `toddler` (WETTER-2, WETTER-4).
 
