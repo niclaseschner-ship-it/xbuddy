@@ -116,11 +116,21 @@ def _dual_auth_401():
     return resp
 
 
+# RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md:39-46,
+# Lehre #1427→#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff — der
+# Rückroll-Pfad ist "XBUDDY_AUTH_MODE=observe + Neustart", nicht "PR + Merge +
+# Deploy" (Kill-Kriterium wörtlich: "gepairtes Gerät bekommt nach dem Flip
+# 401 → ENV sofort zurück auf observe"). Form wortgleich zum seiten-Vorbild
+# (seiten/main.py:469); Default hier ist "hard" statt seitens "observe" —
+# Nic-Setzung 2026-08-11 (#1834) betrifft den WERT (panel ist Cookie-hart ab
+# Tag 0), nicht den Mechanismus (dieselbe ENV-Naht, derselbe Rückroll-Pfad).
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
 require_dual_gate = _auth_gate.make_require_dual_gate(
     get_bot_token=_get_bot_token,
     get_client_ip=_client_ip,
     auth_401=_dual_auth_401,
-    default_mode="observe",
+    default_mode=_AUTH_MODE,  # ENV-Naht, s.o. — Default "hard".
 )
 
 
@@ -135,6 +145,16 @@ _write_lock = threading.Lock()
 # ============================================================
 
 app = Flask(__name__)
+
+
+# AUTH-11 (#1834): Flask legt den impliziten `static`-Endpunkt
+# (`/static/<path:filename>`) für JEDE `Flask(__name__)`-Instanz an, auch ohne
+# `static/`-Verzeichnis (panel/ hat keins — der Endpunkt liefert nur 404,
+# siehe Handoff-Beobachtung). Er steht trotzdem in `app.url_map` und damit unter
+# AUTH-11 — kein `@app.route`, also kein Decorator-Ansatzpunkt; wir tauschen die
+# View-Funktion nach der App-Erzeugung aus (kein `functools.wraps` nötig, der
+# Gate trägt es schon).
+app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
 
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
@@ -156,12 +176,14 @@ def _aktuelle_registry():
 
 
 @app.route("/api/v1/panels/", methods=["GET"])
+@require_dual_gate()  # AUTH-11 (#1834): Lesepfad-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panels():
     """PREG-13: alle Panel-Instanzen der Familie als JSON-Array."""
     return jsonify([p.to_dict() for p in _aktuelle_registry().list_all()])
 
 
 @app.route("/api/v1/panels/<panel_id>", methods=["GET"])
+@require_dual_gate()  # AUTH-11 (#1834): Lesepfad-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panel(panel_id):
     """PREG-14: ein Panel je `panel_id`. Unbekannte id: 404 mit JSON-Fehler."""
     p = _aktuelle_registry().get(panel_id)
@@ -171,6 +193,18 @@ def get_panel(panel_id):
 
 
 @app.route("/api/v1/panels/<panel_id>/config.json", methods=["GET"])
+# AUTH-11 (#1834): NICHT gegated — Watchdog-Befund (Live-Reproduktion): diese
+# Route läuft im Prod-Pfad hinter `seiten._proxy_panel_view` (seiten/main.py:2140),
+# einem nackten `urllib.request.Request(..., method="GET")` OHNE Header/Cookie
+# (PREG-9-Proxy). Der ÜBERHOLT-Marker in panel-bearbeiten.md widerlegt nur die
+# "cookieloses Kiosk-Gerät"-Prämisse — über den Proxy-Aufrufer (ein Python-
+# Prozess, kein Gerät) sagt er nichts. Ein Gate hier hieße: Proxy bekäme 401,
+# fängt es als "Service nicht erreichbar" ab und fällt auf den Code-Default
+# zurück (leeres Panel, HTTP 200 an den Browser) — der von PBE-3 benannte
+# #1338-Bruch, LKG-Cache ist In-Memory und nach Neustart leer. Braucht zuerst
+# eine Identität am Proxy-Hop (Cookie durchreichen vs. Service-zu-Service-
+# Naht) — Design-Entscheidung, die Nic trifft; separat ticketiert als #1854
+# ("seiten→panel-Proxy trägt keine Identität — blockiert fünf AUTH-11-Routen").
 def get_panel_config(panel_id):
     """PREG-14: das `config`-Feld als eigenständiges JSON-Dokument (PANEL-8).
 
@@ -183,6 +217,8 @@ def get_panel_config(panel_id):
 
 
 @app.route("/api/v1/panels/<panel_id>/tiles.json", methods=["GET"])
+# AUTH-11 (#1834): NICHT gegated — siehe Begründung bei `get_panel_config`
+# oben (PREG-9-Proxy ohne Identität, Watchdog-Befund, separat ticketiert).
 def get_panel_tiles(panel_id):
     """PREG-14: das `tiles`-Feld als eigenständiges JSON-Dokument (PANEL-3).
 
@@ -272,8 +308,20 @@ def _bad_request(msg):
 # der deterministisch aus der `panel_id` abgeleiteten URL
 # `/controller/app-panel/<panel_id>/bearbeiten` (PBE-2) aus. Der Daten-Eigentümer
 # (panel-Service) liefert seine eigene Editor-Seite, die zeigt UND editiert —
-# Muster RAT-2 / #328 (Garderoben-Editor). Auth = Heimnetz/Tailscale-Grenze
-# (PBE-3 / RAT-2); keine Rolle in V1.
+# Muster RAT-2 / #328 (Garderoben-Editor).
+#
+# Auth (AUTH-11, #1834, Watchdog-Korrektur 2026-08-11/12): die Editor-Routen
+# bleiben UNGEGATED. Live läuft der Aufruf über `seiten._proxy_panel_bearbeiten`
+# (seiten/main.py:2170, PREG-9-Proxy) — ein nacktes `urllib.request.Request`
+# ohne Cookie. Der ÜBERHOLT-Marker in panel-bearbeiten.md widerlegt nur PBE-3s
+# "cookieloses Kiosk-Gerät"-Halbsatz (das GERÄT trägt seit RAT-32 einen
+# Cookie); über den dritten PBE-3-Lesepfad, den PREG-9-Proxy — dessen Aufrufer
+# ein Python-Prozess ist, kein Gerät —, sagt der Marker nichts. Ein Gate hier
+# würde am Proxy-Hop hart 401/502 auslösen (Watchdog hat das live reproduziert)
+# statt sichtbar zu scheitern. Braucht zuerst eine Identität am Proxy-Hop
+# (Cookie durchreichen vs. Service-zu-Service-Naht) — Design-Entscheidung, die
+# Nic trifft; separat ticketiert als #1854 ("seiten→panel-Proxy trägt keine
+# Identität — blockiert fünf AUTH-11-Routen").
 #
 # Die Statik liegt in `controller/app-panel/bearbeiten.{html,js,css}` neben der
 # bestehenden Display-Seite. Wir lesen die HTML-Datei einmalig pro Request und
@@ -326,6 +374,8 @@ def _send_editor_static(panel_id, filename, mimetype):
 
 
 @app.route("/controller/app-panel/<panel_id>/bearbeiten", methods=["GET"])
+# AUTH-11 (#1834): NICHT gegated — s. Kommentarblock oben (PREG-9-Proxy ohne
+# Identität, Watchdog-Befund, separat ticketiert).
 def get_panel_editor(panel_id):
     """PBE-1/PBE-2: Editor-Seite je Panel-Instanz.
 
@@ -334,8 +384,11 @@ def get_panel_editor(panel_id):
     (PBE-1: die Seite ist an die `panel_id` gebunden — sie editiert nie eine
     andere Instanz; eine unbekannte Identität darf keine Editor-Seite bekommen).
 
-    PBE-3: keine zusätzliche Auth-Schicht; das Heimnetz/Tailscale-Gate (RAT-2)
-    trägt den Zugriff.
+    PBE-3: keine zusätzliche Auth-Schicht in der Route selbst — der Aufruf
+    läuft live über `seiten._proxy_panel_bearbeiten` (PREG-9-Proxy, kein
+    Cookie), ein Gate hier würde den Proxy-Fetch erschlagen (#1338-Bruch,
+    AUTH-11-Watchdog-Korrektur 2026-08-11/12). Identität am Proxy-Hop ist
+    separat ticketiert.
 
     PBE-1: Panel-Identität wird per Token-Substitution `__PANEL_ID__` im echten
     `<body>`-Tag durch die `panel_id` ersetzt — die Editor-JS-Schicht liest sie
@@ -356,18 +409,21 @@ def get_panel_editor(panel_id):
 
 
 @app.route("/controller/app-panel/<panel_id>/bearbeiten.js", methods=["GET"])
+# AUTH-11 (#1834): NICHT gegated — s. Kommentarblock oben (PREG-9-Proxy).
 def get_panel_editor_js(panel_id):
     """PBE-1: Editor-JS-Bundle (statisch). 404 bei unbekannter panel_id."""
     return _send_editor_static(panel_id, "bearbeiten.js", "application/javascript")
 
 
 @app.route("/controller/app-panel/<panel_id>/bearbeiten.css", methods=["GET"])
+# AUTH-11 (#1834): NICHT gegated — s. Kommentarblock oben (PREG-9-Proxy).
 def get_panel_editor_css(panel_id):
     """PBE-1: Editor-CSS (statisch). 404 bei unbekannter panel_id."""
     return _send_editor_static(panel_id, "bearbeiten.css", "text/css; charset=utf-8")
 
 
 @app.route("/api/v1/panels/", methods=["POST"])
+@require_dual_gate(mode="hard")  # AUTH-3.a (#1834): WRITE hart ab Tag 0, kein Observe-Grace — wie PUT.
 def post_panel():
     """PREG-15: Panel-Instanz anlegen.
 

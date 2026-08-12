@@ -165,7 +165,20 @@ def test_pbe1_editor_route_unknown_panel_js_returns_404(editor_client):
 
 def test_pbe1_editor_route_no_auth_layer(editor_client):
     """PBE-3: keine Rollen-/Login-Schicht in V1 — Heimnetz/Tailscale-Grenze
-    ist das Gate (RAT-2). Eigentest: ohne Auth-Header bekommt der Client 200."""
+    ist das Gate (RAT-2). Eigentest: ohne Auth-Header bekommt der Client 200.
+
+    AUTH-11 (#1834): kurzzeitig auf die Umkehrung gedreht (Route verlangt
+    einen Cookie) — dann per Watchdog-Befund (2026-08-11/12, Live-Reproduktion)
+    zurückgenommen. Diese Route läuft im Prod-Pfad hinter
+    `seiten._proxy_panel_bearbeiten` (PREG-9-Proxy, seiten/main.py:2170), einem
+    Aufruf ohne Cookie/Header. Der ÜBERHOLT-Marker in panel-bearbeiten.md
+    widerlegt nur PBE-3s "cookieloses Kiosk-Gerät"-Prämisse (das GERÄT trägt
+    seit RAT-32 einen Cookie) — über den PREG-9-Proxy-Aufrufer (ein Prozess,
+    kein Gerät) sagt er nichts. Ein Gate hier ließe den Proxy scheitern und
+    den Kiosk auf ein leeres Panel mit HTTP 200 zurückfallen (der von PBE-3
+    benannte #1338-Bruch). Diese Zusicherung bleibt gültig, bis eine
+    Design-Entscheidung eine Identität am Proxy-Hop schafft (separat
+    ticketiert, Nic entscheidet) — dann erst darf sie wieder gedreht werden."""
     r = editor_client.get("/controller/app-panel/kueche-01/bearbeiten")
     # Keine 401/403 — Auth ist nicht route-seitig.
     assert r.status_code == 200, \

@@ -22,6 +22,18 @@ sys.path.insert(0, _REPO_ROOT)
 
 from panel import main as panel_main  # noqa: E402
 from panel import registry as registry_mod  # noqa: E402
+from tools.initdata import session_cookie as sc  # noqa: E402
+
+# AUTH-11 (#1834): `GET /api/v1/panels/`, `GET /api/v1/panels/<id>` und
+# `POST /api/v1/panels/` tragen den Dual-Gate — deren Testclients hier
+# brauchen einen gültigen Session-Cookie. `.../config.json`/`.../tiles.json`
+# bleiben ungegated (#1854 "seiten→panel-Proxy trägt keine Identität —
+# blockiert fünf AUTH-11-Routen": laufen live über den PREG-9-Proxy in
+# seiten ohne Cookie, panel/main.py::get_panel_config) — der Cookie schadet
+# ihnen nicht, ist für sie aber nicht die Bedingung. Regressions-Riegel für
+# den ungegateten Zustand: `test_PREG_14_config_und_tiles_json_ohne_cookie_
+# bleiben_200` unten, mit einem eigenen cookie-losen Client.
+_BOT_TOKEN = "123456:ABCdef_panel_test_token"
 
 # ============================================================
 #  Demo-Daten + Fixtures
@@ -58,20 +70,33 @@ def demo_instanz(tmp_path):
 
 @pytest.fixture
 def read_client(demo_instanz):
-    """Lese-Modus: kein `registry_path`, In-Memory. POST liefert hier 503."""
+    """Lese-Modus: kein `registry_path`, In-Memory. POST liefert hier 503.
+
+    AUTH-11 (#1834): der Client trägt einen gültigen Session-Cookie für die
+    gegateten Routen (`GET /api/v1/panels/`, `.../<id>`) — additiv, ändert
+    keine bestehende Zusicherung; für die weiterhin ungegateten
+    `.../config.json`/`.../tiles.json` (s. Kommentar oben) ist er wirkungslos."""
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg)
+    panel_main.configure(reg, bot_token=_BOT_TOKEN)
     panel_main.app.testing = True
-    return panel_main.app.test_client()
+    client = panel_main.app.test_client()
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session("op", _BOT_TOKEN))
+    return client
 
 
 @pytest.fixture
 def write_client(demo_instanz):
-    """Schreib-Modus: `registry_path` gesetzt, POST schreibt auf Disk (PREG-15)."""
+    """Schreib-Modus: `registry_path` gesetzt, POST schreibt auf Disk (PREG-15).
+
+    AUTH-11 (#1834): der Client trägt einen gültigen Session-Cookie — nötig
+    für `POST /api/v1/panels/` (literal `mode="hard"`, AUTH-3.a) und die
+    gegateten Lese-Routen (additiv, ändert keine bestehende Zusicherung)."""
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg, registry_path=demo_instanz)
+    panel_main.configure(reg, registry_path=demo_instanz, bot_token=_BOT_TOKEN)
     panel_main.app.testing = True
-    return panel_main.app.test_client(), demo_instanz
+    client = panel_main.app.test_client()
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session("op", _BOT_TOKEN))
+    return client, demo_instanz
 
 
 # ============================================================
@@ -223,6 +248,37 @@ def test_PREG_14_config_json_unknown_id_404(read_client):
     assert r.status_code == 404
 
 
+def test_PREG_14_config_und_tiles_json_ohne_cookie_bleiben_200(demo_instanz):
+    """AUTH-11 (#1834)/#1854 ("seiten→panel-Proxy trägt keine Identität —
+    blockiert fünf AUTH-11-Routen"): `.../config.json` und `.../tiles.json`
+    bleiben absichtlich UNGEGATED — sie laufen live hinter
+    `seiten._proxy_panel_view` (PREG-9-Proxy, seiten/main.py:2140) ohne
+    Cookie/Header. Ein Gate ließe den Proxy an 401 scheitern und auf den
+    Code-Default zurückfallen (leeres Panel, HTTP 200 — der von PBE-3
+    benannte #1338-Bruch, LKG-Cache In-Memory und nach Neustart leer).
+
+    Regressions-Riegel: bewusst ein eigener, cookie-loser Client (nicht die
+    `read_client`-Fixture, die seit AUTH-11 einen Cookie trägt) — sonst
+    merkt die Suite nicht, falls jemand hier versehentlich wieder ein Gate
+    einzieht (analog `test_pbe1_editor_route_no_auth_layer` für die
+    Editor-Routen, panel/tests/test_panel_editor_seite.py)."""
+    reg = registry_mod.load(demo_instanz)
+    panel_main.configure(reg, bot_token=_BOT_TOKEN)
+    panel_main.app.testing = True
+    cookie_less_client = panel_main.app.test_client()
+
+    r_config = cookie_less_client.get("/api/v1/panels/kueche-01/config.json")
+    assert r_config.status_code == 200, (
+        "#1854: config.json muss ohne Cookie 200 bleiben (PREG-9-Proxy trägt "
+        "keine Identität), got %d" % r_config.status_code
+    )
+    r_tiles = cookie_less_client.get("/api/v1/panels/kueche-01/tiles.json")
+    assert r_tiles.status_code == 200, (
+        "#1854: tiles.json muss ohne Cookie 200 bleiben (PREG-9-Proxy trägt "
+        "keine Identität), got %d" % r_tiles.status_code
+    )
+
+
 # ============================================================
 #  PREG-15 — POST /api/v1/panels/ (Anlegen)
 # ============================================================
@@ -263,11 +319,15 @@ def test_PREG_15_post_nested_query_in_tiles_returns_400(write_client):
 
 
 def test_PREG_15_post_without_registry_path_returns_503(demo_instanz):
-    """Test-Modus (configure ohne registry_path) → POST liefert 503."""
+    """Test-Modus (configure ohne registry_path) → POST liefert 503.
+
+    AUTH-11 (#1834): gültiger Cookie nötig, damit der Request überhaupt am
+    Gate vorbeikommt und die 503-Aussage (kein registry_path) geprüft wird."""
     reg = registry_mod.load(demo_instanz)
-    panel_main.configure(reg)  # kein registry_path
+    panel_main.configure(reg, bot_token=_BOT_TOKEN)  # kein registry_path
     panel_main.app.testing = True
     client = panel_main.app.test_client()
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session("op", _BOT_TOKEN))
     r = client.post("/api/v1/panels/", json={"slug": "neu"})
     assert r.status_code == 503
     assert "error" in r.get_json()
