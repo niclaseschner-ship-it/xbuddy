@@ -116,11 +116,21 @@ def _dual_auth_401():
     return resp
 
 
+# RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md:39-46,
+# Lehre #1427→#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff — der
+# Rückroll-Pfad ist "XBUDDY_AUTH_MODE=observe + Neustart", nicht "PR + Merge +
+# Deploy" (Kill-Kriterium wörtlich: "gepairtes Gerät bekommt nach dem Flip
+# 401 → ENV sofort zurück auf observe"). Form wortgleich zum seiten-Vorbild
+# (seiten/main.py:469); Default hier ist "hard" statt seitens "observe" —
+# Nic-Setzung 2026-08-11 (#1834) betrifft den WERT (panel ist Cookie-hart ab
+# Tag 0), nicht den Mechanismus (dieselbe ENV-Naht, derselbe Rückroll-Pfad).
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
 require_dual_gate = _auth_gate.make_require_dual_gate(
     get_bot_token=_get_bot_token,
     get_client_ip=_client_ip,
     auth_401=_dual_auth_401,
-    default_mode="hard",  # AUTH-11 (#1834, Nic-Setzung 2026-08-11): "hart", nicht "observe".
+    default_mode=_AUTH_MODE,  # ENV-Naht, s.o. — Default "hard".
 )
 
 
@@ -166,14 +176,14 @@ def _aktuelle_registry():
 
 
 @app.route("/api/v1/panels/", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1834): Lesepfad-Ausnahme in PBE-3 ist ÜBERHOLT.
+@require_dual_gate()  # AUTH-11 (#1834): Lesepfad-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panels():
     """PREG-13: alle Panel-Instanzen der Familie als JSON-Array."""
     return jsonify([p.to_dict() for p in _aktuelle_registry().list_all()])
 
 
 @app.route("/api/v1/panels/<panel_id>", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1834): Lesepfad-Ausnahme in PBE-3 ist ÜBERHOLT.
+@require_dual_gate()  # AUTH-11 (#1834): Lesepfad-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panel(panel_id):
     """PREG-14: ein Panel je `panel_id`. Unbekannte id: 404 mit JSON-Fehler."""
     p = _aktuelle_registry().get(panel_id)
@@ -183,7 +193,7 @@ def get_panel(panel_id):
 
 
 @app.route("/api/v1/panels/<panel_id>/config.json", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1834): Lesepfad-Ausnahme in PBE-3 ist ÜBERHOLT.
+@require_dual_gate()  # AUTH-11 (#1834): Lesepfad-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panel_config(panel_id):
     """PREG-14: das `config`-Feld als eigenständiges JSON-Dokument (PANEL-8).
 
@@ -196,7 +206,7 @@ def get_panel_config(panel_id):
 
 
 @app.route("/api/v1/panels/<panel_id>/tiles.json", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1834): Lesepfad-Ausnahme in PBE-3 ist ÜBERHOLT.
+@require_dual_gate()  # AUTH-11 (#1834): Lesepfad-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panel_tiles(panel_id):
     """PREG-14: das `tiles`-Feld als eigenständiges JSON-Dokument (PANEL-3).
 
@@ -343,7 +353,7 @@ def _send_editor_static(panel_id, filename, mimetype):
 
 
 @app.route("/controller/app-panel/<panel_id>/bearbeiten", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1834): PBE-3-Ausnahme ist ÜBERHOLT.
+@require_dual_gate()  # AUTH-11 (#1834): PBE-3-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panel_editor(panel_id):
     """PBE-1/PBE-2: Editor-Seite je Panel-Instanz.
 
@@ -376,21 +386,21 @@ def get_panel_editor(panel_id):
 
 
 @app.route("/controller/app-panel/<panel_id>/bearbeiten.js", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1834): PBE-3-Ausnahme ist ÜBERHOLT.
+@require_dual_gate()  # AUTH-11 (#1834): PBE-3-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panel_editor_js(panel_id):
     """PBE-1: Editor-JS-Bundle (statisch). 404 bei unbekannter panel_id."""
     return _send_editor_static(panel_id, "bearbeiten.js", "application/javascript")
 
 
 @app.route("/controller/app-panel/<panel_id>/bearbeiten.css", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1834): PBE-3-Ausnahme ist ÜBERHOLT.
+@require_dual_gate()  # AUTH-11 (#1834): PBE-3-Ausnahme ÜBERHOLT; mode=_AUTH_MODE (ENV-Naht).
 def get_panel_editor_css(panel_id):
     """PBE-1: Editor-CSS (statisch). 404 bei unbekannter panel_id."""
     return _send_editor_static(panel_id, "bearbeiten.css", "text/css; charset=utf-8")
 
 
 @app.route("/api/v1/panels/", methods=["POST"])
-@require_dual_gate(mode="hard")  # AUTH-11 (#1834): WRITE, Nic-Setzung 2026-08-11.
+@require_dual_gate()  # AUTH-11 (#1834): WRITE, Nic-Setzung 2026-08-11; mode=_AUTH_MODE (ENV-Naht).
 def post_panel():
     """PREG-15: Panel-Instanz anlegen.
 
