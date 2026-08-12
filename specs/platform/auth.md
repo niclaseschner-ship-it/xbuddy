@@ -280,6 +280,27 @@ enumeriert die oben klassifizierten Routen byte-gleich gegen die realen
 
 *Tickets:* #948, #1321
 
+**[ÜBERHOLT 2026-08-11 — Nic-Setzung, siehe AUTH-11]** Zwei Stellen oben in
+dieser Sektion tragen dieselbe Prämisse fort, die AUTH-11 ausdrücklich
+ausschließt. Erstens der **panel (Schreib-Endpunkt)**-Bullet: „das
+Panel-Display ist ein cookieloses Kiosk-Gerät" (Begründung für die
+ausgeklammerten Lesepfade `GET /api/v1/panels/<panel_id>/tiles`,
+`.../config.json`, PREG-13/14/15) ist genau der Geräte-Ausnahme-Grund, den
+AUTH-11 verbietet („Jedes Gerät, das xbuddy konsumiert, trägt ein
+`xbuddy_session`-Cookie … 'Das Gerät kann kein Cookie' ist deshalb kein
+zulässiger Ausnahme-Grund") — dieselbe Prämisse, bereits zweimal in
+`panel-bearbeiten.md` (PBE-3, PBE-4) markiert. Zweitens die namentliche
+Aussage zu `/display/photo/rahmen`, `/display/kibuddy/frage` und
+`/display/plan/woche`: sie blieben „außerhalb AUTH-3 — ihre
+Funnel-Exposition ist die separate AUTH-7-Frage (Phase 4, V1 nicht
+ratifiziert)". Das gilt für die Gate-Frage nicht mehr — dieselbe Buddy-
+Renderer-Klasse (AUTH-4-Markierung oben, `/display/<buddy>/*`) bekommt einen
+Auth-Decorator (Nic-Setzung 2026-08-11, umgesetzt in #1805 über fünf
+parallele Bau-Stücke). Die AUTH-7-Phase-4-nginx-Map bleibt eine zusätzliche
+Ingress-Schicht, kein Ersatz für den Decorator — beide Panel-Lesepfade und
+die drei genannten `/display/…`-Routen tragen künftig einen Decorator, statt
+über diese Sektion als Geräte- oder Sammel-Ausnahme zu laufen.
+
 ### AUTH-3.a — Soft→Hard-Observe-Leiter beim Route-Rollout (RAT-27 (RATIFIZIERT 2026-07-07))
 
 > **RAT-27 (RATIFIZIERT 2026-07-07).** Diese Klausel wurde mit RAT-27 (#1388,
@@ -762,13 +783,15 @@ auffiel.
 (RAT-32). „Das Gerät kann kein Cookie" ist deshalb kein zulässiger
 Ausnahme-Grund.
 
-**Vorrang vor AUTH-4.** AUTH-4 führt eine Reihe von Routen normativ als
-„antwortet ohne Identitätsprüfung" — für die Gate-Frage gilt das nur noch,
-soweit die Route auch in dieser Klausel namentlich ausgenommen ist. Wo
-AUTH-4 und diese Klausel für dieselbe Route unterschiedliche Antworten
-geben, **sticht AUTH-11**. Eine Route, die AUTH-4 als öffentlich führt, aber
-hier in der Ausnahme-Tabelle nicht namentlich steht, trägt einen Decorator
-(siehe AUTH-4-Markierung dort für die betroffenen Zeilen).
+**Vorrang vor AUTH-3 und AUTH-4.** AUTH-3 und AUTH-4 führen Routen normativ
+als von der Gate-Pflicht ausgenommen bzw. als „antwortet ohne
+Identitätsprüfung" — für die Gate-Frage gilt das nur noch, soweit die Route
+auch in dieser Klausel namentlich ausgenommen ist. Wo AUTH-3 oder AUTH-4 und
+diese Klausel für dieselbe Route unterschiedliche Antworten geben, **sticht
+AUTH-11**. Eine Route, die AUTH-3 von der Gate-Pflicht ausklammert oder die
+AUTH-4 als öffentlich führt, aber hier in der Ausnahme-Tabelle nicht
+namentlich steht, trägt einen Decorator (siehe AUTH-3- bzw.
+AUTH-4-Markierung dort für die betroffenen Zeilen).
 
 **Zulässige Ausnahmen — abschließend.** Nur strukturelle Gründe, bei denen
 das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
