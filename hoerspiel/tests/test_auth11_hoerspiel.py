@@ -11,6 +11,10 @@ Suite verifiziert den hoerspiel-Bau-PR:
   - AC4-Beleg: die Dual-Gate-Routen (/display/hoerspiel/*) verlangen den
     xbuddy_session-Cookie — kein Loopback-Bypass, kein tma (anders als
     require_init_data auf den /api/v1/…-Datenrouten).
+  - ENV-Naht (RAT-32-Nicht-Verhandelbares, Lehre #1427→#1430): der
+    Observe→Hard-Flip laeuft ueber `XBUDDY_AUTH_MODE`, nicht ueber einen
+    hartkodierten Code-Wert — belegt an einer echten Display-Route mit
+    beiden Werten.
 
 Alle Requests laufen ueber echte Flask-Test-Requests gegen die reale
 `hoerspiel.main.app` (entry_path_probe — keine isolierte Decorator-Einheit).
@@ -20,6 +24,8 @@ Lauf: python3 -m pytest hoerspiel/tests/test_auth11_hoerspiel.py -q
 
 from __future__ import annotations
 
+import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -176,4 +182,80 @@ def test_display_routen_mit_cookie_ist_200(client, pfad):
     resp = client.get(pfad, headers=_FREMD_IP_HEADERS)
     assert resp.status_code == 200, (
         "%s muss mit Cookie 200 liefern, got %d" % (pfad, resp.status_code)
+    )
+
+
+# ---------------------------------------------------------------------------
+# ENV-Naht XBUDDY_AUTH_MODE — RAT-32-Nicht-Verhandelbares (Lehre #1427→#1430)
+# ---------------------------------------------------------------------------
+#
+# "der Hard-Flip war hartkodiert, der Revert ein Code-Diff" — der
+# Observe<->Hard-Wechsel MUSS eine Zwei-Wege-Tuer ueber ENV+Neustart sein,
+# nie ein Code-Diff. `_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")`
+# wird EINMAL beim Modul-Import ausgewertet (dieselbe Kausalkette wie ein
+# systemd-restart mit neuem ENV) — der Test simuliert den Neustart per
+# `importlib.reload`, NICHT per Monkeypatch des schon gebauten Decorators
+# (das wuerde nur den Test-Mechanismus pruefen, nicht die echte ENV-Naht).
+#
+# Bewusst OHNE `main_mod.configure()`: die statische Route braucht keinen
+# Bot-Token/Cookie-Zustand fuer den negativen Zweig (kein Bot-Token -> kein
+# gueltiger Cookie moeglich -> beide Modi verhalten sich wie "keine Quelle").
+# Der reload erzeugt eine neue `main_mod.app`-Instanz, die NICHT durch den
+# conftest-Autouse-Cookie-Patch laeuft (der patchte die alte Instanz) — die
+# Requests unten sind deshalb garantiert cookie-los, ohne `delete_cookie`.
+
+
+@pytest.fixture
+def auth_mode_reload_isoliert(monkeypatch):
+    """Reloadet hoerspiel.main mit XBUDDY_AUTH_MODE=<value> und stellt den
+    Ursprungs-Zustand (Env + Modul) danach wieder her, damit nachfolgende
+    Tests in der Suite wieder gegen den Default-("hard")-Bau laufen."""
+    original_env = os.environ.get("XBUDDY_AUTH_MODE")
+
+    def _reload_mit(value):
+        if value is None:
+            monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+        else:
+            monkeypatch.setenv("XBUDDY_AUTH_MODE", value)
+        importlib.reload(main_mod)
+        return main_mod
+
+    yield _reload_mit
+
+    # Env zuerst restaurieren, DANN reloaden — sonst liest der Reload noch
+    # den Test-Wert.
+    if original_env is None:
+        monkeypatch.delenv("XBUDDY_AUTH_MODE", raising=False)
+    else:
+        monkeypatch.setenv("XBUDDY_AUTH_MODE", original_env)
+    importlib.reload(main_mod)
+
+
+def test_auth_mode_env_naht_wirkt_auf_echte_display_route(auth_mode_reload_isoliert):
+    """Belegt beide Werte der ENV-Naht an derselben realen Display-Route
+    (impliziter static-Endpunkt) — kein Unit-Test des Decorators isoliert,
+    sondern der komplette Draht von ENV bis zur Flask-Antwort.
+    """
+    # --- XBUDDY_AUTH_MODE=observe: Grace, keine Quelle -> 200 (kein 401) ---
+    reloaded = auth_mode_reload_isoliert("observe")
+    assert reloaded._AUTH_MODE == "observe"
+    c_observe = reloaded.app.test_client()
+    resp_observe = c_observe.get(
+        "/display/hoerspiel/static/alben.js", headers=_FREMD_IP_HEADERS
+    )
+    assert resp_observe.status_code == 200, (
+        "XBUDDY_AUTH_MODE=observe muss die Display-Route ohne Quelle "
+        "durchlassen (Grace), got %d" % resp_observe.status_code
+    )
+
+    # --- Default (keine ENV gesetzt) = hard: dieselbe Route -> 401 ---
+    reloaded = auth_mode_reload_isoliert(None)
+    assert reloaded._AUTH_MODE == "hard"
+    c_hard = reloaded.app.test_client()
+    resp_hard = c_hard.get(
+        "/display/hoerspiel/static/alben.js", headers=_FREMD_IP_HEADERS
+    )
+    assert resp_hard.status_code == 401, (
+        "Default (kein XBUDDY_AUTH_MODE) muss hard sein -> 401 ohne Quelle, "
+        "got %d" % resp_hard.status_code
     )

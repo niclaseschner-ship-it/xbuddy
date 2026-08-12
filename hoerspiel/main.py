@@ -318,11 +318,23 @@ def _client_ip():
     return request.remote_addr
 
 
+# RAT-32-Nicht-Verhandelbares: der Observe->Hard-Flip laeuft ueber die ENV-Naht
+# XBUDDY_AUTH_MODE, NIEMALS ueber einen hartkodierten Code-Wert (Lehre
+# #1427->#1430: „der Hard-Flip war hartkodiert, der Revert ein Code-Diff").
+# Kill-Kriterium: liefert eine Route einem gepairten Geraet 401, wo es vorher
+# 200 bekam -> ENV sofort zurueck auf observe (Zwei-Wege-Tuer, kein Deploy).
+# Default hier ist "hard" (Nic-Setzung 2026-08-11, auth.md AUTH-3.a-UEBERHOLT)
+# — abweichend vom seiten-Vorbild (Default "observe"), weil hoerspiel erst
+# jetzt (T1833) gegated wird und ohne Observe-Vorlauf startet. Muster:
+# seiten/main.py:469.
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
+
 require_dual_gate = make_require_dual_gate(
     get_bot_token=_get_bot_token,
     get_client_ip=_client_ip,
     auth_401=_auth_401,
-    default_mode="hard",  # Nic-Setzung 2026-08-11 (auth.md AUTH-3.a-UEBERHOLT) — NICHT observe.
+    default_mode=_AUTH_MODE,
 )
 
 
@@ -488,7 +500,7 @@ app = Flask(__name__, static_url_path="/display/hoerspiel/static")
 # einzige Ansatzpunkt ist die View-Funktion nach der App-Erzeugung. Bricht
 # nichts: die Views laden ihr JS/CSS ueber denselben Origin, der Browser
 # schickt denselben Cookie mit.
-app.view_functions["static"] = require_dual_gate(mode="hard")(app.view_functions["static"])
+app.view_functions["static"] = require_dual_gate(mode=_AUTH_MODE)(app.view_functions["static"])
 
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
@@ -499,7 +511,7 @@ register_version(app)
 
 @app.route("/display/hoerspiel/<kind_id>/", methods=["GET"])
 @app.route("/display/hoerspiel/<kind_id>", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
 def display_index_redirect(kind_id: str):
     """#1612: /display/hoerspiel/<kind_id>[/] rendert die Alben-View DIREKT (200).
 
@@ -524,7 +536,7 @@ def display_index_redirect(kind_id: str):
 
 
 @app.route("/display/hoerspiel/<kind_id>/alben", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
 def display_alben(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -1046,7 +1058,7 @@ def shared_assets_rebuild(kind_id: str):
 # ---- Daten-Router (HSP-26 `GET /display/hoerspiel/<kind_id>/data/<sub>`, URL-3a) ----
 
 @app.route("/display/hoerspiel/<kind_id>/data/<path:sub>", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
 def display_data(kind_id: str, sub: str):
     """Liefert Audio-/Cover-Assets aus dem Daten-Bereich aus (HSP-26, URL-3a).
 
