@@ -11,6 +11,10 @@ Endpunkte:
   GET /display/wetter/heute?stage=toddler — Mitwachsen-Stufe (WETTER-4; V1 nur toddler)
   GET /healthz                           — Health-Check (SVC-1)
 
+AUTH-11 (#1844): `/display/wetter/heute` und der implizite
+`/display/wetter/static/<path:filename>`-Endpunkt tragen den AUTH-7b-Dual-Gate
+(`xbuddy_session`-Cookie, hard) — Browser-/Kiosk-Fläche, kein tma-Kontext.
+
 Service-Topologie wie plan/main.py: eine schlanke eigenständige Flask-App, ein
 Geschwister von router/, familie/ und plan/.
 """
@@ -36,7 +40,10 @@ if _REPO_ROOT not in sys.path:
 from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
-from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
+from tools.initdata.auth_gate import (  # noqa: E402
+    make_require_dual_gate,
+    make_require_init_data,
+)
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # Das wetter-Paket wird als Paket importiert, damit die relativen Imports in
@@ -140,6 +147,42 @@ require_init_data = make_require_init_data(
 )
 
 
+# ============================================================
+#  AUTH-11 (#1844): Dual-Gate für die Browser-Fläche /display/wetter/*
+# ============================================================
+# /display/wetter/heute ist eine Kiosk-/Browser-Fläche (Tablet), kein
+# Telegram-Mini-App-Kontext — kein tma-Header, sondern der
+# xbuddy_session-Cookie (AUTH-7b). Bot-Token-Getter und 401-Renderer sind mit
+# require_init_data geteilt (kein zweites Geheimnis, kein zweiter 401-Text).
+
+def _client_ip():
+    """Client-IP fürs AUTH-7-Observe-Log (RAT-32: kein Gate mehr, nur Log)."""
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr
+
+
+# RAT-32 Nicht-Verhandelbar (decisions/RAT-32-auth-cookie-only-hart.md, Lehre
+# #1427→#1430): der Hard-Flip ist eine ENV-Naht, kein Code-Diff — der
+# Rueckroll-Pfad ist "XBUDDY_AUTH_MODE=observe + Neustart", nicht "PR + Merge
+# + Deploy". Form wortgleich zum seiten-Vorbild (seiten/main.py:469); Default
+# hier ist "hard" statt seitens "observe" — Nic-Setzung 2026-08-11 (AUTH-11)
+# betrifft den WERT (Display-Fläche ist Cookie-hart ab Tag 0), nicht den
+# Mechanismus (dieselbe ENV-Naht, derselbe Rückroll-Pfad wie seiten).
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
+require_dual_gate = make_require_dual_gate(
+    get_bot_token=_get_bot_token,
+    get_client_ip=_client_ip,
+    auth_401=_auth_401,
+    default_mode=_AUTH_MODE,
+)
+
+
 def configure(cfg, anbindung, config_path=None, anbindung_factory=None,
               bot_token=None, auth_familie_client=None):
     """Setzt Konfiguration und Wetter-Anbindung (Test-Naht, WETTER-24).
@@ -225,6 +268,12 @@ def _anbindung(cfg):
 # URL-1-Prefixe.
 app = Flask(__name__, static_url_path="/display/wetter/static")
 
+# AUTH-11 (#1844): Flasks impliziter static-Endpunkt trägt keine @app.route-
+# Dekoration — einziger Ansatzpunkt ist die View-Funktion nach der
+# App-Erzeugung. Liefert das echte Wetter-CSS aus, muss also hinter dem Gate
+# stehen wie die Display-View selbst.
+app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
+
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
 register_version(app)
@@ -252,6 +301,7 @@ def _jetzt(cfg):
 
 
 @app.route("/display/wetter/heute", methods=["GET"])
+@require_dual_gate()  # AUTH-11 (#1844): Kiosk-/Browser-Fläche, mode=_AUTH_MODE (ENV-Naht)
 def heute():
     """View `heute` als Diptychon, Stufe `toddler` (WETTER-2, WETTER-4).
 

@@ -26,12 +26,27 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from tools.initdata import session_cookie as sc  # noqa: E402
 from wetter import config as config_mod  # noqa: E402
 from wetter import main as main_mod  # noqa: E402
 from wetter import meteo as meteo_mod  # noqa: E402
 from wetter import render as render_mod  # noqa: E402
 
 TAG = date(2026, 6, 3)
+
+# AUTH-11 (T1844-S2): /display/wetter/heute ist hart Cookie-gated
+# (require_dual_gate(mode="hard")) — kein Loopback-Bypass wie bei
+# require_init_data. Tests, die diese Route treffen, brauchen zusätzlich zum
+# configure()-bot_token einen gültigen xbuddy_session-Cookie (Muster
+# tests/test_auth11_kleine_b.py).
+_AUTH11_BOT_TOKEN = "123456:ABCdef_wettertesttoken"
+_AUTH11_SUBJECT = "tablet-elias-01"
+
+
+def _mit_session_cookie(client, bot_token=_AUTH11_BOT_TOKEN, subject=_AUTH11_SUBJECT):
+    """Setzt einen gültigen xbuddy_session-Cookie auf `client` (AUTH-11)."""
+    client.set_cookie(sc.COOKIE_NAME, sc.sign_session(subject, bot_token))
+    return client
 
 
 def _anbindung(transport, cfg):
@@ -138,8 +153,8 @@ def test_wetter11_kein_uv_im_gerenderten_html(demo_config, make_transport):
     Sonnencreme-Karte zeigt Ja/Nein, nicht den UV-Wert 8."""
     import wetter.main as wm
     t = make_transport(TAG, uv=8.0)
-    wm.configure(demo_config, _anbindung(t, demo_config))
-    client = wm.app.test_client()
+    wm.configure(demo_config, _anbindung(t, demo_config), bot_token=_AUTH11_BOT_TOKEN)
+    client = _mit_session_cookie(wm.app.test_client())
     resp = client.get("/display/wetter/heute")
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
@@ -250,8 +265,9 @@ def test_wetter17_view_funktioniert_bei_ausfall(demo_config):
     import wetter.main as wm
     from wetter.tests.conftest import FakeTransport
     t = FakeTransport(fail=True)
-    wm.configure(demo_config, _anbindung(t, demo_config))
-    resp = wm.app.test_client().get("/display/wetter/heute")
+    wm.configure(demo_config, _anbindung(t, demo_config), bot_token=_AUTH11_BOT_TOKEN)
+    client = _mit_session_cookie(wm.app.test_client())
+    resp = client.get("/display/wetter/heute")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     # Neutraler Zustand: das Fallback-Outfit erscheint (nie leer, WETTER-14).
@@ -448,8 +464,8 @@ def test_wetter12_pack_sicht_ganztaegiger_regen_ohne_probe_treffer(demo_config):
 def client(demo_config, make_transport):
     import wetter.main as wm
     t = make_transport(TAG, code=0, temp=20.0, feels=22.0, uv=6.0)
-    wm.configure(demo_config, _anbindung(t, demo_config))
-    return wm.app.test_client()
+    wm.configure(demo_config, _anbindung(t, demo_config), bot_token=_AUTH11_BOT_TOKEN)
+    return _mit_session_cookie(wm.app.test_client())
 
 
 def test_healthz_gibt_200(client):
@@ -510,8 +526,9 @@ def test_wetter7_hero_enthaelt_haus_szene(demo_config, make_transport):
     Inline-SVG mit Haus — kein ARASAAC-Piktogramm für den Wetter-Zustands-Hero."""
     import wetter.main as wm
     t = make_transport(TAG, code=0, temp=20.0, feels=20.0, uv=2.0)
-    wm.configure(demo_config, _anbindung(t, demo_config))
-    resp = wm.app.test_client().get("/display/wetter/heute")
+    wm.configure(demo_config, _anbindung(t, demo_config), bot_token=_AUTH11_BOT_TOKEN)
+    client = _mit_session_cookie(wm.app.test_client())
+    resp = client.get("/display/wetter/heute")
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
     # Die hero-szene enthält ein Inline-SVG mit dem Haus-Macro (erkennbar an
@@ -528,8 +545,9 @@ def test_wetter7_kein_arasaac_hero_piktogramm(demo_config, make_transport):
     es nicht mehr."""
     import wetter.main as wm
     t = make_transport(TAG, code=0, temp=20.0, feels=20.0, uv=2.0)
-    wm.configure(demo_config, _anbindung(t, demo_config))
-    resp = wm.app.test_client().get("/display/wetter/heute")
+    wm.configure(demo_config, _anbindung(t, demo_config), bot_token=_AUTH11_BOT_TOKEN)
+    client = _mit_session_cookie(wm.app.test_client())
+    resp = client.get("/display/wetter/heute")
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
     # hero_pikto darf nicht im Markup erscheinen.
@@ -549,8 +567,9 @@ def test_wetter8_gefuehlte_temp_als_zahl_im_html(demo_config, make_transport):
     View (hero-temp), nicht nur als Bezeichnung."""
     import wetter.main as wm
     t = make_transport(TAG, temp=22.0, feels=17.0, uv=2.0)
-    wm.configure(demo_config, _anbindung(t, demo_config))
-    resp = wm.app.test_client().get("/display/wetter/heute")
+    wm.configure(demo_config, _anbindung(t, demo_config), bot_token=_AUTH11_BOT_TOKEN)
+    client = _mit_session_cookie(wm.app.test_client())
+    resp = client.get("/display/wetter/heute")
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
     # Die gefühlte Temp (17) erscheint in der hero-temp div.
@@ -575,8 +594,9 @@ def test_wetter9_spektrum_marker_vorhanden(demo_config, make_transport):
     neutrales Gesicht, Sonne, Schweiß/Hitze) sitzen im Spektrum-Balken."""
     import wetter.main as wm
     t = make_transport(TAG, code=0, temp=20.0, feels=20.0, uv=2.0)
-    wm.configure(demo_config, _anbindung(t, demo_config))
-    resp = wm.app.test_client().get("/display/wetter/heute")
+    wm.configure(demo_config, _anbindung(t, demo_config), bot_token=_AUTH11_BOT_TOKEN)
+    client = _mit_session_cookie(wm.app.test_client())
+    resp = client.get("/display/wetter/heute")
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
     # Der Spektrum-Marker-Block ist vorhanden.
