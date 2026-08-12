@@ -1,20 +1,26 @@
-"""AUTH-11 — Rueck-Verriegelung der hoerspiel-URL-Map (T1833, #1805).
+"""AUTH-11 — Rueck-Verriegelung der hoerspiel-URL-Map (T1833/#1805, T1857/#1857).
 
 specs/platform/auth.md AUTH-11: jede Route in `app.url_map` traegt entweder
 einen Auth-Decorator, oder sie steht namentlich in der Ausnahme-Liste. Diese
 Suite verifiziert den hoerspiel-Bau-PR:
 
-  - AC1: die URL-Map ist die Messbasis (nicht der Quelltext) — deckt auch den
-    impliziten Flask-static-Endpunkt ab, der keine @app.route-Dekoration hat.
-  - AC2: POST .../shared-assets/rebuild (schreibend) → 401 ohne Identitaet.
-  - AC3: .../bible und .../folgen-historie → 401 ohne Identitaet.
-  - AC4-Beleg: die Dual-Gate-Routen (/display/hoerspiel/*) verlangen den
-    xbuddy_session-Cookie — kein Loopback-Bypass, kein tma (anders als
+  - AC1 (T1833): die URL-Map ist die Messbasis (nicht der Quelltext) — deckt
+    auch den impliziten Flask-static-Endpunkt ab, der keine @app.route-
+    Dekoration hat.
+  - AC2 (T1833): POST .../shared-assets/rebuild (schreibend) → 401 ohne
+    Identitaet.
+  - AC3 (T1833): .../bible und .../folgen-historie → 401 ohne Identitaet.
+  - AC4-Beleg (T1833): die Dual-Gate-Routen (/display/hoerspiel/*) verlangen
+    den xbuddy_session-Cookie — kein Loopback-Bypass, kein tma (anders als
     require_init_data auf den /api/v1/…-Datenrouten).
-  - ENV-Naht (RAT-32-Nicht-Verhandelbares, Lehre #1427→#1430): der
+  - ENV-Naht (T1833, RAT-32-Nicht-Verhandelbares, Lehre #1427→#1430): der
     Observe→Hard-Flip laeuft ueber `XBUDDY_AUTH_MODE`, nicht ueber einen
     hartkodierten Code-Wert — belegt an einer echten Display-Route mit
     beiden Werten.
+  - AC1/AC2 (T1857, Fix-Nachtrag): /display/hoerspiel/static/manifest.
+    webmanifest antwortet OHNE Identitaet 200 (credential-loses PWA-Manifest,
+    #1437-Regressionsklasse) — die Ausnahme ist eng: Nachbar-Assets
+    (alben.css, alben.js) unter demselben Static-Namensraum bleiben gegatet.
 
 Alle Requests laufen ueber echte Flask-Test-Requests gegen die reale
 `hoerspiel.main.app` (entry_path_probe — keine isolierte Decorator-Einheit).
@@ -40,7 +46,12 @@ from tools.initdata import session_cookie as sc  # noqa: E402
 
 # AUTH-11-Ausnahmen (specs/platform/auth.md, Ausnahme-Tabelle, woertlich):
 # "/healthz (je Service), /version" — Ueberwachung fragt vor jeder Anmeldung.
-_AUTH11_AUSNAHME_ENDPOINTS = {"healthz", "version"}
+# "hoerspiel_manifest_public" (T1857/#1857, Fix-Nachtrag, Zeile fuer
+# specs/platform/auth.md folgt separat vom Orchestrator — specs/ ist fuer
+# diesen Track gesperrt): /display/hoerspiel/static/manifest.webmanifest,
+# von alben.html OHNE crossorigin="use-credentials" verlinkt — der Browser
+# holt es per Fetch-Spec credential-los, bei jedem Seitenladen.
+_AUTH11_AUSNAHME_ENDPOINTS = {"healthz", "version", "hoerspiel_manifest_public"}
 
 # Fremd-IP (nicht Loopback, nicht Operator-CIDR) — deckt sowohl den
 # require_init_data-Loopback-Bypass als auch (defensiv) den require_dual_gate-
@@ -183,6 +194,65 @@ def test_display_routen_mit_cookie_ist_200(client, pfad):
     assert resp.status_code == 200, (
         "%s muss mit Cookie 200 liefern, got %d" % (pfad, resp.status_code)
     )
+
+
+# ---------------------------------------------------------------------------
+# T1857/#1857 — PWA-Manifest ist die EINZIGE Ausnahme im Static-Namensraum
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_webmanifest_ohne_identitaet_ist_200(client):
+    """AC1 (T1857): /display/hoerspiel/static/manifest.webmanifest antwortet
+    OHNE jede Auth-Quelle mit 200 — der Browser holt PWA-Manifeste
+    credential-los (Fetch-Spec), bei JEDEM Seitenladen. Ohne diese Ausnahme
+    bekaeme ein gepairter Kiosk 401 auf sein Manifest bei jedem Laden von
+    /display/hoerspiel/<kind_id>/alben (#1437-Regressionsklasse)."""
+    client.delete_cookie(sc.COOKIE_NAME)
+    resp = client.get(
+        "/display/hoerspiel/static/manifest.webmanifest", headers=_FREMD_IP_HEADERS
+    )
+    assert resp.status_code == 200, (
+        "Manifest muss ohne Identitaet 200 liefern, got %d" % resp.status_code
+    )
+    body = resp.get_json()
+    assert body is not None, "Manifest-Route muss JSON liefern"
+    assert body.get("name") == "Hörspiel", (
+        "Manifest-Route muss das echte manifest.webmanifest ausliefern"
+    )
+
+
+@pytest.mark.parametrize("pfad", [
+    "/display/hoerspiel/static/alben.css",
+    "/display/hoerspiel/static/alben.js",
+])
+def test_static_nachbar_assets_bleiben_gegatet(client, pfad):
+    """AC2 (T1857): die Manifest-Ausnahme ist so eng wie noetig — die
+    Nachbar-Assets im selben Static-Namensraum (CSS/JS) bleiben ohne
+    Identitaet weiterhin 401, obwohl sie ueber denselben impliziten
+    Flask-static-Endpunkt ausgeliefert werden."""
+    client.delete_cookie(sc.COOKIE_NAME)
+    resp = client.get(pfad, headers=_FREMD_IP_HEADERS)
+    assert resp.status_code == 401, (
+        "%s muss weiterhin ohne Identitaet 401 liefern (Ausnahme ist nur "
+        "das Manifest), got %d" % (pfad, resp.status_code)
+    )
+
+
+def test_manifest_route_gewinnt_vor_generischem_static_catch_all(client):
+    """AC2-Beleg (T1857): Werkzeug matcht den literalen Manifest-Pfad IMMER
+    vor dem generischen <path:filename>-Catch-all des impliziten
+    static-Endpunkts — die dedizierte Route greift, nicht der gegatete
+    Fallback (Muster kibuddy/main.py, Watchdog-verifiziert)."""
+    for rule in main_mod.app.url_map.iter_rules():
+        if rule.rule == "/display/hoerspiel/static/manifest.webmanifest":
+            assert rule.endpoint == "hoerspiel_manifest_public", (
+                "Der literale Manifest-Pfad muss auf die dedizierte "
+                "public-Route matchen, nicht auf den generischen "
+                "static-Catch-all (endpoint=%r)" % rule.endpoint
+            )
+            break
+    else:
+        pytest.fail("Keine url_map-Regel fuer /display/hoerspiel/static/manifest.webmanifest")
 
 
 # ---------------------------------------------------------------------------

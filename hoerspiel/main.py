@@ -502,6 +502,40 @@ app = Flask(__name__, static_url_path="/display/hoerspiel/static")
 # schickt denselben Cookie mit.
 app.view_functions["static"] = require_dual_gate(mode=_AUTH_MODE)(app.view_functions["static"])
 
+# AUTH-11-Ausnahme (Fix-Nachtrag #1857, Watchdog-Befund auf T1833/#1805): der
+# generische Static-Gate-Tausch oben faengt AUCH das PWA-Manifest ab.
+# `alben.html:12` traegt `<link rel="manifest" href="/display/hoerspiel/
+# static/manifest.webmanifest">` OHNE `crossorigin="use-credentials"` — der
+# Browser holt das Manifest per Fetch-Spec credential-los, bei JEDEM
+# Seitenladen (nicht nur bei der Erst-Installation). Ein gepairter
+# Kind-Tablet-Kiosk bekaeme sonst 401 auf sein Manifest bei jedem Laden (die
+# #1437-Regressionsklasse, die auth.md AUTH-4 fuer genau diesen Fall
+# dokumentiert: „credential-los per Fetch-Spec").
+#
+# Geprueft (AC3, #1857): kein Favicon, kein apple-touch-icon, kein
+# Service-Worker unter /display/hoerspiel/static/ — nur das Manifest selbst
+# ist credential-los referenziert. Die drei PNG-Icon-Dateien in
+# hoerspiel/static/ (icon-192.png, icon-512.png, icon-maskable-512.png) sind
+# NICHT im Manifest verlinkt (das Manifest zeigt auf
+# /display/_shared/icons/arasaac/5915.png — bereits ratifizierte
+# AUTH-11-Ausnahme) und in keinem Template/JS referenziert — sie bleiben
+# ungenutzt hinter dem generischen Static-Gate. eltern.html/player.html
+# haengen an /seiten/hoerspiel/… (separater seiten-Dienst, out of scope hier).
+#
+# Eigene, explizite Route statt einer Bedingung im Wrapper: Werkzeug matcht
+# einen literalen Pfad IMMER vor dem generischen `<path:filename>`-Catch-all
+# des impliziten Static-Endpunkts, unabhaengig von der Registrierungs-
+# reihenfolge — die Route unten greift vor dem gegateten Fallback (Muster
+# kibuddy/main.py:405-450, Watchdog-verifiziert inkl. Traversal-Proben).
+# KEIN Pfad-Parameter: der Dateiname ist eine Konstante im Handler, Traversal
+# ist damit strukturell unmoeglich.
+
+
+@app.route("/display/hoerspiel/static/manifest.webmanifest", methods=["GET"])
+def hoerspiel_manifest_public():
+    """Oeffentliches PWA-Manifest (kein Gate, AUTH-11-Ausnahme s.o.)."""
+    return send_from_directory(app.static_folder, "manifest.webmanifest")
+
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
 register_version(app)
