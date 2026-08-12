@@ -808,6 +808,9 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/display/_shared/design/<path:asset>`, `/display/_shared/icons/<path:asset>` | 7b-Public-Ausnahme aus AUTH-7: die Views laden Design-Tokens und Icons als Asset; mit Gate bleiben sie leer. Seit dem Router-Tod von `seiten` ausgeliefert (RAT-31 E6f, #1568). |
 | `/api/v1/seiten/static/<path:filename>` | Flasks impliziter Static-Endpoint (`static_url_path`, `seiten/main.py:330`) liefert das JS jeder Mini-App aus — genau das Skript, das den `tma`-Header überhaupt erst erzeugt. AUTH-4 führt den Pfad nur als Sammel-Eintrag (`/api/v1/seiten/static/*`); diese Zeile macht ihn namentlich. |
 | `/api/v1/init-data/validate` | Nur per POST erreichbar. Die Adresse, an der die Identität geprüft wird (`seiten/main.py:536`). Sie validiert selbst per HMAC (AUTH-4) und kann folglich nicht hinter dem Ergebnis ihrer eigenen Prüfung liegen. |
+| `/display/kibuddy/static/manifest.webmanifest` | `kibuddy/templates/frage.html:15` lädt das Manifest ohne `crossorigin="use-credentials"` — per Fetch-Spec credential-los. Gegatet bekäme ein gepairtes Gerät bei jedem Laden 401 auf sein Manifest; keine Installation (gleiche Klasse wie `/shell/<panel_id>/manifest.json`). |
+| `/display/kibuddy/static/icons/icon-192.png` | Vom Manifest referenziertes Icon (`kibuddy/static/manifest.webmanifest`); der WebAPK-Installer holt Manifest-Icons **credential-los** — mit Gate schlägt die Installation fehl (gleiche Klasse wie `/shell/<panel_id>/<path:asset>`, #1437). |
+| `/display/kibuddy/static/icons/icon-512.png` | Zweites vom Manifest referenziertes Icon, gleiche Begründung wie `icon-192.png` oben. |
 
 Die Asset-Zeilen oben (Manifest, Service-Worker, Icon-/Design-Assets sowie
 die beiden Bootstrap-Zeilen `/api/v1/seiten/static/<path:filename>` und
