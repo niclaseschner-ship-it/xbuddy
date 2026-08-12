@@ -627,6 +627,43 @@ für den Telegram-Fall, bevor sie gaten können. Bis dahin sind sie hier
 geführt, nicht in AUTH-11s Ausnahme-Tabelle — eine Ausnahme wäre eine
 Entscheidung, dies ist eine offene Frage mit Verfallsdatum.
 
+**Fünf ungegatete panel-Routen — PREG-9-Proxy ohne Identität (#1834).**
+`seiten` proxyt Panel-Lesepfad und Editor-Seite mit einem nackten
+`urllib.request.Request(url, method="GET")` **ohne Header** an den
+panel-Service (`_proxy_panel_view` und `_proxy_panel_bearbeiten`,
+`seiten/main.py`) — der Proxy-Aufrufer ist ein Python-Prozess, kein Gerät,
+und trägt deshalb strukturell keinen Cookie. Der ÜBERHOLT-Marker, der die
+„cookieloses Kiosk-Gerät"-Prämisse in AUTH-3/`panel-bearbeiten.md`
+widerlegt, trägt hier **nicht**: er widerlegt nur die Geräte-Prämisse, nicht
+den fehlenden Identitäts-Transport am Proxy-Hop selbst. Ein Gate auf den
+fünf `panel`-Routen unten würde dem Proxy `401` liefern; für die
+Lesepfade fängt `_proxy_panel_view` das als „Service nicht erreichbar" ab
+und fällt auf den LKG-/Code-Default zurück — der Kiosk zeigte ein leeres
+Panel, ohne sichtbar zu scheitern (Watchdog-Live-Reproduktion: `config.json`
+und `tiles.json` antworteten `200` mit leerem Body statt `401`); für die
+drei `bearbeiten*`-Routen liefert `_proxy_panel_bearbeiten` `502` (kein LKG).
+Das ist wörtlich der in PBE-3 benannte #1338-Bruch, nur am Proxy-Hop statt
+am Gerät.
+
+```
+/api/v1/panels/<panel_id>/config.json         (Trigger: #1854 Proxy-Abschaffung)
+/api/v1/panels/<panel_id>/tiles.json          (Trigger: #1854 Proxy-Abschaffung)
+/controller/app-panel/<panel_id>/bearbeiten       (Trigger: #1854 Proxy-Abschaffung)
+/controller/app-panel/<panel_id>/bearbeiten.js    (Trigger: #1854 Proxy-Abschaffung)
+/controller/app-panel/<panel_id>/bearbeiten.css   (Trigger: #1854 Proxy-Abschaffung)
+```
+
+**Trigger #1854:** Nic-Entscheid 2026-08-12 — der PREG-9-Proxy soll
+**abgeschafft** werden („was wir nicht mehr brauchen sollte weg"),
+abgesichert durch eine Berater-Runde. Der Trigger ist deshalb die
+Abschaffung selbst, nicht „Proxy trägt Cookie": eine Identität am
+Proxy-Hop nachzurüsten wäre eine zweite, konkurrierende Lösung für ein
+Bauteil, das ohnehin wegsoll. Fällt der Proxy, laufen die fünf Routen
+entweder direkt gegen den panel-Service (dann mit Factory-Decorator wie
+jede AUTH-3-Route) oder der Aufruf entfällt mit dem Proxy selbst. Bis dahin
+sind sie hier geführt, nicht in AUTH-11s Ausnahme-Tabelle — eine Ausnahme
+wäre eine Entscheidung, dies ist eine offene Frage mit Verfallsdatum.
+
 **familie-Datenrouten sind KEIN AUTH-6-Migrations-Backlog (RAT-32-Amendment, #1638).**
 `/api/v1/familie/personen*` und `/api/v1/familie/foto/*` tragen keinen Defer-Trigger
 mehr: `familie` ist ein RAT-31-Abriss-Ziel — es kommt keine extern erreichbare
@@ -860,10 +897,12 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/seiten/wetter/regeln/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["wetter-regeln"].icons`, `seiten/pwa_mantel.py:455`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
 | `/seiten/wetter/regeln/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/seiten/wetter/regeln/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/wetter/regeln/wetter-regeln.css` | Einziges Nicht-Manifest-/Nicht-Icon-Asset, das eine der fünf Eltern-Shells über die gegatete `<path:asset>`-Route lädt (`seiten/templates/wetter-regeln.html:11`; `wetter_regeln_asset_view`, `seiten/main.py:1387`) — die anderen vier ziehen ihr CSS/JS aus dem ungegateten impliziten Static (AUTH-11-Ausnahme). Die Shell selbst steht als AUTH-6-Schuldstand offen (Trigger #1859); bliebe das Stylesheet gegatet, lüde die Fläche als unformatiertes HTML — Shell und Pflicht-Asset müssen dieselbe Auth-Antwort geben. |
 | `/seiten/hoerspiel/<kind_id>/eltern/manifest.json` | Ausgeliefert über den ungegateten `hoerspiel_eltern_asset_view` (`seiten/main.py:1285`); Icon-Set aus `REGISTRY["hoerspiel-eltern"].icons` (`seiten/pwa_mantel.py:477`). „SW/manifest: credential-los" (`seiten/main.py:1204`, `:1293`). |
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["hoerspiel-eltern"].icons`, `seiten/pwa_mantel.py:477`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/display/hoerspiel/static/manifest.webmanifest` | Seit #1858 über eine dedizierte Route ausgeliefert (`hoerspiel/main.py:534`), NICHT über den generischen (jetzt gegateten) Static-Endpoint. `hoerspiel/templates/alben.html:12` lädt das Manifest ohne `crossorigin="use-credentials"` — credential-los per Fetch-Spec, gleiche Klasse wie die `kibuddy`-Zeilen oben. Die drei PNG-Icons unter `/display/hoerspiel/static/` bleiben ungenutzt hinter dem generischen Static-Gate (kein Template/JS referenziert sie; das Manifest zeigt auf `/display/_shared/icons/arasaac/5915.png`, bereits ratifizierte Ausnahme) — sie brauchen keine eigene Zeile. |
 
 Die Asset-Zeilen oben (Manifest, Service-Worker, Icon-/Design-Assets sowie
 die beiden Bootstrap-Zeilen `/api/v1/seiten/static/<path:filename>` und
