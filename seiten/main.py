@@ -678,7 +678,7 @@ def auth_pair():
 
 
 @app.route("/seiten/essen/einkauf/", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet):
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859):
 # der echte Entry-Point ist ein Telegram-web_app-Button
 # (eltern-chat/skills/einkauf_zeigen.py:112). require_dual_gate ist seit
 # RAT-32 cookie-only OHNE tma-Zweig (tools/initdata/auth_gate.py:284); MAD-11
@@ -701,7 +701,7 @@ def essen_einkauf_view_trailing_slash():
 
 
 @app.route("/seiten/essen/einkauf", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe: siehe Kommentar an
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
 # essen_einkauf_view_trailing_slash oben (dieselbe Begruendung, derselbe
 # Telegram-web_app-Entry-Point, dieselbe offene Nic-Probe).
 def essen_einkauf_view():
@@ -850,20 +850,19 @@ def einkauf_asset_view(asset):
 
     manifest.json/icons statisch aus seiten/static/einkauf/, sw.js aus der
     committed Datei mit build_id-Substitution (ESSEN-35-Cache-Versionierung).
+
+    Delegiert an `_einkauf_public_asset` (Watchdog-Fix, T1832-S1): EIN
+    Dispatch-Pfad fuer gegatete UND public Adressen, kein zweiter Kopf, der
+    von diesem hier abdriften koennte.
     """
-    return serve_mantel_asset(
-        asset,
-        asset_root=_einkauf_asset_root(),
-        mime_map=_EINKAUF_MIME,
-        special=_mantel_special_disk_sw(
-            _einkauf_asset_root(), _current_build_id(), _EINKAUF_MIME),
-    )
+    return _einkauf_public_asset(asset)
 
 
 def _einkauf_public_asset(asset):
-    """Woertlich derselbe Dispatch wie einkauf_asset_view — nur ohne Gate
-    (s. u.). Geteilt statt dupliziert, damit die vier Public-Routen nicht von
-    der gegateten Fassung abdriften koennen."""
+    """Der eine Dispatch-Pfad fuer alle einkauf-Assets (gegated UND public,
+    Watchdog-Fix T1832-S1). `einkauf_asset_view` (gegated, sw.js u. a.) und
+    die vier Public-Routen (manifest.json/icon-*.png, s. u.) rufen exakt
+    diese Funktion — nichts ist dupliziert, nichts kann abdriften."""
     return serve_mantel_asset(
         asset,
         asset_root=_einkauf_asset_root(),
@@ -944,7 +943,7 @@ def _plan_einst_build_id():
 
 
 @app.route("/seiten/plan/einstellungen/", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): die
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): die
 # Flaeche ist in plan/views.json als typ:"pwa"/zielgruppe:"eltern" gelistet
 # und wird ueber die Mini-App-Uebersicht (mini_app_uebersicht_view, aggregiert
 # aus /api/v1/seiten) als Telegram-web_app-Kachel angeboten — derselbe
@@ -964,7 +963,7 @@ def plan_einstellungen_view_trailing_slash():
 
 
 @app.route("/seiten/plan/einstellungen", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe: siehe Kommentar an
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
 # plan_einstellungen_view_trailing_slash oben.
 def plan_einstellungen_view():
     """PLAN-35: Plan-Einstellungs-PWA — HTML-Render-Route.
@@ -990,19 +989,16 @@ def plan_einstellungen_asset_view(asset):
 
     manifest.json/icons statisch, sw.js aus der committed Datei mit
     build_id-Substitution (PLAN-35 Cache-Versionierung).
+
+    Delegiert an `_plan_einst_public_asset` (Watchdog-Fix, T1832-S1): EIN
+    Dispatch-Pfad fuer gegatete UND public Adressen, analog einkauf.
     """
-    return serve_mantel_asset(
-        asset,
-        asset_root=_plan_einst_asset_root(),
-        mime_map=_PLAN_EINST_MIME,
-        special=_mantel_special_disk_sw(
-            _plan_einst_asset_root(), _plan_einst_build_id(), _PLAN_EINST_MIME),
-    )
+    return _plan_einst_public_asset(asset)
 
 
 def _plan_einst_public_asset(asset):
-    """Woertlich derselbe Dispatch wie plan_einstellungen_asset_view — nur
-    ohne Gate (s. u.), analog _einkauf_public_asset."""
+    """Der eine Dispatch-Pfad fuer alle plan-Assets (gegated UND public,
+    Watchdog-Fix T1832-S1), analog _einkauf_public_asset."""
     return serve_mantel_asset(
         asset,
         asset_root=_plan_einst_asset_root(),
@@ -1159,7 +1155,7 @@ def connector_sw_view():
 
 
 @app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): der
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): der
 # echte Entry-Point ist ein Telegram-web_app-Button
 # (eltern-chat/skills/seiten_uebersicht.py:88, web_app_url). require_dual_gate
 # ist seit RAT-32 cookie-only OHNE tma-Zweig
@@ -1196,7 +1192,7 @@ def mini_app_uebersicht_view():
 
 
 @app.route("/seiten/routine/anpassen/", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): der
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): der
 # echte Entry-Point ist ein Telegram-web_app-Button
 # (eltern-chat/skills/routine_anpassen_oeffnen.py:84). Begruendung wortgleich
 # zu essen_einkauf_view_trailing_slash oben (require_dual_gate cookie-only
@@ -1212,7 +1208,7 @@ def routine_anpassen_view_trailing_slash():
 
 
 @app.route("/seiten/routine/anpassen", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe: siehe Kommentar an
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
 # routine_anpassen_view_trailing_slash oben.
 def routine_anpassen_view():
     """ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View (T1665: PWA-Mantel).
@@ -1299,20 +1295,16 @@ def routine_anpassen_asset_view(asset):
     - manifest.json → pwa_mantel.build_manifest(REGISTRY['routine']) (PWML-1).
     - sw.js         → pwa_mantel.render_sw('routine', build_id) (PWML-2), no-store.
     - icon-*.png    → statisch aus seiten/static/routine/ mit realpath-Traversal-Guard.
+
+    Delegiert an `_routine_anpassen_public_asset` (Watchdog-Fix, T1832-S1):
+    EIN Dispatch-Pfad fuer gegatete UND public Adressen, analog einkauf.
     """
-    cfg = pwa_mantel.REGISTRY["routine"]
-    return serve_mantel_asset(
-        asset,
-        asset_root=_routine_anpassen_asset_root(),
-        mime_map=_ROUTINE_ANPASSEN_MIME,
-        special=_mantel_special_generated(
-            cfg, "routine", _routine_anpassen_build_id()),
-    )
+    return _routine_anpassen_public_asset(asset)
 
 
 def _routine_anpassen_public_asset(asset):
-    """Woertlich derselbe Dispatch wie routine_anpassen_asset_view — nur ohne
-    Gate (s. u.). manifest.json kommt aus der Lib (pwa_mantel.build_manifest),
+    """Der eine Dispatch-Pfad fuer alle routine-Assets (gegated UND public,
+    Watchdog-Fix T1832-S1). manifest.json kommt aus der Lib (pwa_mantel.build_manifest),
     Icons statisch aus seiten/static/routine/."""
     cfg = pwa_mantel.REGISTRY["routine"]
     return serve_mantel_asset(
@@ -1366,7 +1358,7 @@ def _wetter_regeln_build_id():
 
 
 @app.route("/seiten/wetter/regeln/", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): der
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): der
 # echte Entry-Point ist ein Telegram-web_app-Button
 # (eltern-chat/skills/wetter_regeln_oeffnen.py:84). Begruendung wortgleich
 # zu essen_einkauf_view_trailing_slash oben (require_dual_gate cookie-only
@@ -1378,7 +1370,7 @@ def wetter_regeln_view_trailing_slash():
 
 
 @app.route("/seiten/wetter/regeln", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe: siehe Kommentar an
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
 # wetter_regeln_view_trailing_slash oben.
 def wetter_regeln_view():
     """#1715 (ESB-1.a): HTML-Shell des Garderoben-Editors (MAD-7: public, JS
@@ -1393,20 +1385,17 @@ def wetter_regeln_view():
 @app.route("/seiten/wetter/regeln/<path:asset>", methods=["GET"])
 @require_dual_gate(mode=_AUTH_MODE)
 def wetter_regeln_asset_view(asset):
-    """PWA-Mantel-Assets: manifest.json/sw.js aus der Lib, css/icons statisch."""
-    cfg = pwa_mantel.REGISTRY["wetter-regeln"]
-    return serve_mantel_asset(
-        asset,
-        asset_root=_wetter_regeln_asset_root(),
-        mime_map=_WETTER_REGELN_MIME,
-        special=_mantel_special_generated(
-            cfg, "wetter-regeln", _wetter_regeln_build_id()),
-    )
+    """PWA-Mantel-Assets: manifest.json/sw.js aus der Lib, css/icons statisch.
+
+    Delegiert an `_wetter_regeln_public_asset` (Watchdog-Fix, T1832-S1): EIN
+    Dispatch-Pfad fuer gegatete UND public Adressen, analog einkauf.
+    """
+    return _wetter_regeln_public_asset(asset)
 
 
 def _wetter_regeln_public_asset(asset):
-    """Woertlich derselbe Dispatch wie wetter_regeln_asset_view — nur ohne
-    Gate (s. u.)."""
+    """Der eine Dispatch-Pfad fuer alle wetter-regeln-Assets (gegated UND
+    public, Watchdog-Fix T1832-S1)."""
     cfg = pwa_mantel.REGISTRY["wetter-regeln"]
     return serve_mantel_asset(
         asset,
@@ -1437,6 +1426,19 @@ def wetter_regeln_icon_512_public():
 @app.route("/seiten/wetter/regeln/icon-maskable-512.png", methods=["GET"])
 def wetter_regeln_icon_maskable_public():
     return _wetter_regeln_public_asset("icon-maskable-512.png")
+
+
+# Watchdog-Fix (zweite Runde, T1832-S1): wetter-regeln.css ist das EINZIGE
+# Nicht-Manifest-/Nicht-Icon-/Nicht-sw.js-Asset, das eine der fuenf Shells
+# ueber die gegatete <path:asset>-Route laedt (wetter-regeln.html:11) — die
+# anderen vier ziehen ihr CSS/JS aus dem ungegateten /api/v1/seiten/static/…
+# (Flask-implizitem Static, AUTH-11-Ausnahme). Solange offen ist (#1859), ob
+# die Telegram-WebView den xbuddy_session-Cookie traegt, muss die Shell
+# UND ihre Pflicht-Assets dieselbe Auth-Antwort geben — sonst laedt die
+# Flaeche als unformatiertes HTML. Public bis die Probe vorliegt.
+@app.route("/seiten/wetter/regeln/wetter-regeln.css", methods=["GET"])
+def wetter_regeln_css_public():
+    return _wetter_regeln_public_asset("wetter-regeln.css")
 
 
 # ============================================================
@@ -1494,7 +1496,7 @@ def _hoerspiel_eltern_build_id():
 
 
 @app.route("/seiten/hoerspiel/<kind_id>/eltern", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): die
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): die
 # Flaeche ist in hoerspiel/views.json als typ:"pwa"/auth:"tma"/
 # zielgruppe:"eltern" gelistet und wird ueber die Mini-App-Uebersicht
 # (mini_app_uebersicht_view, aggregiert aus /api/v1/seiten) als
@@ -1560,22 +1562,19 @@ def hoerspiel_eltern_asset_view(kind_id: str, asset: str):
 
     Auth: public (HTML-Shell public, MAD-7). SW/manifest: credential-los (Browser-Fetch).
     kind_id ist scope-irrelevant (sw_scope /seiten/hoerspiel/ deckt alle Instanzen).
+
+    Delegiert an `_hoerspiel_eltern_public_asset` (Watchdog-Fix, T1832-S1):
+    EIN Dispatch-Pfad fuer gegatete UND public Adressen, analog einkauf.
+    kind_id fliesst bewusst nicht ein (s. o.).
     """
-    cfg = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT]
-    return serve_mantel_asset(
-        asset,
-        asset_root=_hoerspiel_eltern_asset_root(),
-        mime_map=_HOERSPIEL_ELTERN_MIME,
-        special=_mantel_special_generated(
-            cfg, _HOERSPIEL_ELTERN_COMPONENT, _hoerspiel_eltern_build_id()),
-    )
+    return _hoerspiel_eltern_public_asset(asset)
 
 
 def _hoerspiel_eltern_public_asset(asset):
-    """Woertlich derselbe Dispatch wie hoerspiel_eltern_asset_view — nur ohne
-    Gate (s. u.). kind_id ist scope-irrelevant (s. Docstring oben) und fliesst
-    hier bewusst nicht ein — die Public-Routen tragen ihn nur fuer die
-    URL-Symmetrie zur gegateten Fassung."""
+    """Der eine Dispatch-Pfad fuer alle hoerspiel-eltern-Assets (gegated UND
+    public, Watchdog-Fix T1832-S1). kind_id ist scope-irrelevant (s.
+    Docstring oben) und fliesst hier bewusst nicht ein — die Public-Routen
+    tragen ihn nur fuer die URL-Symmetrie zur gegateten Fassung."""
     cfg = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT]
     return serve_mantel_asset(
         asset,

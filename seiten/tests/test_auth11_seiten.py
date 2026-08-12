@@ -3,25 +3,33 @@
 Belegt T1832-S1 AC1-AC5 NACH dem Watchdog-Fix-Auftrag (zwei kritische Befunde
 am ersten Durchgang, siehe Kommentare in `seiten/main.py`):
 
-  Befund 1 (behoben): Manifest + Icons der fuenf Eltern-PWA-Flaechen (einkauf,
-  plan-einstellungen, routine-anpassen, wetter-regeln, hoerspiel-eltern) sind
-  credential-los per Fetch-Spec (#1437, analog /shell/<panel_id>/manifest.json)
-  -- eigene, ungegatete Routen NEBEN dem gegateten `<path:asset>`-Catch-all
-  (Vorbild: kibuddy/main.py:427-437, T1836). sw.js bleibt gegated.
+  Befund 1 (behoben, zweite Runde erweitert): Manifest + Icons der fuenf
+  Eltern-PWA-Flaechen (einkauf, plan-einstellungen, routine-anpassen,
+  wetter-regeln, hoerspiel-eltern) sind credential-los per Fetch-Spec
+  (#1437, analog /shell/<panel_id>/manifest.json) -- eigene, ungegatete
+  Routen NEBEN dem gegateten `<path:asset>`-Catch-all (Vorbild:
+  kibuddy/main.py:427-437, T1836). sw.js bleibt gegated. Zweite Runde:
+  `wetter-regeln.css` kam dazu (einziges Nicht-Manifest-/Nicht-Icon-/
+  Nicht-sw.js-Asset einer Shell ueber die gegatete Route); die fuenf
+  gegateten `*_asset_view`-Funktionen delegieren jetzt an denselben
+  `_<component>_public_asset`-Helfer wie ihre Public-Geschwister (vorher
+  wortgleiche Kopie -- der Docstring behauptete "geteilt", war es aber nur
+  unter den Public-Routen selbst).
 
-  Befund 2 (zurueckgenommen): die sechs Telegram-web_app-HTML-Shells
-  (essen_einkauf_view, routine_anpassen_view, wetter_regeln_view,
+  Befund 2 (zurueckgenommen, Ticket #1859): die sechs Telegram-web_app-HTML-
+  Shells (essen_einkauf_view, routine_anpassen_view, wetter_regeln_view,
   mini_app_uebersicht_view, plan_einstellungen_view, hoerspiel_eltern_view +
   ihre vier Trailing-Slash-Aliase) sind NICHT gegated -- offene Live-Probe,
   ob die Telegram-WebView den `xbuddy_session`-Cookie traegt (kein Spec-Ort
   behauptet es, MAD-11 belegt nur den fehlenden `Authorization`-Header beim
   Initial-Load). Diese Datei testet sie deshalb NUR auf "bleibt erreichbar",
-  nicht auf "ist gegated".
+  nicht auf "ist gegated". Die offene Probe traegt jetzt Ticket #1859 (statt
+  nur #1832, das beim Merge schliesst).
 
 Was WEITERHIN gegated ist (require_dual_gate(mode=_AUTH_MODE), Cookie-only,
 ENV-getoggelt): /api/v1/seiten/uebersicht, /api/v1/seiten/connector/,
 /api/v1/seiten/reset, sowie die fuenf `<path:asset>`-Catch-alls MINUS
-Manifest/Icons (sw.js u. a. bleibt dahinter).
+Manifest/Icons/wetter-regeln.css (sw.js u. a. bleibt dahinter).
 
 Was require_init_data traegt (Cookie/tma/Loopback, immer hart, kein `mode`):
 /api/v1/seiten, /api/v1/seiten/layout, /api/v1/icons/suche.
@@ -30,7 +38,7 @@ Die elf namentlich gefuehrten AUTH-11-Ausnahmen (`specs/platform/auth.md`
 AUTH-11-Tabelle, gemessen am Live-Stand
 `git show origin/spec/1805-auth11-bootstrap-ausnahmen:specs/platform/auth.md`)
 und die zwei AUTH-2-Cookie-only-Inline-Routen des Hoerspiel-Players
-(`seiten/main.py:1506`/`seiten/main.py:1559`) bleiben unberuehrt.
+(`seiten/main.py:1693`/`seiten/main.py:1746`) bleiben unberuehrt.
 
 **ENV-Naht (RAT-32 Nicht-Verhandelbar).** `_AUTH_MODE` wird EINMAL beim
 Modul-Import aus `os.environ["XBUDDY_AUTH_MODE"]` gelesen (Default
@@ -102,6 +110,16 @@ ROUTEN_INIT_DATA = [
 # oeffentlich, credential-los per Fetch-Spec (#1437). NICHT in
 # `_AUTH11_AUSNAHMEN`, weil die auth.md-Tabelle diese Adressen noch nicht
 # fuehrt (Spec-PR folgt separat, "Fass specs/ nicht an" -- Auftrag).
+#
+# Zweite Watchdog-Runde: `wetter-regeln.css` ist mit aufgenommen -- das
+# EINZIGE Nicht-Manifest-/Nicht-Icon-/Nicht-sw.js-Asset, das eine der fuenf
+# Shells ueber die gegatete `<path:asset>`-Route laedt (wetter-regeln.html:11).
+# Die anderen vier Shells ziehen ihr CSS/JS aus dem ungegateten
+# /api/v1/seiten/static/… (Flask-implizitem Static, AUTH-11-Ausnahme) --
+# nachgesehen (grep auf href=/src= in allen fuenf Templates), kein weiteres
+# Asset dieser Klasse gefunden. Solange die Telegram-Probe (#1859) offen
+# ist, muss die Shell UND ihre Pflicht-Assets dieselbe Auth-Antwort geben --
+# sonst laedt die Flaeche als unformatiertes HTML.
 ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS = [
     "/seiten/essen/einkauf/manifest.json",
     "/seiten/essen/einkauf/icon-192.png",
@@ -119,18 +137,20 @@ ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS = [
     "/seiten/wetter/regeln/icon-192.png",
     "/seiten/wetter/regeln/icon-512.png",
     "/seiten/wetter/regeln/icon-maskable-512.png",
+    "/seiten/wetter/regeln/wetter-regeln.css",
     "/seiten/hoerspiel/mia/eltern/manifest.json",
     "/seiten/hoerspiel/mia/eltern/icon-192.png",
     "/seiten/hoerspiel/mia/eltern/icon-512.png",
     "/seiten/hoerspiel/mia/eltern/icon-maskable-512.png",
 ]
 
-# Befund 2 (Watchdog-Fix): die sechs Telegram-web_app-HTML-Shells + ihre vier
-# Trailing-Slash-Aliase -- NICHT gegated, offene Live-Probe (Nic muss auf
-# einem Elterngeraet den Telegram-Button antippen; Cookie-Traegung der
-# WebView ist nicht belegt). NICHT in `_AUTH11_AUSNAHMEN` (kein Spec-Ort
-# fuehrt sie), NICHT `_AUTH2_INLINE_ROUTEN` (kein Gate ueberhaupt, nicht mal
-# inline) -- eigene, ehrlich benannte vierte Kategorie.
+# Befund 2 (Watchdog-Fix, Ticket #1859): die sechs Telegram-web_app-HTML-
+# Shells + ihre vier Trailing-Slash-Aliase -- NICHT gegated, offene Live-
+# Probe (Nic muss auf einem Elterngeraet den Telegram-Button antippen;
+# Cookie-Traegung der WebView ist nicht belegt). NICHT in
+# `_AUTH11_AUSNAHMEN` (kein Spec-Ort fuehrt sie), NICHT `_AUTH2_INLINE_ROUTEN`
+# (kein Gate ueberhaupt, nicht mal inline) -- eigene, ehrlich benannte vierte
+# Kategorie.
 ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE = [
     "/seiten/essen/einkauf/",
     "/seiten/essen/einkauf",
@@ -180,8 +200,8 @@ def _als_rule_pattern(pfad):
 # (Watchdog-Kleinbefund 2: zwei Mengen verschiedener Sorte sind IMMER
 # disjunkt, das war kein echter Test).
 _AUTH2_INLINE_ROUTEN = {
-    "/seiten/hoerspiel/player",             # seiten/main.py:1506
-    "/seiten/hoerspiel/player/<path:asset>",  # seiten/main.py:1559
+    "/seiten/hoerspiel/player",             # seiten/main.py:1693
+    "/seiten/hoerspiel/player/<path:asset>",  # seiten/main.py:1746
 }
 
 
@@ -345,22 +365,23 @@ def test_pwa_manifest_und_icons_sind_public_auch_hart(hard_client, path):
 
 
 # ---------------------------------------------------------------------------
-# Befund 2 (Watchdog-Fix) — die sechs Telegram-web_app-Shells + Trailing-
-# Slash-Aliase sind NICHT gegated (offene Live-Probe). Diese Tests pruefen
-# NUR "bleibt erreichbar", nicht "ist gegated" -- das waere die falsche
-# Zusicherung fuer eine bewusst offene Frage.
+# Befund 2 (Watchdog-Fix, Ticket #1859) — die sechs Telegram-web_app-Shells +
+# Trailing-Slash-Aliase sind NICHT gegated (offene Live-Probe). Diese Tests
+# pruefen NUR "bleibt erreichbar", nicht "ist gegated" -- das waere die
+# falsche Zusicherung fuer eine bewusst offene Frage.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("path", ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE)
 def test_telegram_shell_bleibt_ohne_cookie_erreichbar_offene_probe(hard_client, path):
-    """Regressions-Schutz gegen ein versehentliches Wieder-Gaten: diese sechs
-    Flaechen haengen an einem Telegram-web_app-Button, dessen WebView beim
-    Initial-Load keinen Authorization-Header sendet (MAD-11) und dessen
-    Cookie-Traegung nicht belegt ist. Bis Nic die Probe auf einem
-    Elterngeraet gemacht hat, MUSS die Route ohne jede Auth-Quelle laden."""
+    """Ticket #1859 (die offene Telegram-Cookie-Probe). Regressions-Schutz
+    gegen ein versehentliches Wieder-Gaten: diese sechs Flaechen haengen an
+    einem Telegram-web_app-Button, dessen WebView beim Initial-Load keinen
+    Authorization-Header sendet (MAD-11) und dessen Cookie-Traegung nicht
+    belegt ist. Bis Nic die Probe auf einem Elterngeraet gemacht hat (#1859),
+    MUSS die Route ohne jede Auth-Quelle laden."""
     r = hard_client.get(path, headers=EXTERN_HEADERS)
-    assert r.status_code == 200, "%s ist eine offene Telegram-Probe -- darf NICHT 401 werden" % path
+    assert r.status_code == 200, "%s ist eine offene Telegram-Probe (#1859) -- darf NICHT 401 werden" % path
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +391,7 @@ def test_telegram_shell_bleibt_ohne_cookie_erreichbar_offene_probe(hard_client, 
 
 
 def test_hoerspiel_player_inline_gate_view_ohne_cookie_ist_401():
-    """seiten/main.py:1506 hoerspiel_player_view -- Inline-AUTH-2-Gate, KEIN
+    """seiten/main.py:1693 hoerspiel_player_view -- Inline-AUTH-2-Gate, KEIN
     Decorator (n=1). Dieser Test ist der Verhaltensbeleg, den der repo-weite
     AUTH-11-Backstop (Folge-Ticket im Brett #1805) statt einer
     __wrapped__-Formpruefung braucht."""
@@ -382,7 +403,7 @@ def test_hoerspiel_player_inline_gate_view_ohne_cookie_ist_401():
 
 
 def test_hoerspiel_player_inline_gate_asset_ohne_cookie_ist_401():
-    """seiten/main.py:1559 hoerspiel_player_asset_view -- dito fuer die
+    """seiten/main.py:1746 hoerspiel_player_asset_view -- dito fuer die
     Asset-Route (manifest.json/sw.js/player.{css,js}/Icons)."""
     main_mod.configure(bot_token=TEST_BOT_TOKEN)
     main_mod.app.testing = True
