@@ -427,10 +427,20 @@ sie stehen in keiner AUTH-11-Ausnahme-Zeile und sind damit nicht länger
 AUTH-4-öffentlich. **Wo diese Liste und AUTH-11s Ausnahme-Tabelle sich für
 eine Route widersprechen, sticht AUTH-11** (Nic 2026-08-11: „alle Adressen,
 also wirklich alle, sind mit einem Cookie geschützt … Nur wer Cookie hat,
-sieht irgendwas."). Die übrigen Zeilen dieser Liste bleiben unberührt: sie
-stehen namentlich in AUTH-11s Ausnahme-Tabelle oder sind mit dem Router-Tod
-(RAT-31) bereits entfallen. Diese Liste bleibt als Entscheidungs-Geschichte
-stehen, welche Routen wann als inhaltlich öffentlich eingestuft wurden.
+sieht irgendwas."). Von den übrigen Zeilen dieser Liste stehen
+`/shell/<panel_id>/manifest.json`, `/shell/<panel_id>/icon-*.png` und
+`/display/_shared/*` namentlich in AUTH-11s Ausnahme-Tabelle; die alten
+`/display/<id>`-Router-Routen sind mit dem Router-Tod (RAT-31 E6f) bereits
+entfallen. **`/display/<buddy>/*` — die Buddy-Renderer-Views selbst (zwölf
+`@app.route`-Vorkommen in sieben Services plus deren sieben implizite
+Static-Endpunkte) — steht in keiner AUTH-11-Ausnahme-Zeile und ist damit
+offen: sie bekommen einen Auth-Decorator** (Nic-Setzung 2026-08-11,
+umgesetzt in #1805 über fünf parallele Bau-Stücke). Das ist unabhängig von
+AUTH-7: die dort erst mit Phase 4 scharfe nginx-Map ist eine zusätzliche
+Ingress-Schicht, kein Ersatz für den Decorator — ein Bau-PR braucht beides,
+nicht eines statt des anderen. Diese Liste bleibt als Entscheidungs-
+Geschichte stehen, welche Routen wann als inhaltlich öffentlich eingestuft
+wurden.
 
 [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „R2-Patches"
 → Patch A Endpoint-Liste AUTH-4 + Patch B nginx-Map (Phase 4)]
@@ -768,8 +778,8 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/healthz` (je Service), `/version` | Die Überwachung fragt vor jeder Anmeldung. Nicht per Cookie, sondern am Ingress auf Loopback/Tailnet einschränken. |
 | `/auth/pair` | Die Adresse, an der das Cookie ausgestellt wird. Hinter dem Cookie unerreichbar. |
 | `/shell/<panel_id>/manifest.json` | Ohne öffentliches Manifest installiert sich keine PWA. RAT-32 führt die Manifest-Publicness als Nicht-Verhandelbares. |
-| `/shell/<panel_id>/sw.js` | Der Browser lädt den Service-Worker, bevor eine Session existiert. |
-| `/api/v1/seiten/static/connector/sw.js` | Service-Worker der Connector-Seite, gleiche Begründung. Eigene Zeile, weil die Klausel Sammel-Einträge ausschließt — auch eine Auslassungs-Ellipse ist keiner. |
+| `/shell/<panel_id>/sw.js` | **[ÜBERHOLT — Code-Gegenprobe]** Keine Ausnahme (mehr): der Endpunkt trägt `@require_dual_gate(mode="hard")` (`seiten/main.py:1955`, Kommentar „sw.js bleibt gated") und ist hart gegated; `test_shell_sw_js_bleibt_gated_ohne_quelle` (`tests/test_dual_gate_7b.py:248`) verriegelt das. Die Begründung „lädt vor Session" trifft auf diese Route nicht zu — sie trifft auf die Zeile unten. |
+| `/api/v1/seiten/static/connector/sw.js` | Der Browser lädt diesen Service-Worker, bevor eine Session existiert — anders als `/shell/<panel_id>/sw.js` oben (dort inzwischen gegated) ist diese Route tatsächlich ungegatet. Eigene Zeile, weil die Klausel Sammel-Einträge ausschließt — auch eine Auslassungs-Ellipse ist keiner. |
 | `/shell/<panel_id>/<path:asset>` | Der WebAPK-Installer holt die Manifest-Icons **credential-los** — mit Gate schlägt die Installation fehl (#1437). |
 | `/controller/_shared/<path:asset>` | Der Service-Worker legt diese Dateien im Precache ab, **bevor** ein Cookie existiert (ROU-23). |
 | `/display/_shared/design/<path:asset>`, `/display/_shared/icons/<path:asset>` | 7b-Public-Ausnahme aus AUTH-7: die Views laden Design-Tokens und Icons als Asset; mit Gate bleiben sie leer. Seit dem Router-Tod von `seiten` ausgeliefert (RAT-31 E6f, #1568). |
@@ -781,14 +791,19 @@ die beiden Bootstrap-Zeilen `/api/v1/seiten/static/<path:filename>` und
 `/api/v1/init-data/validate`) sind dieselbe technische Klasse: Dateien oder
 Bootstrap-Endpunkte, die ein Browser/Installer/Service-Worker **bevor** ein
 Cookie existieren kann laden oder aufrufen muss. Sie tragen keine
-Familiendaten. Verriegelt ist davon bislang nur `/display/_shared/*`, durch
-`test_display_shared_bleibt_public_ungegatet`
-(`tests/test_auth_decorator_coverage.py:333`) — für diese eine Zeile
-zeichnet die Tabelle den ratifizierten, bereits getesteten Bestand nach. Für
-die übrigen Zeilen dieser Tabelle, einschließlich der beiden zuletzt
-ergänzten, liegt noch kein eigener Test vor; die Verriegelungs-Aussage gilt
-für sie **nicht**. Die Test-Implementierung dafür ist Aufgabe des Bau-PRs
-(siehe unten).
+Familiendaten. Verriegelt ist davon bereits ein Teil: `/display/_shared/*`
+durch `test_display_shared_bleibt_public_ungegatet`
+(`tests/test_auth_decorator_coverage.py:333`), `/shell/<panel_id>/manifest.json`
+durch `test_shell_manifest_public_gibt_200_ohne_gate`
+(`tests/test_dual_gate_7b.py:134`) und `/shell/<panel_id>/<path:asset>` für
+den Icon-Fall durch `test_shell_icon_public_ohne_quelle_gibt_200`
+(`tests/test_dual_gate_7b.py:232`) sowie
+`test_shell_icon_512_public_ohne_quelle_gibt_200`
+(`tests/test_dual_gate_7b.py:261`) — für diese Zeilen zeichnet die Tabelle
+den ratifizierten, bereits getesteten Bestand nach. Für die übrigen Zeilen
+dieser Tabelle, einschließlich der beiden zuletzt ergänzten, liegt noch kein
+eigener Test vor; die Verriegelungs-Aussage gilt für sie **nicht**. Die
+Test-Implementierung dafür ist Aufgabe des Bau-PRs (siehe unten).
 
 Die Liste erweitert man **nur per Spec-Änderung**, nie im Test-Code — sonst
 wandert die Ausnahme aus der Sicht heraus.

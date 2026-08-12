@@ -140,7 +140,10 @@ vollständige, neue `tiles`-Liste der Instanz entgegen und schreibt sie.
   2026-07-31, #1400 → „a": die tote #1389-„7b-Dual-Gate"/funnel-Erreichbarkeits-
   Prämisse ist ersetzt). Nur der Schreib-Endpunkt ist gegated; die Lese-
   `tiles.json`/`config.json` bleiben **außerhalb AUTH-3** (cookieloses Kiosk-
-  Display, PBE-3) — ihre Funnel-Exposition ist die separate AUTH-7-Frage.
+  Display, PBE-3 — **[ÜBERHOLT 2026-08-11 — Nic-Setzung, siehe PBE-3-Absatz
+  unten]**: das Gerät trägt seit RAT-32 einen gültigen Cookie, AUTH-11
+  schließt Geräte-Ausnahmen aus) — ihre Funnel-Exposition ist die separate
+  AUTH-7-Frage.
 
 *Wenn* der Endpunkt eine gültige `tiles`-Liste für eine existierende Instanz
 erhält, *dann* liegt nach der Antwort `200` der neue Stand atomar in der
