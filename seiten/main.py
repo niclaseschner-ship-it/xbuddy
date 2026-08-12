@@ -678,7 +678,17 @@ def auth_pair():
 
 
 @app.route("/seiten/essen/einkauf/", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet):
+# der echte Entry-Point ist ein Telegram-web_app-Button
+# (eltern-chat/skills/einkauf_zeigen.py:112). require_dual_gate ist seit
+# RAT-32 cookie-only OHNE tma-Zweig (tools/initdata/auth_gate.py:284); MAD-11
+# haelt als ratifizierten Live-Befund fest, dass die Telegram-WebView beim
+# HTML-Initial-Load KEINEN Authorization-Header sendet — ob sie den
+# xbuddy_session-Cookie traegt, behauptet kein Spec-Ort. Ein Gate haette
+# das JS nie starten lassen, das seinerseits initData/tma fuer
+# /api/v1/init-data/validate liefert. Probe steht aus: Nic tippt auf einem
+# gepairten Elterngeraet den Telegram-Button an — erst danach ist belegt, ob
+# diese Route sicher hinter require_dual_gate/require_init_data kann.
 def essen_einkauf_view_trailing_slash():
     """ESSEN-34 Trailing-Slash-Alias: GET /seiten/essen/einkauf/ → HTML.
 
@@ -691,7 +701,9 @@ def essen_einkauf_view_trailing_slash():
 
 
 @app.route("/seiten/essen/einkauf", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe: siehe Kommentar an
+# essen_einkauf_view_trailing_slash oben (dieselbe Begruendung, derselbe
+# Telegram-web_app-Entry-Point, dieselbe offene Nic-Probe).
 def essen_einkauf_view():
     """EZG-6 / ESSEN-31 / ESSEN-33: Eltern-Mini-App-View fuer die Einkaufsliste.
 
@@ -848,6 +860,50 @@ def einkauf_asset_view(asset):
     )
 
 
+def _einkauf_public_asset(asset):
+    """Woertlich derselbe Dispatch wie einkauf_asset_view — nur ohne Gate
+    (s. u.). Geteilt statt dupliziert, damit die vier Public-Routen nicht von
+    der gegateten Fassung abdriften koennen."""
+    return serve_mantel_asset(
+        asset,
+        asset_root=_einkauf_asset_root(),
+        mime_map=_EINKAUF_MIME,
+        special=_mantel_special_disk_sw(
+            _einkauf_asset_root(), _current_build_id(), _EINKAUF_MIME),
+    )
+
+
+# AUTH-11-Ausnahme (Watchdog-Fix #1832, Spec-Zeilen folgen in einem separaten
+# Spec-PR — die AUTH-11-Tabelle verlangt die konkreten Adressen namentlich,
+# keine Sammel-Eintraege). manifest.json + die drei Icons sind credential-los
+# per Fetch-Spec — ein Gate wuerde die PWA-Installation brechen (#1437,
+# dieselbe technische Klasse wie /shell/<panel_id>/manifest.json in der
+# AUTH-11-Ausnahme-Tabelle). ESSEN-34/ESSEN-33 verlangen wortgleich 200 auf
+# genau diesen Adressen. Eigene, explizite Routen statt einer Bedingung im
+# gegateten <path:asset>-Catch-all: Werkzeug matcht einen literalen Pfad
+# IMMER vor dem Catch-all, unabhaengig von der Registrierungsreihenfolge
+# (Vorbild: kibuddy/main.py:427-437, T1836). sw.js bleibt UNGEAENDERT hinter
+# dem Gate (einkauf_asset_view oben) — nur Manifest + Icons sind hier public.
+@app.route("/seiten/essen/einkauf/manifest.json", methods=["GET"])
+def einkauf_manifest_public():
+    return _einkauf_public_asset("manifest.json")
+
+
+@app.route("/seiten/essen/einkauf/icon-192.png", methods=["GET"])
+def einkauf_icon_192_public():
+    return _einkauf_public_asset("icon-192.png")
+
+
+@app.route("/seiten/essen/einkauf/icon-512.png", methods=["GET"])
+def einkauf_icon_512_public():
+    return _einkauf_public_asset("icon-512.png")
+
+
+@app.route("/seiten/essen/einkauf/icon-maskable-512.png", methods=["GET"])
+def einkauf_icon_maskable_public():
+    return _einkauf_public_asset("icon-maskable-512.png")
+
+
 # ============================================================
 #  PLAN-35 — Plan-Einstellungs-PWA (Mantel, Service-Worker, Icons)
 # ============================================================
@@ -888,7 +944,15 @@ def _plan_einst_build_id():
 
 
 @app.route("/seiten/plan/einstellungen/", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): die
+# Flaeche ist in plan/views.json als typ:"pwa"/zielgruppe:"eltern" gelistet
+# und wird ueber die Mini-App-Uebersicht (mini_app_uebersicht_view, aggregiert
+# aus /api/v1/seiten) als Telegram-web_app-Kachel angeboten — derselbe
+# WebView-Entry-Mechanismus wie einkauf/routine/wetter (siehe Kommentar an
+# essen_einkauf_view_trailing_slash fuer die volle Begruendung: require_dual_gate
+# ist cookie-only ohne tma-Zweig, MAD-11 belegt fehlenden Authorization-Header
+# beim Initial-Load, Cookie-Traegung der WebView ist NICHT belegt). Offene
+# Nic-Probe wie bei den anderen fuenf Flaechen.
 def plan_einstellungen_view_trailing_slash():
     """PLAN-35 Trailing-Slash-Alias: GET /seiten/plan/einstellungen/ → HTML.
 
@@ -900,7 +964,8 @@ def plan_einstellungen_view_trailing_slash():
 
 
 @app.route("/seiten/plan/einstellungen", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe: siehe Kommentar an
+# plan_einstellungen_view_trailing_slash oben.
 def plan_einstellungen_view():
     """PLAN-35: Plan-Einstellungs-PWA — HTML-Render-Route.
 
@@ -933,6 +998,40 @@ def plan_einstellungen_asset_view(asset):
         special=_mantel_special_disk_sw(
             _plan_einst_asset_root(), _plan_einst_build_id(), _PLAN_EINST_MIME),
     )
+
+
+def _plan_einst_public_asset(asset):
+    """Woertlich derselbe Dispatch wie plan_einstellungen_asset_view — nur
+    ohne Gate (s. u.), analog _einkauf_public_asset."""
+    return serve_mantel_asset(
+        asset,
+        asset_root=_plan_einst_asset_root(),
+        mime_map=_PLAN_EINST_MIME,
+        special=_mantel_special_disk_sw(
+            _plan_einst_asset_root(), _plan_einst_build_id(), _PLAN_EINST_MIME),
+    )
+
+
+# AUTH-11-Ausnahme (Watchdog-Fix #1832) — Begruendung wortgleich zu den
+# einkauf-Public-Routen oben (#1437, kibuddy-Vorbild, sw.js bleibt gegated).
+@app.route("/seiten/plan/einstellungen/manifest.json", methods=["GET"])
+def plan_einstellungen_manifest_public():
+    return _plan_einst_public_asset("manifest.json")
+
+
+@app.route("/seiten/plan/einstellungen/icon-192.png", methods=["GET"])
+def plan_einstellungen_icon_192_public():
+    return _plan_einst_public_asset("icon-192.png")
+
+
+@app.route("/seiten/plan/einstellungen/icon-512.png", methods=["GET"])
+def plan_einstellungen_icon_512_public():
+    return _plan_einst_public_asset("icon-512.png")
+
+
+@app.route("/seiten/plan/einstellungen/icon-maskable-512.png", methods=["GET"])
+def plan_einstellungen_icon_maskable_public():
+    return _plan_einst_public_asset("icon-maskable-512.png")
 
 
 # ============================================================
@@ -1060,7 +1159,16 @@ def connector_sw_view():
 
 
 @app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): der
+# echte Entry-Point ist ein Telegram-web_app-Button
+# (eltern-chat/skills/seiten_uebersicht.py:88, web_app_url). require_dual_gate
+# ist seit RAT-32 cookie-only OHNE tma-Zweig
+# (tools/initdata/auth_gate.py:284); MAD-11 haelt als ratifizierten
+# Live-Befund fest, dass die Telegram-WebView beim HTML-Initial-Load KEINEN
+# Authorization-Header sendet — ob sie den xbuddy_session-Cookie traegt,
+# behauptet kein Spec-Ort. Ein Gate haette das JS nie starten lassen, das
+# seinerseits initData/tma fuer /api/v1/seiten/layout liefert (require_init_data,
+# s. dort). Offene Nic-Probe wie bei den anderen fuenf Flaechen.
 def mini_app_uebersicht_view():
     """MAU-1: Telegram-Mini-App-Uebersichts-View — HTML fuer den Familien-Bot.
 
@@ -1088,7 +1196,12 @@ def mini_app_uebersicht_view():
 
 
 @app.route("/seiten/routine/anpassen/", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): der
+# echte Entry-Point ist ein Telegram-web_app-Button
+# (eltern-chat/skills/routine_anpassen_oeffnen.py:84). Begruendung wortgleich
+# zu essen_einkauf_view_trailing_slash oben (require_dual_gate cookie-only
+# ohne tma-Zweig, MAD-11-Befund fehlender Authorization-Header beim
+# Initial-Load, Cookie-Traegung der WebView unbelegt). Offene Nic-Probe.
 def routine_anpassen_view_trailing_slash():
     """ROUTINE-23 Trailing-Slash-Alias: GET /seiten/routine/anpassen/ → HTML (T1665).
 
@@ -1099,7 +1212,8 @@ def routine_anpassen_view_trailing_slash():
 
 
 @app.route("/seiten/routine/anpassen", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe: siehe Kommentar an
+# routine_anpassen_view_trailing_slash oben.
 def routine_anpassen_view():
     """ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View (T1665: PWA-Mantel).
 
@@ -1196,6 +1310,42 @@ def routine_anpassen_asset_view(asset):
     )
 
 
+def _routine_anpassen_public_asset(asset):
+    """Woertlich derselbe Dispatch wie routine_anpassen_asset_view — nur ohne
+    Gate (s. u.). manifest.json kommt aus der Lib (pwa_mantel.build_manifest),
+    Icons statisch aus seiten/static/routine/."""
+    cfg = pwa_mantel.REGISTRY["routine"]
+    return serve_mantel_asset(
+        asset,
+        asset_root=_routine_anpassen_asset_root(),
+        mime_map=_ROUTINE_ANPASSEN_MIME,
+        special=_mantel_special_generated(
+            cfg, "routine", _routine_anpassen_build_id()),
+    )
+
+
+# AUTH-11-Ausnahme (Watchdog-Fix #1832) — Begruendung wortgleich zu den
+# einkauf-Public-Routen oben (#1437, kibuddy-Vorbild, sw.js bleibt gegated).
+@app.route("/seiten/routine/anpassen/manifest.json", methods=["GET"])
+def routine_anpassen_manifest_public():
+    return _routine_anpassen_public_asset("manifest.json")
+
+
+@app.route("/seiten/routine/anpassen/icon-192.png", methods=["GET"])
+def routine_anpassen_icon_192_public():
+    return _routine_anpassen_public_asset("icon-192.png")
+
+
+@app.route("/seiten/routine/anpassen/icon-512.png", methods=["GET"])
+def routine_anpassen_icon_512_public():
+    return _routine_anpassen_public_asset("icon-512.png")
+
+
+@app.route("/seiten/routine/anpassen/icon-maskable-512.png", methods=["GET"])
+def routine_anpassen_icon_maskable_public():
+    return _routine_anpassen_public_asset("icon-maskable-512.png")
+
+
 # ============================================================
 #  #1715 (ESB-1.a, Zweig A) — Wetter-Regeln-Mini-App (seiten-gehostet)
 # ============================================================
@@ -1216,14 +1366,20 @@ def _wetter_regeln_build_id():
 
 
 @app.route("/seiten/wetter/regeln/", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): der
+# echte Entry-Point ist ein Telegram-web_app-Button
+# (eltern-chat/skills/wetter_regeln_oeffnen.py:84). Begruendung wortgleich
+# zu essen_einkauf_view_trailing_slash oben (require_dual_gate cookie-only
+# ohne tma-Zweig, MAD-11-Befund fehlender Authorization-Header beim
+# Initial-Load, Cookie-Traegung der WebView unbelegt). Offene Nic-Probe.
 def wetter_regeln_view_trailing_slash():
     """Trailing-Slash-Alias (manifest start_url) → HTML-Shell."""
     return wetter_regeln_view()
 
 
 @app.route("/seiten/wetter/regeln", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe: siehe Kommentar an
+# wetter_regeln_view_trailing_slash oben.
 def wetter_regeln_view():
     """#1715 (ESB-1.a): HTML-Shell des Garderoben-Editors (MAD-7: public, JS
     macht ensureAuth über /api/v1/wetter/regeln). PWA-Mantel via Lib."""
@@ -1246,6 +1402,41 @@ def wetter_regeln_asset_view(asset):
         special=_mantel_special_generated(
             cfg, "wetter-regeln", _wetter_regeln_build_id()),
     )
+
+
+def _wetter_regeln_public_asset(asset):
+    """Woertlich derselbe Dispatch wie wetter_regeln_asset_view — nur ohne
+    Gate (s. u.)."""
+    cfg = pwa_mantel.REGISTRY["wetter-regeln"]
+    return serve_mantel_asset(
+        asset,
+        asset_root=_wetter_regeln_asset_root(),
+        mime_map=_WETTER_REGELN_MIME,
+        special=_mantel_special_generated(
+            cfg, "wetter-regeln", _wetter_regeln_build_id()),
+    )
+
+
+# AUTH-11-Ausnahme (Watchdog-Fix #1832) — Begruendung wortgleich zu den
+# einkauf-Public-Routen oben (#1437, kibuddy-Vorbild, sw.js bleibt gegated).
+@app.route("/seiten/wetter/regeln/manifest.json", methods=["GET"])
+def wetter_regeln_manifest_public():
+    return _wetter_regeln_public_asset("manifest.json")
+
+
+@app.route("/seiten/wetter/regeln/icon-192.png", methods=["GET"])
+def wetter_regeln_icon_192_public():
+    return _wetter_regeln_public_asset("icon-192.png")
+
+
+@app.route("/seiten/wetter/regeln/icon-512.png", methods=["GET"])
+def wetter_regeln_icon_512_public():
+    return _wetter_regeln_public_asset("icon-512.png")
+
+
+@app.route("/seiten/wetter/regeln/icon-maskable-512.png", methods=["GET"])
+def wetter_regeln_icon_maskable_public():
+    return _wetter_regeln_public_asset("icon-maskable-512.png")
 
 
 # ============================================================
@@ -1303,7 +1494,16 @@ def _hoerspiel_eltern_build_id():
 
 
 @app.route("/seiten/hoerspiel/<kind_id>/eltern", methods=["GET"])
-@require_dual_gate(mode=_AUTH_MODE)
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet): die
+# Flaeche ist in hoerspiel/views.json als typ:"pwa"/auth:"tma"/
+# zielgruppe:"eltern" gelistet und wird ueber die Mini-App-Uebersicht
+# (mini_app_uebersicht_view, aggregiert aus /api/v1/seiten) als
+# Telegram-web_app-Kachel angeboten — derselbe WebView-Entry-Mechanismus wie
+# einkauf/routine/wetter (siehe Kommentar an essen_einkauf_view_trailing_slash
+# fuer die volle Begruendung: require_dual_gate ist cookie-only ohne
+# tma-Zweig, MAD-11 belegt fehlenden Authorization-Header beim Initial-Load,
+# Cookie-Traegung der WebView ist NICHT belegt). Offene Nic-Probe wie bei den
+# anderen fuenf Flaechen.
 def hoerspiel_eltern_view(kind_id: str):
     """HSP-33 / T1681: Hörspiel-Eltern-PWA-Shell (kind_id-tragend, ESB-1, PWAM-5).
 
@@ -1369,6 +1569,45 @@ def hoerspiel_eltern_asset_view(kind_id: str, asset: str):
         special=_mantel_special_generated(
             cfg, _HOERSPIEL_ELTERN_COMPONENT, _hoerspiel_eltern_build_id()),
     )
+
+
+def _hoerspiel_eltern_public_asset(asset):
+    """Woertlich derselbe Dispatch wie hoerspiel_eltern_asset_view — nur ohne
+    Gate (s. u.). kind_id ist scope-irrelevant (s. Docstring oben) und fliesst
+    hier bewusst nicht ein — die Public-Routen tragen ihn nur fuer die
+    URL-Symmetrie zur gegateten Fassung."""
+    cfg = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT]
+    return serve_mantel_asset(
+        asset,
+        asset_root=_hoerspiel_eltern_asset_root(),
+        mime_map=_HOERSPIEL_ELTERN_MIME,
+        special=_mantel_special_generated(
+            cfg, _HOERSPIEL_ELTERN_COMPONENT, _hoerspiel_eltern_build_id()),
+    )
+
+
+# AUTH-11-Ausnahme (Watchdog-Fix #1832) — Begruendung wortgleich zu den
+# einkauf-Public-Routen oben (#1437, kibuddy-Vorbild, sw.js bleibt gegated).
+# <kind_id> bleibt Teil der URL (Symmetrie zur gegateten Fassung), ist aber
+# scope-irrelevant fuer den Dispatch (s. _hoerspiel_eltern_public_asset).
+@app.route("/seiten/hoerspiel/<kind_id>/eltern/manifest.json", methods=["GET"])
+def hoerspiel_eltern_manifest_public(kind_id: str):
+    return _hoerspiel_eltern_public_asset("manifest.json")
+
+
+@app.route("/seiten/hoerspiel/<kind_id>/eltern/icon-192.png", methods=["GET"])
+def hoerspiel_eltern_icon_192_public(kind_id: str):
+    return _hoerspiel_eltern_public_asset("icon-192.png")
+
+
+@app.route("/seiten/hoerspiel/<kind_id>/eltern/icon-512.png", methods=["GET"])
+def hoerspiel_eltern_icon_512_public(kind_id: str):
+    return _hoerspiel_eltern_public_asset("icon-512.png")
+
+
+@app.route("/seiten/hoerspiel/<kind_id>/eltern/icon-maskable-512.png", methods=["GET"])
+def hoerspiel_eltern_icon_maskable_public(kind_id: str):
+    return _hoerspiel_eltern_public_asset("icon-maskable-512.png")
 
 
 # ============================================================

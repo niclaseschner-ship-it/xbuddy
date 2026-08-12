@@ -1,18 +1,40 @@
 """AUTH-11 — Rueck-Verriegelung auf der seiten-URL-Map (#1832, Brett #1805).
 
-Belegt T1832-S1 AC1-AC5: die ~21 zuvor ungegateten Browser-/Datenrouten dieses
-Service tragen jetzt `require_dual_gate(mode=_AUTH_MODE)` (Cookie-only,
-ENV-getoggelt) oder `require_init_data` (Cookie/tma/Loopback, immer hart) --
-je nachdem, wer die Route tatsaechlich aufruft (siehe die einzelnen
-Docstrings in `seiten/main.py`). Die zehn namentlich gefuehrten AUTH-11-
-Ausnahmen (`specs/platform/auth.md` AUTH-11-Tabelle, gemessen am Live-Stand
+Belegt T1832-S1 AC1-AC5 NACH dem Watchdog-Fix-Auftrag (zwei kritische Befunde
+am ersten Durchgang, siehe Kommentare in `seiten/main.py`):
+
+  Befund 1 (behoben): Manifest + Icons der fuenf Eltern-PWA-Flaechen (einkauf,
+  plan-einstellungen, routine-anpassen, wetter-regeln, hoerspiel-eltern) sind
+  credential-los per Fetch-Spec (#1437, analog /shell/<panel_id>/manifest.json)
+  -- eigene, ungegatete Routen NEBEN dem gegateten `<path:asset>`-Catch-all
+  (Vorbild: kibuddy/main.py:427-437, T1836). sw.js bleibt gegated.
+
+  Befund 2 (zurueckgenommen): die sechs Telegram-web_app-HTML-Shells
+  (essen_einkauf_view, routine_anpassen_view, wetter_regeln_view,
+  mini_app_uebersicht_view, plan_einstellungen_view, hoerspiel_eltern_view +
+  ihre vier Trailing-Slash-Aliase) sind NICHT gegated -- offene Live-Probe,
+  ob die Telegram-WebView den `xbuddy_session`-Cookie traegt (kein Spec-Ort
+  behauptet es, MAD-11 belegt nur den fehlenden `Authorization`-Header beim
+  Initial-Load). Diese Datei testet sie deshalb NUR auf "bleibt erreichbar",
+  nicht auf "ist gegated".
+
+Was WEITERHIN gegated ist (require_dual_gate(mode=_AUTH_MODE), Cookie-only,
+ENV-getoggelt): /api/v1/seiten/uebersicht, /api/v1/seiten/connector/,
+/api/v1/seiten/reset, sowie die fuenf `<path:asset>`-Catch-alls MINUS
+Manifest/Icons (sw.js u. a. bleibt dahinter).
+
+Was require_init_data traegt (Cookie/tma/Loopback, immer hart, kein `mode`):
+/api/v1/seiten, /api/v1/seiten/layout, /api/v1/icons/suche.
+
+Die elf namentlich gefuehrten AUTH-11-Ausnahmen (`specs/platform/auth.md`
+AUTH-11-Tabelle, gemessen am Live-Stand
 `git show origin/spec/1805-auth11-bootstrap-ausnahmen:specs/platform/auth.md`)
 und die zwei AUTH-2-Cookie-only-Inline-Routen des Hoerspiel-Players
-(`seiten/main.py:1455`/`seiten/main.py:1508`) bleiben unberuehrt.
+(`seiten/main.py:1506`/`seiten/main.py:1559`) bleiben unberuehrt.
 
 **ENV-Naht (RAT-32 Nicht-Verhandelbar).** `_AUTH_MODE` wird EINMAL beim
 Modul-Import aus `os.environ["XBUDDY_AUTH_MODE"]` gelesen (Default
-`"observe"`, seiten/main.py:469) -- ein live laufender Prozess flippt nicht
+`"observe"`, seiten/main.py:402) -- ein live laufender Prozess flippt nicht
 mit; Flip/Rueckroll ist ENV+systemd-Neustart, kein Code-Diff. `seiten` laeuft
 LIVE bereits mit `XBUDDY_AUTH_MODE=hard` per Drop-In
 (`/etc/systemd/system/xbuddy-seiten.service.d/40-auth-mode.conf`) -- die
@@ -53,36 +75,73 @@ from seiten.tests.conftest import (  # noqa: E402  # isort:skip
 from tools.initdata import session_cookie as sc  # noqa: E402  # isort:skip
 
 # ---------------------------------------------------------------------------
-# Die 21 im Zuge von T1832-S1 neu gegateten Routen -- getrennt nach Decorator
-# (AC1/AC2/AC4 Nachweis-Grundlage). `manifest.json` steht als Asset-Vertreter
-# fuer die `<path:asset>`-Routen (auf Platte committed, siehe seiten/static/).
+# Routen, die WEITERHIN require_dual_gate/require_init_data tragen.
 # ---------------------------------------------------------------------------
 
 ROUTEN_DUAL_GATE = [
     ("GET", "/api/v1/seiten/uebersicht"),
-    ("GET", "/seiten/essen/einkauf/"),
-    ("GET", "/seiten/essen/einkauf"),
-    ("GET", "/seiten/essen/einkauf/manifest.json"),
-    ("GET", "/seiten/plan/einstellungen/"),
-    ("GET", "/seiten/plan/einstellungen"),
-    ("GET", "/seiten/plan/einstellungen/manifest.json"),
     ("GET", "/api/v1/seiten/connector/"),
-    ("GET", "/api/v1/seiten/mini-app-uebersicht"),
-    ("GET", "/seiten/routine/anpassen/"),
-    ("GET", "/seiten/routine/anpassen"),
-    ("GET", "/seiten/routine/anpassen/manifest.json"),
-    ("GET", "/seiten/wetter/regeln/"),
-    ("GET", "/seiten/wetter/regeln"),
-    ("GET", "/seiten/wetter/regeln/manifest.json"),
-    ("GET", "/seiten/hoerspiel/mia/eltern"),
-    ("GET", "/seiten/hoerspiel/mia/eltern/manifest.json"),
     ("GET", "/api/v1/seiten/reset"),
+    # sw.js ist der Asset-Vertreter: er bleibt hinter dem `<path:asset>`-
+    # Catch-all gegated, waehrend manifest.json/icon-*.png derselben Route
+    # jetzt oeffentlich sind (Befund 1, eigene Tests unten).
+    ("GET", "/seiten/essen/einkauf/sw.js"),
+    ("GET", "/seiten/plan/einstellungen/sw.js"),
+    ("GET", "/seiten/routine/anpassen/sw.js"),
+    ("GET", "/seiten/wetter/regeln/sw.js"),
+    ("GET", "/seiten/hoerspiel/mia/eltern/sw.js"),
 ]
 
 ROUTEN_INIT_DATA = [
     ("GET", "/api/v1/seiten"),
     ("GET", "/api/v1/seiten/layout"),
     ("GET", "/api/v1/icons/suche?q=test"),
+]
+
+# Befund 1 (Watchdog-Fix): Manifest + Icons der fuenf Eltern-PWA-Flaechen --
+# oeffentlich, credential-los per Fetch-Spec (#1437). NICHT in
+# `_AUTH11_AUSNAHMEN`, weil die auth.md-Tabelle diese Adressen noch nicht
+# fuehrt (Spec-PR folgt separat, "Fass specs/ nicht an" -- Auftrag).
+ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS = [
+    "/seiten/essen/einkauf/manifest.json",
+    "/seiten/essen/einkauf/icon-192.png",
+    "/seiten/essen/einkauf/icon-512.png",
+    "/seiten/essen/einkauf/icon-maskable-512.png",
+    "/seiten/plan/einstellungen/manifest.json",
+    "/seiten/plan/einstellungen/icon-192.png",
+    "/seiten/plan/einstellungen/icon-512.png",
+    "/seiten/plan/einstellungen/icon-maskable-512.png",
+    "/seiten/routine/anpassen/manifest.json",
+    "/seiten/routine/anpassen/icon-192.png",
+    "/seiten/routine/anpassen/icon-512.png",
+    "/seiten/routine/anpassen/icon-maskable-512.png",
+    "/seiten/wetter/regeln/manifest.json",
+    "/seiten/wetter/regeln/icon-192.png",
+    "/seiten/wetter/regeln/icon-512.png",
+    "/seiten/wetter/regeln/icon-maskable-512.png",
+    "/seiten/hoerspiel/mia/eltern/manifest.json",
+    "/seiten/hoerspiel/mia/eltern/icon-192.png",
+    "/seiten/hoerspiel/mia/eltern/icon-512.png",
+    "/seiten/hoerspiel/mia/eltern/icon-maskable-512.png",
+]
+
+# Befund 2 (Watchdog-Fix): die sechs Telegram-web_app-HTML-Shells + ihre vier
+# Trailing-Slash-Aliase -- NICHT gegated, offene Live-Probe (Nic muss auf
+# einem Elterngeraet den Telegram-Button antippen; Cookie-Traegung der
+# WebView ist nicht belegt). NICHT in `_AUTH11_AUSNAHMEN` (kein Spec-Ort
+# fuehrt sie), NICHT `_AUTH2_INLINE_ROUTEN` (kein Gate ueberhaupt, nicht mal
+# inline) -- eigene, ehrlich benannte vierte Kategorie.
+ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE = [
+    "/seiten/essen/einkauf/",
+    "/seiten/essen/einkauf",
+    "/seiten/plan/einstellungen/",
+    "/seiten/plan/einstellungen",
+    "/seiten/routine/anpassen/",
+    "/seiten/routine/anpassen",
+    "/seiten/wetter/regeln/",
+    "/seiten/wetter/regeln",
+    "/seiten/hoerspiel/mia/eltern",
+    "/api/v1/seiten/mini-app-uebersicht",
 ]
 
 # AUTH-11-Ausnahmen fuer seiten -- EXAKTE Teilmenge der Tabelle in
@@ -103,17 +162,26 @@ _AUTH11_AUSNAHMEN = {
     "/api/v1/init-data/validate",
 }
 
+def _als_rule_pattern(pfad):
+    """Wandelt einen konkreten Test-Pfad (mit 'mia' als kind_id, fuer echte
+    Flask-Test-Client-Requests noetig) in das zugehoerige Flask-Rule-Pattern
+    (`<kind_id>`) um -- fuer den Vergleich gegen `rule.rule` in
+    `app.url_map.iter_rules()` (die traegt den Platzhalter, keinen Wert)."""
+    return pfad.replace("/hoerspiel/mia/", "/hoerspiel/<kind_id>/")
+
+
 # AUTH-2 (Cookie-only) — Hoerspiel-Player-PWA (auth.md-Abschnitt gleichen
 # Namens): kein Decorator (n=1, kein Lego-Zwilling, Gate lebt inline in der
 # View-Funktion). GEHOERT NICHT in die AUTH-11-Ausnahmemenge oben -- diese
 # Routen sind gegated (401 ohne Cookie, siehe test_hoerspiel_player_inline_*
-# unten), nur eben nicht per Decorator/`__wrapped__` sichtbar. Getrennt
-# benannt, damit niemand sie mit einer AUTH-11-Ausnahme verwechselt
-# (Watchdog-Auflage T1832: Verhaltensbeleg schlaegt Formpruefung, siehe
-# test_hoerspiel_player_inline_gate_* fuer den Beleg).
-_AUTH2_INLINE_ENDPOINTS = {
-    "hoerspiel_player_view",             # seiten/main.py:1455
-    "hoerspiel_player_asset_view",       # seiten/main.py:1508
+# unten), nur eben nicht per Decorator/`__wrapped__` sichtbar. Rule-Strings
+# (nicht Endpoint-Namen) -- dieselbe Sorte wie `_AUTH11_AUSNAHMEN`, damit ein
+# Disjunktheits-Check zwischen beiden strukturell etwas pruefen kann
+# (Watchdog-Kleinbefund 2: zwei Mengen verschiedener Sorte sind IMMER
+# disjunkt, das war kein echter Test).
+_AUTH2_INLINE_ROUTEN = {
+    "/seiten/hoerspiel/player",             # seiten/main.py:1506
+    "/seiten/hoerspiel/player/<path:asset>",  # seiten/main.py:1559
 }
 
 
@@ -189,7 +257,7 @@ def test_reset_mit_gueltigem_cookie_ist_200_und_rolling_refresh(hard_client):
 def test_reset_observe_ist_rueckroll_default_und_laesst_ohne_cookie_durch(observe_client):
     """AC3: ohne ENV-Override bleibt der Default 'observe' (anders als beim
     routine-Geschwister, dessen Default 'hard' ist -- Nic-Setzung 2026-08-11,
-    seiten/main.py:469 unveraendert). Observe laesst ohne Cookie durch (200,
+    seiten/main.py:402 unveraendert). Observe laesst ohne Cookie durch (200,
     AUTH-3.a Grace) -- der RAT-32-Rueckroll-Pfad, falls das Live-hard-ENV
     zurueckgesetzt werden muss."""
     r = observe_client.get("/api/v1/seiten/reset", headers=EXTERN_HEADERS)
@@ -215,7 +283,7 @@ def test_env_naht_treibt_reset_wirklich_end_to_end(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# AC1/AC4 — alle 21 neu gegateten Routen: ohne Cookie 401, mit Cookie durch
+# AC1/AC4 — die weiterhin gegateten Routen: ohne Cookie 401, mit Cookie durch
 # ---------------------------------------------------------------------------
 
 
@@ -261,13 +329,48 @@ def test_init_data_route_greift_auch_ohne_auth_mode_hard():
 
 
 # ---------------------------------------------------------------------------
+# Befund 1 (Watchdog-Fix) — Manifest + Icons der fuenf Eltern-PWAs sind
+# oeffentlich, credential-los per Fetch-Spec (#1437). sw.js bleibt oben
+# ueber ROUTEN_DUAL_GATE mitgeprueft (gegated).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS)
+def test_pwa_manifest_und_icons_sind_public_auch_hart(hard_client, path):
+    """Selbst im hard-Modus, OHNE Cookie: 200. Ein Gate haette die
+    PWA-Installation gebrochen (#1437) -- ESSEN-33/ESSEN-34 verlangen
+    wortgleich 200 auf genau diesen Adressen."""
+    r = hard_client.get(path, headers=EXTERN_HEADERS)
+    assert r.status_code == 200, "%s muss credential-los 200 liefern (PWA-Manifest/-Icon)" % path
+
+
+# ---------------------------------------------------------------------------
+# Befund 2 (Watchdog-Fix) — die sechs Telegram-web_app-Shells + Trailing-
+# Slash-Aliase sind NICHT gegated (offene Live-Probe). Diese Tests pruefen
+# NUR "bleibt erreichbar", nicht "ist gegated" -- das waere die falsche
+# Zusicherung fuer eine bewusst offene Frage.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE)
+def test_telegram_shell_bleibt_ohne_cookie_erreichbar_offene_probe(hard_client, path):
+    """Regressions-Schutz gegen ein versehentliches Wieder-Gaten: diese sechs
+    Flaechen haengen an einem Telegram-web_app-Button, dessen WebView beim
+    Initial-Load keinen Authorization-Header sendet (MAD-11) und dessen
+    Cookie-Traegung nicht belegt ist. Bis Nic die Probe auf einem
+    Elterngeraet gemacht hat, MUSS die Route ohne jede Auth-Quelle laden."""
+    r = hard_client.get(path, headers=EXTERN_HEADERS)
+    assert r.status_code == 200, "%s ist eine offene Telegram-Probe -- darf NICHT 401 werden" % path
+
+
+# ---------------------------------------------------------------------------
 # AC4 — die zwei AUTH-2-Cookie-only-Inline-Routen bleiben unveraendert
 # geschuetzt (Verhaltensbeleg statt Formpruefung, Watchdog-Auflage T1832)
 # ---------------------------------------------------------------------------
 
 
 def test_hoerspiel_player_inline_gate_view_ohne_cookie_ist_401():
-    """seiten/main.py:1455 hoerspiel_player_view -- Inline-AUTH-2-Gate, KEIN
+    """seiten/main.py:1506 hoerspiel_player_view -- Inline-AUTH-2-Gate, KEIN
     Decorator (n=1). Dieser Test ist der Verhaltensbeleg, den der repo-weite
     AUTH-11-Backstop (Folge-Ticket im Brett #1805) statt einer
     __wrapped__-Formpruefung braucht."""
@@ -279,7 +382,7 @@ def test_hoerspiel_player_inline_gate_view_ohne_cookie_ist_401():
 
 
 def test_hoerspiel_player_inline_gate_asset_ohne_cookie_ist_401():
-    """seiten/main.py:1508 hoerspiel_player_asset_view -- dito fuer die
+    """seiten/main.py:1559 hoerspiel_player_asset_view -- dito fuer die
     Asset-Route (manifest.json/sw.js/player.{css,js}/Icons)."""
     main_mod.configure(bot_token=TEST_BOT_TOKEN)
     main_mod.app.testing = True
@@ -339,48 +442,81 @@ def test_connector_sw_js_bleibt_ungegated(hard_client):
 # ---------------------------------------------------------------------------
 
 
-def test_url_map_jede_regel_gegated_oder_ausnahme_oder_inline_belegt():
+def test_url_map_jede_regel_erklaert():
     """AUTH-11 (specs/platform/auth.md): Messbasis ist `app.url_map`, nicht
     der Quelltext -- eine morgen hinzugefuegte Route waere per Hand-Aufzaehlung
-    unsichtbar. Jede Regel traegt entweder:
+    unsichtbar. Jede Regel dieses Service faellt in GENAU eine von vier
+    Kategorien:
 
-      (a) einen Auth-Decorator (`__wrapped__` am view_function, die
-          `functools.wraps`-Heuristik aus dem Auftrags-Messbefehl), ODER
+      (a) traegt einen Auth-Decorator (`__wrapped__` am view_function, die
+          `functools.wraps`-Heuristik aus dem Auftrags-Messbefehl),
       (b) steht namentlich in `_AUTH11_AUSNAHMEN` (exakte Teilmenge der
-          auth.md-Tabelle, siehe oben), ODER
+          auth.md-Tabelle),
       (c) ist einer der zwei AUTH-2-Inline-Endpunkte in
-          `_AUTH2_INLINE_ENDPOINTS` -- deren Schutz beweisen die
+          `_AUTH2_INLINE_ROUTEN` -- deren Schutz beweisen die
           `test_hoerspiel_player_inline_gate_*`-Tests oben VERHALTLICH, nicht
-          per Form. (c) ist explizit GETRENNT von (b), damit die Ausnahme-
-          menge der Spec-Tabelle nie um eine bereits gegatete Route erweitert
-          wird (Watchdog-Auflage T1832).
+          per Form,
+      (d) steht in `ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS` (bewusst oeffentlich,
+          #1437, Spec-PR folgt separat) oder `ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE`
+          (bewusst NICHT gegated, offene Nic-Probe).
+
+    (b)-(d) sind bewusst getrennte, disjunkte Mengen (s. u.) -- eine
+    Watchdog-Ausnahme wird nie in die Spec-Tabellen-Menge (b) einsortiert,
+    nur weil sie zufaellig auch offen ist.
     """
     main_mod.configure(bot_token=TEST_BOT_TOKEN)
+    bekannte_offene_routen = (
+        _AUTH11_AUSNAHMEN
+        | _AUTH2_INLINE_ROUTEN
+        | {_als_rule_pattern(p) for p in ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS}
+        | {_als_rule_pattern(p) for p in ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE}
+    )
     ungeklaert = []
     for rule in main_mod.app.url_map.iter_rules():
-        if rule.rule in _AUTH11_AUSNAHMEN:
-            continue
-        if rule.endpoint in _AUTH2_INLINE_ENDPOINTS:
+        if rule.rule in bekannte_offene_routen:
             continue
         vf = main_mod.app.view_functions.get(rule.endpoint)
         if hasattr(vf, "__wrapped__"):
             continue
         ungeklaert.append(rule.rule)
     assert not ungeklaert, (
-        "Routen ohne Auth-Decorator, ohne AUTH-11-Ausnahme und ohne belegtes "
-        "Inline-Gate: %r -- entweder Decorator ergaenzen oder auth.md AUTH-11 "
-        "per Spec-Aenderung erweitern (nie im Test-Code)." % ungeklaert
+        "Routen ohne Auth-Decorator und ohne bekannte Kategorie: %r -- "
+        "entweder Decorator ergaenzen oder einer der vier Mengen zuordnen "
+        "(nie stillschweigend)." % ungeklaert
     )
 
 
-def test_auth11_ausnahmen_sind_teilmenge_der_spec_tabelle():
-    """Gegenprobe zur Ausnahmemenge selbst: exakt elf Eintraege (die zehn aus
-    dem T1832-S1-Auftrag PLUS den einen, den der Auftrag selbst als "neu in
-    der Tabelle" nachtraegt -- /api/v1/seiten/static/<path:filename> UND
+def test_bekannte_offene_kategorien_sind_paarweise_disjunkt():
+    """Watchdog-Kleinbefund 2: `_AUTH11_AUSNAHMEN` (Spec-Tabelle) und
+    `_AUTH2_INLINE_ROUTEN` (Inline-Gate) trugen zuvor verschiedene Sorten
+    (Rule-Strings vs. Endpoint-Namen) -- zwei Mengen verschiedener Sorte sind
+    STRUKTURELL immer disjunkt, das prüfte nichts. Jetzt sind alle vier
+    Kategorien Rule-String-Mengen; die Disjunktheit ist ein echter Beleg,
+    dass keine Route in zwei Kategorien gleichzeitig steht (z. B. faelschlich
+    sowohl als Spec-Ausnahme UND als offene Telegram-Probe gefuehrt)."""
+    kategorien = {
+        "AUTH11_AUSNAHMEN": _AUTH11_AUSNAHMEN,
+        "AUTH2_INLINE_ROUTEN": _AUTH2_INLINE_ROUTEN,
+        "BEFUND1_PUBLIC_PWA_ASSETS": {_als_rule_pattern(p) for p in ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS},
+        "BEFUND2_OFFENE_TELEGRAM_PROBE": {_als_rule_pattern(p) for p in ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE},
+    }
+    namen = list(kategorien)
+    for i, a in enumerate(namen):
+        for b in namen[i + 1:]:
+            ueberschneidung = kategorien[a] & kategorien[b]
+            assert not ueberschneidung, (
+                "%s und %s ueberschneiden sich: %r" % (a, b, ueberschneidung)
+            )
+
+
+def test_auth11_ausnahmen_hat_die_erwartete_kardinalitaet():
+    """Reine Kardinalitaets-/Drift-Probe fuer `_AUTH11_AUSNAHMEN` -- KEINE
+    Teilmengen-Pruefung gegen die echte Tabelle (das parst diese Datei nicht;
+    der repo-weite AUTH-11-Test des Abschluss-Stuecks im Brett #1805 parst
+    `specs/platform/auth.md` einmal zentral). Elf Eintraege: die zehn aus dem
+    T1832-S1-Auftrag PLUS den einen, den der Auftrag selbst als "neu in der
+    Tabelle" nachtraegt -- /api/v1/seiten/static/<path:filename> UND
     /api/v1/init-data/validate sind beide neu, macht in Summe elf benannte
-    Zeilen in der Tabelle trotz der Bezeichnung 'zehn' im Auftrag; woertlich
-    nachgezaehlt gegen `specs/platform/auth.md` AUTH-11-Tabelle, siehe
-    Modul-Docstring). Reine Kardinalitaets-/Drift-Probe -- keine Spec-Aenderung."""
+    Zeilen trotz der Bezeichnung 'zehn' im Auftrag (woertlich nachgezaehlt
+    gegen `specs/platform/auth.md` AUTH-11-Tabelle, siehe Modul-Docstring)."""
     assert len(_AUTH11_AUSNAHMEN) == 11
-    assert _AUTH11_AUSNAHMEN.isdisjoint(_AUTH2_INLINE_ENDPOINTS), \
-        "Ausnahmemenge und Inline-Endpunkt-Menge duerfen sich nie ueberschneiden"
