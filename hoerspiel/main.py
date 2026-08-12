@@ -76,7 +76,10 @@ else:  # python3 hoerspiel/main.py
 # MAD-7 / HSP-39 / T1015: Init-Data-Auth aus tools.initdata (Cluster-A-Option-B
 # 2026-06-18-1720 — kein sys.path-Hack auf eltern-chat mehr).
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
-from tools.initdata.auth_gate import make_require_init_data  # noqa: E402
+from tools.initdata.auth_gate import (  # noqa: E402
+    make_require_dual_gate,
+    make_require_init_data,
+)
 
 _INIT_DATA_AVAILABLE = True
 
@@ -291,6 +294,51 @@ require_init_data = make_require_init_data(
 
 
 # ============================================================
+#  AUTH-11 Dual-Gate — /display/hoerspiel/*-Browser-Flaechen (T1833, #1805)
+# ============================================================
+# Die /display/hoerspiel/…-Renderer-Routen (samt dem impliziten Flask-
+# static-Endpunkt) sind reine Browser-Flaechen — kein tma-Header (das
+# <img>/<script>/<a href>-Laden traegt keinen Authorization-Header), kein
+# Server-zu-Server-Loopback-Aufrufer. Analog seiten/main.py require_dual_gate
+# (AUTH-7b) und dem #1833-Geschwister-Track routine: NUR der
+# xbuddy_session-Cookie zaehlt (kein tma, kein Loopback-Bypass — anders als
+# require_init_data oben). Bot-Token-Getter und 401-Renderer werden mit
+# require_init_data GETEILT (gleicher HMAC-Sign-Key, kein zweites Geheimnis;
+# ein zweiter fast identischer 401-Text waere ein Genre-Duplikat).
+
+
+def _client_ip():
+    """Client-IP fuers AUTH-7-Observe-Log (RAT-32: kein Gate mehr, nur Log)."""
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr
+
+
+# RAT-32-Nicht-Verhandelbares: der Observe->Hard-Flip laeuft ueber die ENV-Naht
+# XBUDDY_AUTH_MODE, NIEMALS ueber einen hartkodierten Code-Wert (Lehre
+# #1427->#1430: „der Hard-Flip war hartkodiert, der Revert ein Code-Diff").
+# Kill-Kriterium: liefert eine Route einem gepairten Geraet 401, wo es vorher
+# 200 bekam -> ENV sofort zurueck auf observe (Zwei-Wege-Tuer, kein Deploy).
+# Default hier ist "hard" (Nic-Setzung 2026-08-11, auth.md AUTH-3.a-UEBERHOLT)
+# — abweichend vom seiten-Vorbild (Default "observe"), weil hoerspiel erst
+# jetzt (T1833) gegated wird und ohne Observe-Vorlauf startet. Muster:
+# seiten/main.py:469.
+_AUTH_MODE = os.environ.get("XBUDDY_AUTH_MODE", "hard")
+
+
+require_dual_gate = make_require_dual_gate(
+    get_bot_token=_get_bot_token,
+    get_client_ip=_client_ip,
+    auth_401=_auth_401,
+    default_mode=_AUTH_MODE,
+)
+
+
+# ============================================================
 #  HSP-3a: Familie-Client-Accessor + Face-Pille-Helfer
 # ============================================================
 
@@ -446,6 +494,14 @@ def _validate_llm_model(provider: str, model: str) -> bool:
 
 app = Flask(__name__, static_url_path="/display/hoerspiel/static")
 
+# AUTH-11 (T1833/#1805): der implizite Flask-static-Endpoint
+# (/display/hoerspiel/static/<path:filename>) traegt KEINE @app.route-
+# Dekoration — Werkzeug registriert ihn intern als Endpunkt "static". Der
+# einzige Ansatzpunkt ist die View-Funktion nach der App-Erzeugung. Bricht
+# nichts: die Views laden ihr JS/CSS ueber denselben Origin, der Browser
+# schickt denselben Cookie mit.
+app.view_functions["static"] = require_dual_gate(mode=_AUTH_MODE)(app.view_functions["static"])
+
 
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
 register_version(app)
@@ -455,6 +511,7 @@ register_version(app)
 
 @app.route("/display/hoerspiel/<kind_id>/", methods=["GET"])
 @app.route("/display/hoerspiel/<kind_id>", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
 def display_index_redirect(kind_id: str):
     """#1612: /display/hoerspiel/<kind_id>[/] rendert die Alben-View DIREKT (200).
 
@@ -479,6 +536,7 @@ def display_index_redirect(kind_id: str):
 
 
 @app.route("/display/hoerspiel/<kind_id>/alben", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
 def display_alben(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -495,6 +553,7 @@ def display_alben(kind_id: str):
 # ---- Lese-Endpoints (HSP-17, Side-Effekt-frei) ----
 
 @app.route("/api/v1/hoerspiel/<kind_id>/bible", methods=["GET"])
+@require_init_data  # AUTH-11 (T1833/#1805): Profil der Fantasiewelt eines realen Kindes.
 def bible(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -504,6 +563,7 @@ def bible(kind_id: str):
 
 
 @app.route("/api/v1/hoerspiel/<kind_id>/folgen-historie", methods=["GET"])
+@require_init_data  # AUTH-11 (T1833/#1805): Profil der Fantasiewelt eines realen Kindes.
 def folgen_historie(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -816,14 +876,20 @@ def _audio_event_stream():
 
 
 @app.route("/api/v1/hoerspiel/<kind_id>/audio-stream", methods=["GET"])
+@require_init_data  # AUTH-11 (T1833/#1805): war PUBLIC (AUTH-6), jetzt Cookie-Pfad.
 def audio_stream(kind_id: str):
     """HSP-42: SSE-Stream für Audio-Source-Push an Panel-PWA.
 
     Caller: app-panel-PWA (controller/app-panel/), pro HSP-Instanz eine
     EventSource-Verbindung. Browser-Native-Reconnect übernimmt Reconnect
-    bei Tab-visibility-Change (DC-7-Pattern).
+    bei Tab-visibility-Change (DC-7-Pattern). EventSource kann keinen
+    Authorization-Header setzen — die Identitätsquelle ist der
+    xbuddy_session-Cookie, den der Browser bei einem SSE-Connect wie bei
+    jedem anderen same-origin-GET automatisch mitschickt.
 
-    Auth: PUBLIC (AUTH-6, Trigger „Phase 4 HSP-Audio-Routing").
+    Auth: AUTH-11 (T1833/#1805) — require_init_data (Cookie-Zweig trägt
+    den echten Aufrufer; Loopback bleibt als Server-zu-Server-Fallback).
+    Vormals PUBLIC (AUTH-6, Trigger „Phase 4 HSP-Audio-Routing" — überholt).
     """
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -880,13 +946,19 @@ def themen_endpoint(kind_id: str):
 
 @app.route("/api/v1/hoerspiel/<kind_id>/alben/<album_id>/audio/<path:track_filename>",
            methods=["GET"])
+@require_init_data  # AUTH-11 (T1833/#1805): war PUBLIC (AUTH-4), jetzt Cookie-Pfad.
 def album_audio(kind_id: str, album_id: str, track_filename: str):
     """HSP-37: Audio-Track streamen mit Range-Requests.
 
-    Auth: PUBLIC (AUTH-4, auth.md:366). Das <audio>-Element/Range-Fetch lädt den
-    Track ohne zuverlässiges Cookie — Gaten bräche das Kind-Tablet-Playback
-    (T1640 KRITISCH). send_from_directory blockt Pfad-Traversal.
-    `Content-Type: audio/mpeg`, `Cache-Control: private, max-age=86400`.
+    Auth: AUTH-11 (T1833/#1805) — require_init_data. Der frühere PUBLIC-Stand
+    (AUTH-4, auth.md:366) ist überholt (Nic-Setzung 2026-08-11: alle Adressen
+    hinter dem Cookie). Das reale Kind-Tablet-Playback läuft ohnehin nicht
+    über diesen Pfad, sondern über den Manifest-`audio-asset`, der auf
+    `/display/hoerspiel/<kind_id>/data/alben/…` zeigt (dual-gate-geschützt,
+    `album_manifest.py`); diese Route hat aktuell keinen realen Caller
+    (verifiziert: `hoerspiel/static/eltern.js:726-731`-Kommentar). Gaten
+    bricht daher kein Live-Playback. send_from_directory blockt Pfad-
+    Traversal. `Content-Type: audio/mpeg`, `Cache-Control: private, max-age=86400`.
     """
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -952,6 +1024,7 @@ def resume_endpoint(kind_id: str):
 # ---- Shared-Assets (HSP-17/22/29) ----
 
 @app.route("/api/v1/hoerspiel/<kind_id>/shared-assets/status", methods=["GET"])
+@require_init_data  # AUTH-11 (T1833/#1805): war PUBLIC (AUTH-4/Diagnose), jetzt Cookie-Pfad.
 def shared_assets_status(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
@@ -960,7 +1033,16 @@ def shared_assets_status(kind_id: str):
 
 
 @app.route("/api/v1/hoerspiel/<kind_id>/shared-assets/rebuild", methods=["POST"])
+@require_init_data  # AUTH-11 (T1833/#1805): schreibend, hoechste Prioritaet — s.u.
 def shared_assets_rebuild(kind_id: str):
+    """HSP-22/29: alle vier Shared-Assets-MP3s (Intro/Outro je Voice) neu bauen.
+
+    Auth: AUTH-11 (T1833/#1805) — require_init_data. Kein Docstring/Kommentar
+    hier behauptete früher „loopback-only", aber der Decorator selbst fehlte
+    komplett: am 2026-08-11 war die Route live ohne Cookie erreichbar und
+    antwortete nach 24s mit 200 (unautorisierter Rebuild-Trigger, teuer per
+    TTS-Kosten). Jetzt hart gegated wie jede andere AUTH-3-Schreibroute.
+    """
     err = _assert_self_kind(kind_id)
     if err is not None:
         return err
@@ -976,6 +1058,7 @@ def shared_assets_rebuild(kind_id: str):
 # ---- Daten-Router (HSP-26 `GET /display/hoerspiel/<kind_id>/data/<sub>`, URL-3a) ----
 
 @app.route("/display/hoerspiel/<kind_id>/data/<path:sub>", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-11 (T1833/#1805): Browser-Flaeche, Cookie-only.
 def display_data(kind_id: str, sub: str):
     """Liefert Audio-/Cover-Assets aus dem Daten-Bereich aus (HSP-26, URL-3a).
 

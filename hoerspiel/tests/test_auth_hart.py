@@ -4,14 +4,24 @@ Phase-3-Migration: die hoerspiel-Datenrouten (config, alben, alben/<id>/manifest
 resume, themen, folgen-vorschlag) tragen jetzt den HART-Factory-Decorator
 (`tools/initdata/auth_gate.make_require_init_data`, Name `require_init_data`).
 Diese Suite belegt die vier Auth-Zweige an einer echten AUTH-3-Route plus die
-KRITISCHE Playback-Ausnahme:
+Audio-mp3-Route:
 
   - extern OHNE Quelle (X-Forwarded-For gesetzt) → 401 (hoerspiel-AUTH-8-HTML),
   - extern MIT gültigem Cookie → 200 + Rolling-Refresh (Set-Cookie),
   - extern MIT gültigem tma-Header + Familien-Mitglied → 200,
   - Loopback (127.0.0.1 ohne XFF) → Pass-through 200,
-  - KRITISCH: die Audio-mp3-Route bleibt PUBLIC (AUTH-4) — extern ohne Cookie
-    liefert KEIN 401 (sonst bräche das Kind-Tablet-Playback).
+  - GEDREHT (T1833, #1805, AUTH-11): die Audio-mp3-Route ist NICHT mehr PUBLIC.
+    Der frühere AUTH-4-Publicness-Eintrag für `alben/<id>/audio/<track>.mp3`
+    ist per Nic-Setzung 2026-08-11 (auth.md AUTH-3.a-ÜBERHOLT-Passage, deckt
+    diese Route über die generische Vorrang-Klausel eines parallel
+    entstehenden AUTH-4-ÜBERHOLT-Markers ab) aufgehoben — Nic hat die Route
+    am 2026-08-11 namentlich mitentschieden ("auch die Kind-Tablet-Audio-
+    Route"), weil der Kiosk seit dem RAT-32-Cookie-Umbau ein gültiges Cookie
+    bis 2026-11-09 trägt. Die frühere "sonst bricht das Playback"-Prämisse war
+    eine behauptete, nie gemessene Folge (dieselbe Klasse Fehlschluss wie die
+    inzwischen widerlegte PBE-3-"cookieloses Kiosk-Gerät"-Prämisse) — extern
+    OHNE Identität liefert die Route jetzt wie jede andere AUTH-3-Datenroute
+    401.
 """
 
 import hashlib
@@ -35,8 +45,12 @@ TEST_BOT_TOKEN = "123456:ABCdef_testtoken"
 
 # AUTH-3-Datenroute (GET alben liefert auch mit leerem data_root 200 → []).
 _DATA_ROUTE = "/api/v1/hoerspiel/mia/alben"
-# KRITISCH: Audio-mp3 bleibt PUBLIC (AUTH-4). 404 (kein Album) beweist, dass der
-# View OHNE Auth-401 erreicht wird — die Auth-Membran greift nicht.
+# GEDREHT (T1833, #1805, AUTH-11, AUTH-4-ÜBERHOLT): Audio-mp3 ist jetzt
+# require_init_data-gegated wie jede andere Datenroute dieses Buddys — die
+# frühere PUBLIC-Ausnahme (AUTH-4) ist per Nic-Setzung 2026-08-11 aufgehoben.
+# 404 (kein Album) bleibt der Beleg für den erreichten View, aber jetzt NUR
+# noch MIT Identität (s. test_audio_route_extern_mit_cookie_ist_200_wegen_404
+# unten) — ohne Identität steht die Auth-Membran davor (401).
 _AUDIO_ROUTE = "/api/v1/hoerspiel/mia/alben/x1/audio/track-01.mp3"
 
 
@@ -108,17 +122,38 @@ def test_daten_route_loopback_ohne_xff_ist_pass_through(app_client):
     assert r.status_code == 200, "Loopback ohne XFF muss durchlaufen (AUTH-5)"
 
 
-def test_audio_route_extern_ohne_cookie_bleibt_public(app_client):
-    """KRITISCH (T1640): die Audio-mp3-Route ist NICHT gegatet (AUTH-4 public).
+def test_audio_route_extern_ohne_identitaet_ist_401(app_client):
+    """GEDREHT (T1833, #1805, AUTH-11): die Audio-mp3-Route verlangt jetzt Identität.
 
-    Fremd-Request ohne Cookie darf KEIN 401 sehen — sonst bräche das
-    Kind-Tablet-Playback. 404 (kein Album x1) beweist: der View läuft, die
-    Auth-Membran greift nicht (401 würde vor dem 404 stehen).
+    Bis 2026-08-11 stand hier die Umkehrung — "Audio-mp3 bleibt PUBLIC (AUTH-4),
+    401 bricht das Kind-Tablet-Playback". Die Prämisse war eine BEHAUPTETE,
+    nie gemessene Folge (dieselbe Fehlerklasse wie die zwischenzeitlich am
+    Live-Stand widerlegte PBE-3-Prämisse "cookieloses Kiosk-Gerät"). Nic hat
+    diese Route am 2026-08-11 namentlich mitentschieden ("auch die
+    Kind-Tablet-Audio-Route") — der Kiosk trägt seit dem RAT-32-Cookie-Umbau
+    ein gültiges Cookie bis 2026-11-09. Der frühere AUTH-4-PUBLIC-Eintrag ist
+    über die generische Vorrang-Klausel des parallel entstehenden
+    AUTH-4-ÜBERHOLT-Markers (spec/1805-auth11-bootstrap-ausnahmen) abgedeckt.
+    Fremd-Request ohne Cookie/tma → 401 wie jede andere require_init_data-Route
+    (s. test_daten_route_extern_ohne_quelle_ist_401 oben, dasselbe Muster).
     """
     r = app_client.get(_AUDIO_ROUTE, headers={"X-Forwarded-For": "1.2.3.4"})
-    assert r.status_code != 401, (
-        "Audio-mp3 muss PUBLIC bleiben (AUTH-4) — 401 bricht das Playback (T1640)"
+    assert r.status_code == 401, (
+        "Audio-mp3 muss ohne Identität 401 liefern (AUTH-11, Nic-Setzung 2026-08-11 "
+        "hebt den früheren AUTH-4-PUBLIC-Stand auf)"
     )
+    body = r.get_data(as_text=True)
+    assert "neu verbinden" in body.lower(), "AUTH-8-Re-Pair-HTML erwartet"
+
+
+def test_audio_route_extern_mit_cookie_ist_200_wegen_404(app_client):
+    """Positiv-Gegenprobe zur gedrehten Zusicherung oben: mit gültigem Cookie
+    kommt die Audio-mp3-Route durch — 404 (kein Album x1) beweist, dass der
+    View erreicht wird und nicht die Auth-Membran greift."""
+    token = session_cookie.sign_session(42, TEST_BOT_TOKEN)
+    app_client.set_cookie(session_cookie.COOKIE_NAME, token, domain="localhost")
+    r = app_client.get(_AUDIO_ROUTE, headers={"X-Forwarded-For": "1.2.3.4"})
     assert r.status_code == 404, (
-        "erwartet 404 (kein Album x1) — beweist, dass der View ohne Auth erreicht wird"
+        "erwartet 404 (kein Album x1) mit gültigem Cookie — beweist, dass der "
+        "View hinter der Auth-Membran erreicht wird"
     )
