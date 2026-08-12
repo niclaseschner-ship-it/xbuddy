@@ -6,6 +6,9 @@
                                                 Endpunkt trägt jetzt den Gate
   test_static_endpoint_mit_cookie_passiert_gate — AC4: gültiger Cookie lässt
                                                 die (leere) static-Route durch
+  test_static_endpoint_mit_cookie_und_datei_setzt_rolling_refresh — AC4:
+                                                existiert die Datei, liefert
+                                                die Route 200 + Rolling-Refresh
   test_auth_mode_env_naht_observe_ist_rueckroll_default_bleibt_hart — RAT-32
                                                 Nicht-Verhandelbar: End-to-End-
                                                 Beleg der ENV-Naht über einen

@@ -203,7 +203,8 @@ def get_panel(panel_id):
 # zurück (leeres Panel, HTTP 200 an den Browser) — der von PBE-3 benannte
 # #1338-Bruch, LKG-Cache ist In-Memory und nach Neustart leer. Braucht zuerst
 # eine Identität am Proxy-Hop (Cookie durchreichen vs. Service-zu-Service-
-# Naht) — Design-Entscheidung, die Nic trifft; separat ticketiert.
+# Naht) — Design-Entscheidung, die Nic trifft; separat ticketiert als #1854
+# ("seiten→panel-Proxy trägt keine Identität — blockiert fünf AUTH-11-Routen").
 def get_panel_config(panel_id):
     """PREG-14: das `config`-Feld als eigenständiges JSON-Dokument (PANEL-8).
 
@@ -319,7 +320,8 @@ def _bad_request(msg):
 # würde am Proxy-Hop hart 401/502 auslösen (Watchdog hat das live reproduziert)
 # statt sichtbar zu scheitern. Braucht zuerst eine Identität am Proxy-Hop
 # (Cookie durchreichen vs. Service-zu-Service-Naht) — Design-Entscheidung, die
-# Nic trifft; separat ticketiert.
+# Nic trifft; separat ticketiert als #1854 ("seiten→panel-Proxy trägt keine
+# Identität — blockiert fünf AUTH-11-Routen").
 #
 # Die Statik liegt in `controller/app-panel/bearbeiten.{html,js,css}` neben der
 # bestehenden Display-Seite. Wir lesen die HTML-Datei einmalig pro Request und
