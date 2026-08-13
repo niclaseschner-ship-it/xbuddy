@@ -1,5 +1,15 @@
 # RAT-24 — Deterministisches Render-/Layout-Gate für Display-Views
 
+> ## ⛔ ZURÜCKGEZOGEN am 2026-08-13 durch [RAT-37](RAT-37-rat-24-render-gate-rueckzug.md)
+>
+> Dieser Entscheid gilt **nicht mehr**. Das Render-Gate ist beerdigt, nicht
+> repariert: 48 Tage nie verdrahtet, dann sechs Tage nach der Verdrahtung erneut
+> blind (Auth-Rück-Verriegelung, 3/3 Pilot-Ansichten 401). Gemessene Nutzung
+> **0 von 97** Kommentaren. Der Screenshot-Self-Check über die Origin bleibt
+> unberührt — er ist älter als RAT-24 und war nie Teil davon.
+>
+> Der Text unten bleibt als Geschichte stehen. **Nicht als geltende Regel lesen.**
+
 - **Entschieden:** 2026-06-26 (Berater-Runde „Deterministisch-hartes Layout-Gate
   für Display-Views", Berater + Codex-Antiberater, eine Runde mit READY-FOR-PROPOSE-
   Vorstufe + Antiberater-Pass), **ratifiziert** 2026-06-26 (Nic, drei Stempel:
