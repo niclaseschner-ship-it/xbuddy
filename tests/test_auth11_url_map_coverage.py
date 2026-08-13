@@ -286,6 +286,27 @@ def _auth6_alle_eintraege() -> list[str]:
 # hartkodiert: faellt die Zeile aus der Spec, faellt die Erklaerung mit.
 _SAMMELZEILE = frozenset({"/healthz", "/version"})
 
+#: Die drei Klassen, die AUSSCHLIESSLICH aus den Decorator-Factories stammen
+#: duerfen. `markiere_auth_klasse` weist sie seit #1805 zurueck.
+_FACTORY_KLASSEN = frozenset({
+    auth_gate.AUTH_KLASSE_HART,
+    auth_gate.AUTH_KLASSE_SOFT,
+    auth_gate.AUTH_KLASSE_DUAL,
+})
+
+
+def _marker_traeger(view_func):
+    """(Klasse, Traeger-Objekt) — wer in der `__wrapped__`-Kette den Marker haelt."""
+    aktuell = view_func
+    gesehen: set[int] = set()
+    while aktuell is not None and id(aktuell) not in gesehen:
+        gesehen.add(id(aktuell))
+        klasse = getattr(aktuell, auth_gate.AUTH_MARKER, None)
+        if klasse:
+            return klasse, aktuell
+        aktuell = getattr(aktuell, "__wrapped__", None)
+    return None, None
+
 
 def erklaerung(app, rule) -> tuple[str, str] | None:
     """Die (Sorte, Detail)-Erklaerung fuer eine URL-Map-Regel, oder `None`.
@@ -306,9 +327,22 @@ def erklaerung(app, rule) -> tuple[str, str] | None:
       Sorte macht die Drift sichtbar (#1863).
     """
     view = app.view_functions.get(rule.endpoint)
-    klasse = auth_gate.auth_klasse(view)
+    klasse, traeger = _marker_traeger(view)
     ausnahmen = auth11_ausnahmen()
     schuldstand = auth6_schuldstand()
+
+    # Kohaerenz-Probe fuer die drei Factory-Klassen: sie entstehen nur an einem
+    # fertigen Wrapper, und jeder dieser Wrapper traegt `functools.wraps`. Ein
+    # Marker dieser Klassen auf einer NIE umhuellten Funktion kann folglich
+    # nicht aus einer Factory stammen — er wurde von Hand gesetzt und behauptet
+    # ein Gate, das es nicht gibt. `markiere_auth_klasse` weist diese Klassen
+    # zurueck; diese Probe deckt zusaetzlich das rohe `setattr`.
+    #
+    # Bewusst nur VERSCHAERFEND: `__wrapped__` ist hier keine Gate-Heuristik
+    # (das war der alte Fehler), sondern eine Zusatz-Bedingung. Der Marker
+    # bleibt der Nachweis — er wird hier nur nicht mehr blind geglaubt.
+    if klasse in _FACTORY_KLASSEN and not hasattr(traeger, "__wrapped__"):
+        return None
 
     if klasse == auth_gate.AUTH_KLASSE_INLINE_COOKIE:
         if rule.rule not in auth11_inline_erlaubte():
@@ -632,10 +666,34 @@ def test_markiere_auth_klasse_ist_verhaltensneutral():
     def view(a, b=2):
         return a + b
 
-    markiert = auth_gate.markiere_auth_klasse("X")(view)
+    markiert = auth_gate.markiere_auth_klasse(
+        auth_gate.AUTH_KLASSE_INLINE_COOKIE)(view)
     assert markiert is view, "Marker darf keinen Wrapper einziehen"
     assert markiert(1) == 3
-    assert auth_gate.auth_klasse(markiert) == "X"
+    assert auth_gate.auth_klasse(markiert) == auth_gate.AUTH_KLASSE_INLINE_COOKIE
+
+
+@pytest.mark.parametrize("klasse", sorted(_FACTORY_KLASSEN))
+def test_markiere_auth_klasse_verweigert_die_factory_klassen(klasse):
+    """Die Tuer, die AUTH-11 zumachen soll, war nach dem Inline-Riegel nur
+    verschoben: `markiere_auth_klasse` nahm jeden String an, und `erklaerung()`
+    prueft die Spec-Liste NUR bei der Inline-Klasse. Ein handgesetztes
+    `AUTH-7b-DUAL` auf einer gate-losen, schreibenden Route war damit gruen —
+    eine Zeile, kein Spec-PR.
+
+    AUTH-11 stuetzt seine Beweiskette ausdruecklich darauf, dass die
+    Factory-Klassen nur am fertigen Wrapper entstehen (auth.md: „wer ihn
+    traegt, hat zwingend auch dessen Gate-Logik"). Diese Praemisse haelt nur,
+    wenn der Handsetzer sie nicht schreiben darf.
+    """
+    with pytest.raises(ValueError, match="AUTH-2-INLINE"):
+        auth_gate.markiere_auth_klasse(klasse)
+
+
+def test_markiere_auth_klasse_verweigert_auch_freie_strings():
+    """Kein Ausweichen ueber einen Fantasie-Wert: nur die Inline-Klasse zaehlt."""
+    with pytest.raises(ValueError, match="AUTH-2-INLINE"):
+        auth_gate.markiere_auth_klasse("AUTH-9000-SUPER")
 
 
 # ---------------------------------------------------------------------------
@@ -834,12 +892,22 @@ def test_inline_liste_ist_klein_und_ueberschneidet_keine_andere_liste():
 
 def test_negativprobe_gegatete_und_gefuehrte_routen_bleiben_gruen():
     """Gegenprobe zur Negativ-Probe: derselbe Mechanismus meldet eine
-    markierte Route und eine Spec-gefuehrte Route NICHT — der Test oben ist
-    also nicht bloss „meldet alles"."""
+    gegatete und eine Spec-gefuehrte Route NICHT — der Test oben ist also
+    nicht bloss „meldet alles".
+
+    Die gegatete Route bekommt hier einen ECHTEN Factory-Decorator. Frueher
+    stand an dieser Stelle ein handgesetztes `AUTH_KLASSE_DUAL` auf einer
+    gate-losen View — damit zementierte der eigene Testkorpus genau das
+    Muster, das die Verriegelung verhindern soll: wer es kopierte, tat nichts,
+    was das Repo als falsch behandelt.
+    """
     probe = _wegwerf_app("auth11_gegenprobe")
+    echter_gate = auth_gate.make_require_dual_gate(
+        get_bot_token=lambda: "t", get_client_ip=lambda: None,
+        auth_401=lambda: ("", 401))()
 
     @probe.route("/spielwiese/gegatet")
-    @auth_gate.markiere_auth_klasse(auth_gate.AUTH_KLASSE_DUAL)
+    @echter_gate
     def gegatet():                                # pragma: no cover - nie gerufen
         return "ok"
 
@@ -853,6 +921,37 @@ def test_negativprobe_gegatete_und_gefuehrte_routen_bleiben_gruen():
 
     assert unerklaerte_regeln(probe) == [], (
         "Marker- bzw. Spec-gedeckte Routen duerfen nicht gemeldet werden"
+    )
+
+
+def test_negativprobe_handgesetzte_factory_klasse_ohne_gate_wird_rot():
+    """Der vom Watchdog reproduzierte Fall, in seiner haertesten Form.
+
+    `markiere_auth_klasse` weist die Factory-Klassen jetzt zurueck — der
+    bequeme Weg ist zu. Bleibt das rohe `setattr` mit dem Attributnamen. Auch
+    das darf nicht gruen sein: der Marker sitzt dann auf einer nie umhuellten
+    Funktion, kann also aus keiner Factory stammen und behauptet ein Gate, das
+    es nicht gibt.
+
+    Die Route ist bewusst schreibend und fuehrt eine Kind-ID — die Klasse
+    Route, die im Ausgangsbefund von #1805 unauthentifiziert erreichbar war.
+    """
+    probe = _wegwerf_app("auth11_gefaelschter_marker")
+
+    @probe.route("/api/v1/kinder/<kid>/profil", methods=["GET", "POST"])
+    def profil(kid):                              # pragma: no cover - nie gerufen
+        return "Profil ohne jeden Gate"
+
+    # Roh gesetzt, am Handsetzer vorbei — die einzige verbliebene Form.
+    setattr(profil, auth_gate.AUTH_MARKER, auth_gate.AUTH_KLASSE_DUAL)
+    assert auth_gate.auth_klasse(profil) == auth_gate.AUTH_KLASSE_DUAL, (
+        "Voraussetzung: der gefaelschte Marker ist gesetzt"
+    )
+
+    offen = unerklaerte_regeln(probe)
+    assert offen == ["GET,POST /api/v1/kinder/<kid>/profil [endpoint=profil]"], (
+        "Eine gate-lose Route mit handgesetzter Factory-Klasse muss unerklaert "
+        "bleiben — sonst genuegt eine Zeile fuer eine schreibende Route: %s" % offen
     )
 
 

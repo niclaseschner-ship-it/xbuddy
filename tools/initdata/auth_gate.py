@@ -167,7 +167,29 @@ def markiere_auth_klasse(klasse):
     uebergebene Funktion: kein Wrapper, keine Signatur-Aenderung, kein
     zusaetzlicher Frame — der Marker ist reine Deklaration, das Gate bleibt
     dort, wo es steht.
+
+    **Nur `AUTH_KLASSE_INLINE_COOKIE` ist zulaessig; alles andere wirft.**
+    Der Grund ist die Beweiskette, auf die sich AUTH-11 ausdruecklich stuetzt
+    (auth.md: „der Marker wird erst gesetzt, nachdem der fertige Wrapper
+    steht, wer ihn traegt, hat zwingend auch dessen Gate-Logik"). Diese
+    Praemisse haelt nur, solange die drei Factory-Klassen ausschliesslich aus
+    den Factories stammen. Duerfte dieser Handsetzer sie auch schreiben,
+    genuegte eine Zeile fuer eine gate-lose Route mit
+    `AUTH_KLASSE_DUAL` — kein Wrapper, kein Spec-PR, und AUTH-11 saehe sie
+    als gegatet. Die Inline-Klasse ist die einzige, die von Hand gesetzt
+    werden darf, und sie ist genau deshalb an eine abschliessende Liste in
+    der Klausel gebunden (AUTH-11, `AUTH-2-INLINE`).
     """
+    if klasse != AUTH_KLASSE_INLINE_COOKIE:
+        raise ValueError(
+            "markiere_auth_klasse akzeptiert nur %r (AUTH-2-Inline-Gate), nicht %r. "
+            "Die Factory-Klassen duerfen ausschliesslich von den Decorator-Factories "
+            "gesetzt werden — sonst behauptet ein Attribut ein Gate, das es nicht gibt "
+            "(auth.md AUTH-11). Braucht die Route wirklich einen Inline-Gate, gehoert "
+            "sie zusaetzlich namentlich in die AUTH-2-INLINE-Liste der Klausel."
+            % (AUTH_KLASSE_INLINE_COOKIE, klasse)
+        )
+
     def setzer(fn):
         setattr(fn, AUTH_MARKER, klasse)
         return fn
