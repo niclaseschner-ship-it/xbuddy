@@ -508,7 +508,19 @@ explizites Undo greift noch.
 **Undo-Wort + Quittungs-Anleitung — eindeutig statt breit.** Das
 Undo-Wort ist konstant **`falsch`** — ein einziges, nicht polysemes
 Wort. Alltags-Ablehnungen wie `nein` sind **ausgeschlossen**, damit
-kein beiläufiges Nein einen Schreibakt kippt. Die A2-Quittung
+kein beiläufiges Nein einen Schreibakt kippt.
+
+**[ERGÄNZT 2026-08-13 — Nic-Verdikt zu #1253] Was die Familie sieht, ist nicht
+alles, was der Skill zurückgibt.** Eine Tool-Antwort darf zwei Teile tragen:
+einen **sichtbaren** für die Familie und einen **Steuer-Teil**, den nur das
+Modell liest. Technische Kennungen, mit denen das Modell eine Umkehr-Aktion
+aufrufen kann, gehören in den Steuer-Teil — **nie** in den sichtbaren Text.
+
+Vorher gab es diese Trennung nicht, mit der Folge, dass eine Quittung der
+Familie zwei verschiedene Umkehr-Wörter und eine technische Kennung anbot. Die
+Ein-Wort-Regel oben gilt für den **sichtbaren** Teil und ist damit ohne Ausnahme
+haltbar: die Familie sieht genau `falsch`, das Modell bekommt zusätzlich, was es
+zum Rückgängigmachen braucht. Die A2-Quittung
 **enthält das Undo-Wort explizit und nennt den Effekt** in einem
 Satz, z. B.: „Ich habe X eingetragen. Wenn das ein Missverständnis
 war, sag einfach `falsch`, ich mach es dann rückgängig." Die Familie
