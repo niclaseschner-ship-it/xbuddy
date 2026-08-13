@@ -581,17 +581,16 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 **V1-Stand:**
 
 ```
-/api/v1/hoerspiel/<kind_id>/audio-stream      (Trigger: Phase 4 HSP-Audio-Routing — PANEL-13-Naht; Infrastruktur erhalten (app-panel/app.js:819-966), audio_play-Producer ruht bis #1471/HSP-44)
+# audio-stream, seiten, seiten/uebersicht: Trigger 2026-08-12 gefeuert → jetzt
+# gegatet (audio-stream + seiten: AUTH-3 HART via #1833/#1832; seiten/uebersicht:
+# AUTH-7b DUAL via #1832) — Zeilen entfernt, #1863
 # routine/{items,config} + hoerspiel/{config,alben,alben/<id>/manifest,resume,themen,folgen-vorschlag}: Phase-2/3-Trigger 2026-07-30 gefeuert → jetzt in AUTH-3 (Bau #1639/#1640)
-/api/v1/seiten                                (Trigger: Phase 2/3, mini-app-uebersicht-Migration)
-/api/v1/seiten/uebersicht                     (Trigger: Phase 2/3)
 /api/v1/seiten/mini-app-uebersicht            (Trigger: Phase 2/3)
 /api/v1/panels/*                              (Trigger: Phase 4 Panel-Mini-App)
 /api/v1/panels/<id>/tiles*                    (Trigger: Phase 4)
 /api/v1/geraete/*                             (Trigger: Geräte-Editor-Mini-App)
-/api/v1/router/panels/<src>                   (Trigger: Phase 4 Display-Renderer)
-/api/v1/displays/<id>/events                  (Trigger: Phase 4)
-/api/v1/displays/<id>/state                   (Trigger: Phase 4)
+# router/panels/<src>, displays/<id>/events, displays/<id>/state: Routen existieren
+# in keiner URL-Map mehr (RAT-31-Router-Tod) — Zeilen entfernt, #1863
 ```
 
 **Zehn ungegatete Telegram-Shell-Routen — Auth-11-Anlass (#1805).** AUTH-11
