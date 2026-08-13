@@ -841,6 +841,25 @@ existiert, trägt entweder einen Auth-Decorator — oder sie steht namentlich
 in der Ausnahme-Liste dieser Klausel. Eine Route mit weder noch macht den
 Test rot. Die Prüfung geht vom **Code** aus (URL-Map), nicht von der Spec.
 
+**Der Marker ist der Nachweis, nicht die bloße Existenz eines Decorators.**
+Der Test prüft nicht die Decorator-*Form* (jeder `functools.wraps`-Wrapper
+trägt ein `__wrapped__`-Attribut — auch ein Caching- oder Logging-Decorator;
+das wäre ein mögliches Falsch-Positiv), sondern ein explizites Attribut
+(`auth_gate.AUTH_MARKER`, `tools/initdata/auth_gate.py`), das die drei
+Decorator-Factories (`make_require_init_data`, `make_require_soft_gate`,
+`make_require_dual_gate`) am fertigen Wrapper setzen — sowie
+`markiere_auth_klasse()` für Inline-Gates (AUTH-2-INLINE, unten). Was der
+Marker leistet: er unterscheidet einen Auth-Decorator zuverlässig von jedem
+beliebigen anderen Wrapper. Was er **nicht** leistet: er beweist nicht, dass
+tatsächlich gegatet wird. Bei den drei Factories folgt das aus der Mechanik
+— der Marker wird erst gesetzt, nachdem der fertige Wrapper steht, wer ihn
+trägt, hat zwingend auch dessen Gate-Logik. Beim handgesetzten
+`markiere_auth_klasse()` folgt das **nicht**: die Funktion setzt nur das
+Attribut und gibt die View unverändert zurück, ohne sie zu umhüllen — der
+Marker ist reine Deklaration, kein Gate. Deshalb braucht jede so markierte
+Route eine eigene, abschließende Liste (AUTH-2-INLINE, unten) statt dem
+Marker allein zu vertrauen.
+
 **Sammel-Einträge zählen nicht.** Ein Wildcard-Eintrag wie
 `/display/<buddy>/*` (AUTH-4) oder `/api/v1/panels/*` (AUTH-6) erfüllt
 AUTH-11 **nicht**. Jede konkrete Route wird einzeln geführt. Begründung:
@@ -925,6 +944,35 @@ Test-Implementierung dafür ist Aufgabe des Bau-PRs (siehe unten).
 
 Die Liste erweitert man **nur per Spec-Änderung**, nie im Test-Code — sonst
 wandert die Ausnahme aus der Sicht heraus.
+
+**AUTH-2-INLINE — vierte Beweisform (handgesetzter Inline-Gate).**
+Auth-Decorator und die Ausnahme-Tabelle oben sind zwei Erklärungen,
+AUTH-6-Schuldstand eine dritte. Eine vierte Klasse deckt Routen, die
+**weder** einen Auth-Decorator tragen **noch** öffentlich sind: der Gate
+liegt handgeschrieben im Funktionskörper selbst, ohne geteilten Decorator —
+weil es bei n=1 keinen Konsumenten gibt, der einen geteilten Decorator
+rechtfertigt (AUTH-2 oben, #1292). Ohne eigene, abschließende, namentliche
+Liste wäre so eine Route für AUTH-11 unsichtbar erklärt, obwohl sie nie
+geprüft wurde — genau die Lücke, die AUTH-11 schließen soll, an neuer
+Stelle wieder offen.
+
+**Abschließende Liste — heute genau zwei, beide AUTH-2 (#1292):**
+
+```
+/seiten/hoerspiel/player
+/seiten/hoerspiel/player/<path:asset>
+```
+
+Der Hörspiel-Player ist eine live benutzte Browser-PWA ohne tma-Pfad; der
+Cookie-Gate liegt inline in `hoerspiel_player_view` / `hoerspiel_player_asset_view`
+(`seiten/main.py`) statt hinter einem geteilten Decorator, weil er bei n=1
+keinen rechtfertigte. Eine **dritte** Inline-Route kostet einen gereviewten
+Spec-PR wie jede Ausnahme — der Code allein trägt sie nicht automatisch in
+diese Liste ein, das ist ihr ganzer Zweck. Die Nennung hier ersetzt auch
+keinen Gate: der eigentliche Beleg sind die Verhaltenstests
+(`test_html_kein_cookie_gibt_401`, `test_manifest_kein_cookie_gibt_401`,
+`test_sw_kein_cookie_gibt_401`, `seiten/tests/test_hoerspiel_player.py:58,71,77`),
+die 401 ohne Cookie tatsächlich beobachten — nicht die Namensnennung.
 
 **Messbasis ist die URL-Map, nicht der Quelltext.** Der Test liest
 `app.url_map`, nicht die `@route`-Dekorationen. Beides deckt sich nicht:
