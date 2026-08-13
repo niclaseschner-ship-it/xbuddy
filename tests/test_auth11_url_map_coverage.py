@@ -179,6 +179,73 @@ def auth6_schuldstand() -> set[str]:
     return {r for r in _auth6_alle_eintraege() if "*" not in r}
 
 
+#: Der Token, mit dem die AUTH-11-Klausel ihre Inline-Beweisform einleitet.
+#: Identisch mit `auth_gate.AUTH_KLASSE_INLINE_COOKIE` — Code und Spec teilen
+#: den Namen, damit die Naht bei einer Umbenennung sichtbar bricht.
+_INLINE_TOKEN = auth_gate.AUTH_KLASSE_INLINE_COOKIE
+
+
+def auth11_inline_erlaubte() -> set[str]:
+    """Die abschliessende Liste der Routen, die den Inline-Marker fuehren duerfen.
+
+    **Warum es diese Liste braucht (Watchdog-Befund, Nic-Entscheid 2026-08-13).**
+    Drei der vier AUTH-11-Erklaerungen kosten einen gereviewten Spec-PR. Der
+    Inline-Marker kostete bis hierher eine Zeile Produktivcode und niemandes
+    Aufmerksamkeit: `markiere_auth_klasse` setzt ein Attribut und prueft nichts
+    — eine Route mit Marker und ganz OHNE Gate galt als erklaert. Das ist genau
+    die Luecke, die AUTH-11 schliessen soll, an neuer Stelle. Deshalb zaehlt der
+    Inline-Marker nur noch fuer Routen, die die Klausel namentlich fuehrt.
+
+    Gelesen wird der Block im `### AUTH-11`-Abschnitt, den eine Zeile mit dem
+    Token `AUTH-2-INLINE` einleitet; danach zaehlen die Backtick-Routen der
+    folgenden Tabellen-/Fence-Zeilen bis zum Blockende. Beide Schreibweisen
+    (Markdown-Tabelle wie die Ausnahme-Tabelle, Fence wie der AUTH-6-Schuldstand)
+    werden akzeptiert, damit die Form dem Spec-Track offensteht.
+
+    Fehlt der Block, ist die Menge **leer** — und jede Route mit Inline-Marker
+    ist unerklaert. Kein Fallback, kein Grandfathering: ein „bis die Spec da ist
+    zaehlt der Marker halt so" waere dieselbe selbstbediente Tuer noch einmal.
+    """
+    routen: set[str] = set()
+    im_block = False
+    im_fence = False
+    # Erst wenn die eigentliche Aufzaehlung (Tabelle oder Fence) begonnen hat,
+    # darf eine Prosa-Zeile den Block beenden. Sonst risse schon die zweite
+    # Zeile eines mehrzeiligen Einleitungssatzes den Block ab, bevor die
+    # Tabelle ueberhaupt beginnt — der Parser laese still eine leere Liste.
+    struktur_begonnen = False
+    for line in _abschnitt("### AUTH-11").splitlines():
+        strip = line.strip()
+        if not im_block:
+            if _INLINE_TOKEN in strip:
+                im_block = True
+                # Die einleitende Zeile darf selbst schon Routen fuehren.
+                routen.update(_BACKTICK_ROUTE.findall(strip))
+            continue
+        if strip.startswith("```"):
+            im_fence = not im_fence
+            struktur_begonnen = True
+            continue
+        if im_fence:
+            treffer = re.match(r"^(/\S+)", strip)
+            if treffer:
+                routen.add(treffer.group(1))
+            continue
+        if strip.startswith("|"):
+            struktur_begonnen = True
+            zellen = [z.strip() for z in strip.strip("|").split("|")]
+            if zellen and not set(zellen[0]) <= set("- :"):
+                routen.update(_BACKTICK_ROUTE.findall(zellen[0]))
+            continue
+        if not strip:
+            continue
+        # Prosa: vor der Aufzaehlung Einleitung (tolerieren), danach Blockende.
+        routen.update(_BACKTICK_ROUTE.findall(strip))
+        if struktur_begonnen:
+            im_block = False
+    return routen
+
+
 def _auth6_alle_eintraege() -> list[str]:
     """Alle Trigger-Zeilen des AUTH-6-Abschnitts, Sammel-Eintraege eingeschlossen."""
     eintraege: list[str] = []
@@ -211,20 +278,50 @@ def erklaerung(app, rule) -> tuple[str, str] | None:
     """Die (Sorte, Detail)-Erklaerung fuer eine URL-Map-Regel, oder `None`.
 
     `None` heisst: weder gegatet noch in einer der Spec-Listen — AUTH-11-rot.
+
+    Zwei Feinheiten, beide aus dem Watchdog-Verdikt 2026-08-13:
+
+    - **Inline-Marker nur gegen die Spec-Liste.** Ein Marker der Klasse
+      `AUTH-2-INLINE` erklaert nur, wenn die Klausel die Route namentlich
+      fuehrt (`auth11_inline_erlaubte`). Sonst ist die Route unerklaert — der
+      Marker allein ist eine Selbstbescheinigung, kein Beweis.
+    - **Listen-Drift wird benannt, nicht verschluckt.** Traegt eine Route ein
+      Gate UND fuehrt die Spec sie zugleich als public (AUTH-6-Schuldstand
+      oder AUTH-11-Ausnahme), ist das ein eigener Befund: die veraltete Zeile
+      wuerde einen spaeteren Gate-Verlust auffangen und den Test gruen halten.
+      Sicherheitsseitig gilt weiter „gegatet" (Vorrang ist richtig), aber die
+      Sorte macht die Drift sichtbar (#1863).
     """
     view = app.view_functions.get(rule.endpoint)
     klasse = auth_gate.auth_klasse(view)
+    ausnahmen = auth11_ausnahmen()
+    schuldstand = auth6_schuldstand()
+
+    if klasse == auth_gate.AUTH_KLASSE_INLINE_COOKIE:
+        if rule.rule not in auth11_inline_erlaubte():
+            return None
+        return ("gegatet-inline", "%s, namentlich in AUTH-11 gefuehrt" % klasse)
     if klasse:
+        if rule.rule in schuldstand or rule.rule in ausnahmen:
+            return ("gegatet-listen-drift",
+                    "%s — Spec fuehrt die Route zugleich als public (#1863)" % klasse)
         return ("gegatet", klasse)
 
-    ausnahmen = auth11_ausnahmen()
     if rule.rule in _SAMMELZEILE and rule.rule in ausnahmen:
         return ("auth11-sammelzeile", "AUTH-11-Tabelle, Zeile „je Service“")
     if rule.rule in ausnahmen:
         return ("auth11-ausnahme", "AUTH-11-Tabelle, namentliche Zeile")
-    if rule.rule in auth6_schuldstand():
+    if rule.rule in schuldstand:
         return ("auth6-schuldstand", "AUTH-6-Fence mit Defer-Trigger")
     return None
+
+
+def listen_drift(app) -> list[str]:
+    """Routen, die ein Gate tragen und in der Spec zugleich als public stehen."""
+    return sorted(
+        rule.rule for rule in app.url_map.iter_rules()
+        if (erklaerung(app, rule) or ("", ""))[0] == "gegatet-listen-drift"
+    )
 
 
 def unerklaerte_regeln(app) -> list[str]:
@@ -264,6 +361,38 @@ def test_jede_url_map_regel_hat_genau_eine_erklaerung(service):
         "specs/platform/auth.md gefuehrt (AUTH-11-Ausnahme-Tabelle oder "
         "AUTH-6-Schuldstand mit Trigger):\n  %s"
         % (service, "\n  ".join(offen))
+    )
+
+
+@pytest.mark.parametrize("service", sorted(SERVICE_MODULE))
+def test_keine_listen_drift_zwischen_gate_und_spec(service):
+    """Watchdog-Befund 2 (#1863): eine Route, die ein Gate traegt und in der
+    Spec ZUGLEICH als public gefuehrt wird, ist ein Drift-Befund.
+
+    Warum das nicht bloss Kosmetik ist: `erklaerung()` nimmt die erste
+    zutreffende Erklaerung, und Marker-vor-Spec ist fuer die Sicherheitsfrage
+    die richtige Reihenfolge. Genau daraus entsteht aber ein blinder Fleck —
+    verliert eine solche Route ihren Marker, faengt die veraltete
+    AUTH-6-Zeile den Ausfall auf und der Coverage-Test bleibt gruen. Der
+    Gate-Verlust waere unsichtbar.
+
+    Stateless ist das nicht zu erkennen (der entfernte Marker hinterlaesst
+    keine Spur). Die einzige Abhilfe ist, die veraltete Zeile zu entfernen:
+    ohne stale Eintrag gibt es nichts, was den Ausfall auffangen koennte.
+    Deshalb ist dieser Test rot, bis die Spec nachgezogen ist — er treibt die
+    Aufloesung, statt den Zustand zu dulden.
+
+    Bekannter Stand 2026-08-13 (#1863): drei Routen sind gegatet, waehrend
+    AUTH-6 sie noch als Schuldstand fuehrt — /api/v1/hoerspiel/<kind_id>/
+    audio-stream, /api/v1/seiten, /api/v1/seiten/uebersicht. Ihre Defer-Trigger
+    sind faktisch gefeuert; die Zeilen gehoeren aus AUTH-6 heraus.
+    """
+    drift = listen_drift(_app(service))
+    assert not drift, (
+        "Listen-Drift in %s — diese Routen sind gegatet, die Spec fuehrt sie "
+        "aber weiter als public. Die veraltete Zeile wuerde einen spaeteren "
+        "Gate-Verlust maskieren (#1863). Spec nachziehen, nicht hier "
+        "ausnehmen:\n  %s" % (service, "\n  ".join(drift))
     )
 
 
@@ -564,6 +693,113 @@ def test_negativprobe_neue_ungegatete_route_wird_rot():
     )
 
 
+def test_negativprobe_nackter_inline_marker_ohne_spec_eintrag_wird_rot():
+    """Watchdog-Befund 1 / Nic-Entscheid 2026-08-13: der Inline-Marker ist
+    keine selbstbedienbare Tuer.
+
+    `markiere_auth_klasse` setzt ein Attribut und prueft NICHTS — eine Route
+    mit Marker und ganz ohne Gate-Code sah bis hierher erklaert aus. Drei der
+    vier Erklaerungen kosten einen gereviewten Spec-PR; diese kostete eine
+    Zeile Produktivcode. Jetzt zaehlt der Marker nur fuer Routen, die AUTH-11
+    namentlich fuehrt — eine ungelistete Route mit nacktem Marker ist rot.
+    """
+    probe = _wegwerf_app("auth11_inline_negativprobe")
+
+    @probe.route("/spielwiese/nur-marker-kein-gate")
+    @auth_gate.markiere_auth_klasse(auth_gate.AUTH_KLASSE_INLINE_COOKIE)
+    def nur_marker():                             # pragma: no cover - nie gerufen
+        return "kein Gate, nur ein Attribut"
+
+    assert "/spielwiese/nur-marker-kein-gate" not in auth11_inline_erlaubte(), (
+        "Voraussetzung: die Fantasie-Route steht nicht in der Spec-Liste"
+    )
+    offen = unerklaerte_regeln(probe)
+    assert offen == ["GET /spielwiese/nur-marker-kein-gate [endpoint=nur_marker]"], (
+        "Ein Inline-Marker ohne namentlichen Spec-Eintrag muss unerklaert "
+        "bleiben — sonst ist die Verriegelung selbstbedienbar: %s" % offen
+    )
+
+
+def test_inline_marker_zaehlt_sobald_die_klausel_die_route_fuehrt(tmp_path, monkeypatch):
+    """Gegenstueck zur Probe oben, gegen eine FIXTURE-Spec: steht die Route in
+    der Klausel, erklaert der Inline-Marker sie.
+
+    Die Fixture belegt zugleich den Parser-Vertrag fuer den offenen Spec-Track
+    (`spec/1805-inline-marker-in-auth11`): beide Schreibweisen — Tabellenzeile
+    und Fence — werden gelesen, jeweils eingeleitet durch eine Zeile mit dem
+    Token `AUTH-2-INLINE`.
+    """
+    fixture = tmp_path / "auth.md"
+    fixture.write_text(
+        "### AUTH-11 — Rueck-Verriegelung\n\n"
+        "Vierte Beweisform AUTH-2-INLINE — abschliessende Liste:\n\n"
+        "| Route | Grund |\n|---|---|\n"
+        "| `/seiten/hoerspiel/player` | Player-PWA, Cookie-Gate im Koerper. |\n"
+        "| `/seiten/hoerspiel/player/<path:asset>` | Assets derselben PWA. |\n\n"
+        "## 6. Naechster Abschnitt\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "AUTH_MD", fixture)
+    erlaubt = auth11_inline_erlaubte()
+    assert erlaubt == {
+        "/seiten/hoerspiel/player",
+        "/seiten/hoerspiel/player/<path:asset>",
+    }, "Tabellen-Schreibweise nicht korrekt geparst: %s" % sorted(erlaubt)
+
+    fixture.write_text(
+        "### AUTH-11 — Rueck-Verriegelung\n\n"
+        "Vierte Beweisform AUTH-2-INLINE — abschliessende Liste:\n\n"
+        "```\n/seiten/hoerspiel/player\n/seiten/hoerspiel/player/<path:asset>\n```\n\n"
+        "## 6. Naechster Abschnitt\n",
+        encoding="utf-8",
+    )
+    erlaubt = auth11_inline_erlaubte()
+    assert erlaubt == {
+        "/seiten/hoerspiel/player",
+        "/seiten/hoerspiel/player/<path:asset>",
+    }, "Fence-Schreibweise nicht korrekt geparst: %s" % sorted(erlaubt)
+
+
+def test_seiten_loest_sich_auf_sobald_die_klausel_die_zwei_player_routen_fuehrt(
+    tmp_path, monkeypatch
+):
+    """Bereitschafts-Beleg fuer den offenen Spec-Track.
+
+    Solange `spec/1805-inline-marker-in-auth11` nicht gemergt ist, kennt
+    auth.md die Beweisform `AUTH-2-INLINE` nicht, und die zwei Player-Routen
+    sind unerklaert — `test_jede_url_map_regel_hat_genau_eine_erklaerung[seiten]`
+    ist deshalb rot. Das ist der gewollte Zustand: ein Fallback waere die
+    selbstbediente Tuer, die der Watchdog beanstandet hat.
+
+    Dieser Test belegt, dass es genau an der Klausel haengt und an nichts
+    sonst: gegen eine Kopie der ECHTEN auth.md, ergaenzt um den Inline-Block,
+    loest sich die seiten-URL-Map vollstaendig auf. Landet die Spec, wird der
+    rote Test gruen — ohne eine Zeile Test-Aenderung.
+    """
+    echt = AUTH_MD.read_text(encoding="utf-8")
+    block = (
+        "\n**Vierte Beweisform — %s.** Routen, deren AUTH-2-Cookie-Gate im\n"
+        "Funktionskoerper liegt statt in einem Decorator. Abschliessend:\n\n"
+        "| Route | Grund |\n|---|---|\n"
+        "| `/seiten/hoerspiel/player` | Hoerspiel-Player-PWA. |\n"
+        "| `/seiten/hoerspiel/player/<path:asset>` | Assets derselben PWA. |\n\n"
+        % _INLINE_TOKEN
+    )
+    assert "\n## 6. " in echt, "Ankerpunkt fuer die Fixture nicht gefunden"
+    fixture = tmp_path / "auth.md"
+    fixture.write_text(echt.replace("\n## 6. ", block + "\n## 6. ", 1), encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "AUTH_MD", fixture)
+
+    assert auth11_inline_erlaubte() == {
+        "/seiten/hoerspiel/player",
+        "/seiten/hoerspiel/player/<path:asset>",
+    }
+    assert unerklaerte_regeln(_app("seiten")) == [], (
+        "Mit der Klausel muss sich die seiten-URL-Map restlos aufloesen — "
+        "haengt hier noch etwas, liegt es NICHT am Spec-Track"
+    )
+
+
 def test_negativprobe_gegatete_und_gefuehrte_routen_bleiben_gruen():
     """Gegenprobe zur Negativ-Probe: derselbe Mechanismus meldet eine
     markierte Route und eine Spec-gefuehrte Route NICHT — der Test oben ist
@@ -612,4 +848,10 @@ def test_negativprobe_entfernter_marker_macht_echte_route_rot():
         )
     finally:
         setattr(view, auth_gate.AUTH_MARKER, original)
-    assert unerklaerte_regeln(app) == [], "Wiederherstellung fehlgeschlagen"
+    # Nur die manipulierte Route pruefen — nicht die ganze App: andere Regeln
+    # koennen aus unabhaengigen Gruenden offen sein (siehe die zwei
+    # Inline-Routen, blockiert auf spec/1805-inline-marker-in-auth11). Eine
+    # Wiederherstellungs-Probe, die daran haengt, misst nicht mehr sich selbst.
+    assert not any(kandidat.rule in eintrag for eintrag in unerklaerte_regeln(app)), (
+        "Wiederherstellung des Markers auf %s fehlgeschlagen" % kandidat.rule
+    )
