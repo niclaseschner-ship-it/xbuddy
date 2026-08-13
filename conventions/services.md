@@ -125,10 +125,29 @@ Jeder HTTP-Service exponiert zwei unauthentifizierte Diagnose-Endpunkte:
   Name `/health` am Service selbst. Der Router aggregiert die Per-Service-`/healthz`
   optional zu einem Fan-in-`/health` (anderer Typ: Readiness-Aggregat, nicht
   Per-Service-Endpunkt).
-- **`GET /version`** — liefert die **beim Deploy geschriebene** Commit-SHA aus
-  einer Datei (`__XBUDDY_DATA__/deploy/version`), **nicht** `git rev-parse` zur
-  Laufzeit (ein paralleler Worktree/Branch-Rest würde sonst einen falschen SHA
-  einfrieren).
+- **`GET /version`** — liefert die Commit-SHA **des Codes, den dieser Service
+  gerade ausführt**. Jeder Service ermittelt sie **einmal beim Start** und hält
+  sie im Speicher; jeder Service hat seinen **eigenen** Wert.
+
+  **[GEÄNDERT 2026-08-13 — Nic-Verdikte zu #1788]** Die frühere Fassung verlangte
+  eine beim Deploy geschriebene gemeinsame Datei und verbot ausdrücklich die
+  Ermittlung zur Laufzeit. Beides ist überholt:
+
+  - Die Datei wurde **von niemandem geschrieben** — das zuständige Skript hatte
+    keinen einzigen Aufrufer. Alle zwölf Endpunkte meldeten monatelang denselben
+    veralteten Stand.
+  - Eine **gemeinsame** Datei kann nicht ausdrücken, was sie ausdrücken soll:
+    hängt ein einzelner Service auf altem Code, zeigt sie trotzdem den Stand des
+    zuletzt gestarteten. Genau der Fall wäre unsichtbar — und genau dieser Fall
+    ist der einzige, der zählt.
+  - Die alte Begründung („ein paralleler Worktree würde einen falschen SHA
+    einfrieren") stammt aus der Zeit vor dem Wirbelsäulen-Abriss. Sie trägt
+    heute nicht mehr, und sie war der einzige Grund für das Verbot.
+
+  Ermittlung beim Start statt bei jeder Anfrage ist wichtig: der Wert soll den
+  **laufenden Prozess** beschreiben, nicht die Platte. Zieht jemand neuen Code,
+  ohne neu zu starten, muss `/version` weiterhin den **alten** Stand melden —
+  das ist die Anzeige, an der man den fälligen Neustart erkennt.
 
 Der Deploy-Regelkreis (`deploy/update.sh`, Stufe 1) leitet aus dem gemergten Diff
 die betroffenen Services ab — **geteilter Mapper** mit
