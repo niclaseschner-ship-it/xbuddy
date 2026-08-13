@@ -1690,6 +1690,13 @@ def _hoerspiel_player_build_id():
 
 
 @app.route("/seiten/hoerspiel/player", methods=["GET"])
+# AUTH-11 (#1805): Diese View traegt ihr AUTH-2-Cookie-Gate INLINE im
+# Funktionskoerper (unten, „AUTH-2: Cookie-Gate (HSP-47, #1292)"), nicht als
+# Decorator — ein markerbasierter AUTH-11-Test saehe sie sonst als ungegatet.
+# `markiere_auth_klasse` setzt nur ein Attribut und gibt dieselbe Funktion
+# zurueck: kein Wrapper, keine Verhaltensaenderung am Live-Player-Pfad.
+# Verhaltens-Beleg bleiben die 401-Tests der seiten-Suite.
+@_auth_gate.markiere_auth_klasse(_auth_gate.AUTH_KLASSE_INLINE_COOKIE)
 def hoerspiel_player_view():
     """HSP-47/HSP-49: Hörspiel-Player-PWA — HTML-Render-Route.
 
@@ -1743,6 +1750,9 @@ def hoerspiel_player_view():
 
 
 @app.route("/seiten/hoerspiel/player/<path:asset>", methods=["GET"])
+# AUTH-11 (#1805): wie hoerspiel_player_view — AUTH-2-Cookie-Gate INLINE im
+# Funktionskoerper, deshalb der reine Marker (kein Wrapper, kein Umbau).
+@_auth_gate.markiere_auth_klasse(_auth_gate.AUTH_KLASSE_INLINE_COOKIE)
 def hoerspiel_player_asset_view(asset):
     """HSP-47: PWA-Mantel-Asset-Auslieferung über die Lib (PWML-1/2).
 
