@@ -31,6 +31,12 @@ sie wird **verlinkt, nicht kopiert** (CLAUDE.md §6). Jeder Record ist selbsttra
 Bewusst **kein schwerer ADR-Apparat** — XBuddy entscheidet Nic-in-Minuten, nicht
 Team-Konsens über Monate. Kurz halten.
 
+**Form eines Records:** die vier Glieder — Problem → betrachtete Alternativen →
+wie entschieden/gemessen → Ergebnis. Sie stehen als eine Quelle im Methoden-Repo
+(`lotse/contracts/entscheidung.md`) und gelten für RAT-Records, Prozess-Tickets
+und größere Ticket-Begründungen gleichermaßen; hier nicht duplizieren. „Kurz
+halten" heißt: alle vier Glieder, jedes knapp — nicht: Glieder weglassen.
+
 ## Eine neue Entscheidung eintragen
 
 1. Berater-Runde in brainstorm laufen lassen (Vorschlag + Antiberater), Nic ratifiziert.
