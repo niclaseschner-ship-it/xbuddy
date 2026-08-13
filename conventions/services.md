@@ -133,9 +133,11 @@ Jeder HTTP-Service exponiert zwei unauthentifizierte Diagnose-Endpunkte:
   eine beim Deploy geschriebene gemeinsame Datei und verbot ausdrücklich die
   Ermittlung zur Laufzeit. Beides ist überholt:
 
-  - Die Datei wurde **von niemandem geschrieben** — das zuständige Skript hatte
-    keinen einzigen Aufrufer. Alle zwölf Endpunkte meldeten monatelang denselben
-    veralteten Stand.
+  - Die Datei wurde **faktisch nie geschrieben**. Nicht, weil die Schreib-Funktion
+    keinen Aufrufer hätte — `deploy/update.sh:424` ruft sie auf —, sondern weil
+    der automatische Deploy-Pfad selbst nicht läuft: gearbeitet wird von Hand,
+    Stand ziehen und Dienst neu starten. Alle zwölf Endpunkte meldeten
+    monatelang denselben veralteten Stand.
   - Eine **gemeinsame** Datei kann nicht ausdrücken, was sie ausdrücken soll:
     hängt ein einzelner Service auf altem Code, zeigt sie trotzdem den Stand des
     zuletzt gestarteten. Genau der Fall wäre unsichtbar — und genau dieser Fall
