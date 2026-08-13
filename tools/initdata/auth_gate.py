@@ -126,6 +126,74 @@ def _tma_leer(auth_header: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# AUTH-11-Marker: expliziter Gate-Nachweis statt `__wrapped__`-Heuristik (#1805)
+# ---------------------------------------------------------------------------
+#
+# AUTH-11 (auth.md:839) verlangt fuer JEDE Regel der Flask-URL-Map einen
+# Nachweis, dass sie gegatet ist. Der bisher benutzte Nachweis — „das
+# `view_function` hat ein `__wrapped__`" — ist eine Heuristik: `functools.wraps`
+# setzt `__wrapped__` an JEDEN Wrapper, auch an einen Caching-, Logging- oder
+# Feature-Flag-Decorator. Eine ungegatete Route mit irgendeinem anderen
+# Decorator waere damit stumm gruen — genau die Klasse Luecke, die AUTH-11
+# schliessen soll.
+#
+# Deshalb tragen die Wrapper der Factories unten ein explizites Attribut, das
+# die Auth-Klasse benennt. Nur dieses Attribut zaehlt als Nachweis.
+#
+# Vererbung ueber `functools.wraps`: kopiert ein spaeterer, aeusserer Decorator
+# den Wrapper per `functools.wraps`, uebernimmt er dessen `__dict__` und damit
+# den Marker; `auth_klasse()` laeuft zusaetzlich die `__wrapped__`-Kette ab,
+# falls ein aeusserer Decorator ohne `wraps` dazwischen sitzt.
+
+AUTH_MARKER = "__xbuddy_auth_klasse__"
+
+#: HART (Loopback → Cookie+Rolling-Refresh → tma → 401), `make_require_init_data`.
+AUTH_KLASSE_HART = "AUTH-3-HART"
+#: SOFT (Loopback → tma → Pass-through), `make_require_soft_gate`.
+AUTH_KLASSE_SOFT = "AUTH-3-SOFT"
+#: Dual-Gate 7b (Cookie ODER Observe-Grace), `make_require_dual_gate`.
+AUTH_KLASSE_DUAL = "AUTH-7b-DUAL"
+#: AUTH-2-Cookie-Gate, das im Funktionskoerper der View sitzt statt als
+#: Decorator (Hoerspiel-Player-PWA, `seiten/main.py`). Der Marker macht das
+#: Gate fuer AUTH-11 sichtbar; das Verhalten liegt weiterhin in der View.
+AUTH_KLASSE_INLINE_COOKIE = "AUTH-2-INLINE"
+
+
+def markiere_auth_klasse(klasse):
+    """Setzt den AUTH-11-Marker auf eine View — **ohne** sie zu umhuellen.
+
+    Fuer die Handvoll Views, deren Auth-Pruefung im Funktionskoerper liegt
+    (AUTH-2-Inline-Gate) statt in einem Decorator. Der Rueckgabewert IST die
+    uebergebene Funktion: kein Wrapper, keine Signatur-Aenderung, kein
+    zusaetzlicher Frame — der Marker ist reine Deklaration, das Gate bleibt
+    dort, wo es steht.
+    """
+    def setzer(fn):
+        setattr(fn, AUTH_MARKER, klasse)
+        return fn
+    return setzer
+
+
+def auth_klasse(view_func):
+    """Auth-Klasse einer View, oder `None` wenn sie keinen Marker traegt.
+
+    Laeuft die `__wrapped__`-Kette ab, damit ein spaeterer aeusserer Decorator
+    den Nachweis nicht verdeckt. Gepruefte Bedingung bleibt aber das
+    **Marker-Attribut**, nie die blosse Existenz von `__wrapped__` — ein
+    fremder Decorator ohne Marker macht eine Route nicht gegatet.
+    """
+    aktuell = view_func
+    gesehen: set[int] = set()
+    while aktuell is not None and id(aktuell) not in gesehen:
+        gesehen.add(id(aktuell))
+        klasse = getattr(aktuell, AUTH_MARKER, None)
+        if klasse:
+            return klasse
+        aktuell = getattr(aktuell, "__wrapped__", None)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Decorator-Factories (auth.md „AUTH-Decorator-Lib", #1383)
 # ---------------------------------------------------------------------------
 #
@@ -209,6 +277,8 @@ def make_require_init_data(
 
             # AUTH-3: weder Loopback noch Cookie noch tma → HART 401 (AUTH-8).
             return auth_401()
+        # AUTH-11-Marker (#1805): expliziter Gate-Nachweis, verhaltensneutral.
+        setattr(wrapper, AUTH_MARKER, AUTH_KLASSE_HART)
         return wrapper
     return decorator
 
@@ -267,6 +337,8 @@ def make_require_soft_gate(
 
             g.init_data = parsed
             return fn(*args, **kwargs)
+        # AUTH-11-Marker (#1805): expliziter Gate-Nachweis, verhaltensneutral.
+        setattr(wrapper, AUTH_MARKER, AUTH_KLASSE_SOFT)
         return wrapper
     return decorator
 
@@ -328,6 +400,8 @@ def make_require_dual_gate(
                     "(cookie_vorhanden=%s, operator_ip=%s) → 200 (Grace, kein 401)",
                     request.path, bool(cookie_val), operator_ok)
                 return fn(*args, **kwargs)
+            # AUTH-11-Marker (#1805): expliziter Gate-Nachweis, verhaltensneutral.
+            setattr(wrapper, AUTH_MARKER, AUTH_KLASSE_DUAL)
             return wrapper
         return decorator
     return make_decorator
