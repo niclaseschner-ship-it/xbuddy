@@ -184,6 +184,19 @@ def auth6_schuldstand() -> set[str]:
 #: den Namen, damit die Naht bei einer Umbenennung sichtbar bricht.
 _INLINE_TOKEN = auth_gate.AUTH_KLASSE_INLINE_COOKIE
 
+#: Anker der Klausel-DEFINITION: eine Zeile, die mit dem Token beginnt
+#: (optional fettgesetzt), also `**AUTH-2-INLINE — vierte Beweisform …**`.
+#:
+#: Warum nicht „irgendeine Zeile, die den Token enthaelt": die Klausel nennt
+#: ihre eigene Beweisform mehrfach als Quer-Verweis im Fliesstext
+#: („… fuer Inline-Gates (AUTH-2-INLINE, unten)"). Ein Parser, der an der
+#: ersten Erwaehnung ankert, startet weit VOR der Liste, laeuft in die
+#: Ausnahme-Tabelle und liest deren Zeilen als Inline-Liste — gemessen: 39
+#: statt 2 Eintraege, ohne die zwei echten. Das ist nicht bloss falsch,
+#: sondern gefaehrlich falsch: stuende eine Route zufaellig in der
+#: Ausnahme-Tabelle, waere ihr Inline-Marker still akzeptiert.
+_INLINE_ANKER = re.compile(r"^\*{0,2}%s\b" % re.escape(_INLINE_TOKEN))
+
 
 def auth11_inline_erlaubte() -> set[str]:
     """Die abschliessende Liste der Routen, die den Inline-Marker fuehren duerfen.
@@ -217,7 +230,7 @@ def auth11_inline_erlaubte() -> set[str]:
     for line in _abschnitt("### AUTH-11").splitlines():
         strip = line.strip()
         if not im_block:
-            if _INLINE_TOKEN in strip:
+            if _INLINE_ANKER.match(strip):
                 im_block = True
                 # Die einleitende Zeile darf selbst schon Routen fuehren.
                 routen.update(_BACKTICK_ROUTE.findall(strip))
@@ -484,15 +497,21 @@ def test_parser_verwirft_ueberholte_tabellenzeile():
 
 
 def test_parser_auth6_schuldstand_kardinalitaet_und_stichproben():
-    """Der AUTH-6-Parser liest alle drei Fence-Bloecke des Abschnitts.
-    Ist-Stand 2026-08-12: 21 literale Eintraege (+3 Sammel-Eintraege)."""
+    """Der AUTH-6-Parser liest alle Fence-Bloecke des Abschnitts.
+
+    Ist-Stand 2026-08-13: 15 literale Eintraege. Zuvor 21 — #1865 hat sechs
+    erledigte Posten ENTFERNT (drei tote Routen aus dem RAT-31-Router-Tod,
+    drei mit am 2026-08-12 gefeuertem Trigger). Die Schwelle folgt der Spec
+    nach unten: sie soll einen stillen Parse-Verlust fangen, nicht einen
+    aufgeraeumten Schuldstand zurueckweisen.
+    """
     schuld = auth6_schuldstand()
-    assert len(schuld) >= 18, (
-        "Nur %d AUTH-6-Schuldstand-Eintraege geparst (erwartet >=18, Ist: 21)"
+    assert len(schuld) >= 13, (
+        "Nur %d AUTH-6-Schuldstand-Eintraege geparst (erwartet >=13, Ist: 15)"
         % len(schuld)
     )
     for route in (
-        "/api/v1/hoerspiel/<kind_id>/audio-stream",     # V1-Stand-Fence
+        "/api/v1/seiten/mini-app-uebersicht",           # V1-Stand-Fence
         "/seiten/essen/einkauf",                        # Telegram-Shell-Fence (#1859)
         "/seiten/essen/einkauf/",                       # Trailing-Slash-Variante
         "/seiten/hoerspiel/<kind_id>/eltern",
@@ -730,13 +749,20 @@ def test_inline_marker_zaehlt_sobald_die_klausel_die_route_fuehrt(tmp_path, monk
     Token `AUTH-2-INLINE`.
     """
     fixture = tmp_path / "auth.md"
+    # Die Fixture spiegelt die ECHTE Form: ein Quer-Verweis auf die Beweisform
+    # im Fliesstext VOR der Definition (genau die Falle, die den Parser einmal
+    # in die Ausnahme-Tabelle laufen liess), dann die fettgesetzte Definition
+    # am Zeilenanfang, dann die Liste.
     fixture.write_text(
         "### AUTH-11 — Rueck-Verriegelung\n\n"
-        "Vierte Beweisform AUTH-2-INLINE — abschliessende Liste:\n\n"
+        "| Route | Grund |\n|---|---|\n"
+        "| `/auth/pair` | Ausnahme-Tabelle, darf NICHT in die Inline-Liste. |\n\n"
+        "Der Marker gilt fuer Inline-Gates (%s, unten) nur mit Liste.\n\n"
+        "**%s — vierte Beweisform.** Abschliessende Liste:\n\n"
         "| Route | Grund |\n|---|---|\n"
         "| `/seiten/hoerspiel/player` | Player-PWA, Cookie-Gate im Koerper. |\n"
         "| `/seiten/hoerspiel/player/<path:asset>` | Assets derselben PWA. |\n\n"
-        "## 6. Naechster Abschnitt\n",
+        "## 6. Naechster Abschnitt\n" % (_INLINE_TOKEN, _INLINE_TOKEN),
         encoding="utf-8",
     )
     monkeypatch.setattr(sys.modules[__name__], "AUTH_MD", fixture)
@@ -748,9 +774,11 @@ def test_inline_marker_zaehlt_sobald_die_klausel_die_route_fuehrt(tmp_path, monk
 
     fixture.write_text(
         "### AUTH-11 — Rueck-Verriegelung\n\n"
-        "Vierte Beweisform AUTH-2-INLINE — abschliessende Liste:\n\n"
+        "**%s — vierte Beweisform.**\n"
+        "Mehrzeilige Einleitungsprosa, die den Block nicht abreissen darf.\n\n"
+        "**Abschliessende Liste — heute genau zwei:**\n\n"
         "```\n/seiten/hoerspiel/player\n/seiten/hoerspiel/player/<path:asset>\n```\n\n"
-        "## 6. Naechster Abschnitt\n",
+        "## 6. Naechster Abschnitt\n" % _INLINE_TOKEN,
         encoding="utf-8",
     )
     erlaubt = auth11_inline_erlaubte()
@@ -760,43 +788,47 @@ def test_inline_marker_zaehlt_sobald_die_klausel_die_route_fuehrt(tmp_path, monk
     }, "Fence-Schreibweise nicht korrekt geparst: %s" % sorted(erlaubt)
 
 
-def test_seiten_loest_sich_auf_sobald_die_klausel_die_zwei_player_routen_fuehrt(
-    tmp_path, monkeypatch
-):
-    """Bereitschafts-Beleg fuer den offenen Spec-Track.
+def test_inline_liste_ist_klein_und_ueberschneidet_keine_andere_liste():
+    """Anti-Pollution-Riegel — der Ersatz fuer die Bereitschafts-Probe.
 
-    Solange `spec/1805-inline-marker-in-auth11` nicht gemergt ist, kennt
-    auth.md die Beweisform `AUTH-2-INLINE` nicht, und die zwei Player-Routen
-    sind unerklaert — `test_jede_url_map_regel_hat_genau_eine_erklaerung[seiten]`
-    ist deshalb rot. Das ist der gewollte Zustand: ein Fallback waere die
-    selbstbediente Tuer, die der Watchdog beanstandet hat.
+    Vorgeschichte: der Parser ankerte an der ERSTEN Erwaehnung des Tokens.
+    Die Klausel nennt ihre Beweisform aber zweimal als Quer-Verweis im
+    Fliesstext, bevor sie sie definiert. Der Block startete deshalb vor der
+    Ausnahme-Tabelle und las deren Zeilen als Inline-Liste: 39 Eintraege statt
+    2, und ausgerechnet die zwei echten fehlten. Die Coverage ging davon rot
+    — aber nur zufaellig. Stuende eine Route zugleich in der Ausnahme-Tabelle,
+    waere ihr Inline-Marker still akzeptiert worden.
 
-    Dieser Test belegt, dass es genau an der Klausel haengt und an nichts
-    sonst: gegen eine Kopie der ECHTEN auth.md, ergaenzt um den Inline-Block,
-    loest sich die seiten-URL-Map vollstaendig auf. Landet die Spec, wird der
-    rote Test gruen — ohne eine Zeile Test-Aenderung.
+    Zwei strukturelle Invarianten fangen genau diese Klasse:
+
+    - **Disjunkt.** Eine Route, deren Gate inline im Koerper liegt, ist per
+      Definition nicht public — sie kann nicht zugleich AUTH-11-Ausnahme oder
+      AUTH-6-Schuldstand sein. Ueberlappung heisst: ein Parser hat die
+      Nachbar-Liste eingesammelt.
+    - **Klein.** Die Beweisform ist die Ausnahme von der Ausnahme (n=1-Fall,
+      auth.md „heute genau zwei"). Eine zweistellige Inline-Liste ist
+      entweder ein Parse-Unfall oder ein Architektur-Problem — beides gehoert
+      angesehen, nicht durchgewunken.
     """
-    echt = AUTH_MD.read_text(encoding="utf-8")
-    block = (
-        "\n**Vierte Beweisform — %s.** Routen, deren AUTH-2-Cookie-Gate im\n"
-        "Funktionskoerper liegt statt in einem Decorator. Abschliessend:\n\n"
-        "| Route | Grund |\n|---|---|\n"
-        "| `/seiten/hoerspiel/player` | Hoerspiel-Player-PWA. |\n"
-        "| `/seiten/hoerspiel/player/<path:asset>` | Assets derselben PWA. |\n\n"
-        % _INLINE_TOKEN
-    )
-    assert "\n## 6. " in echt, "Ankerpunkt fuer die Fixture nicht gefunden"
-    fixture = tmp_path / "auth.md"
-    fixture.write_text(echt.replace("\n## 6. ", block + "\n## 6. ", 1), encoding="utf-8")
-    monkeypatch.setattr(sys.modules[__name__], "AUTH_MD", fixture)
+    inline = auth11_inline_erlaubte()
+    assert inline, "Inline-Liste leer geparst — Klausel-Form in auth.md geaendert?"
 
-    assert auth11_inline_erlaubte() == {
-        "/seiten/hoerspiel/player",
-        "/seiten/hoerspiel/player/<path:asset>",
-    }
-    assert unerklaerte_regeln(_app("seiten")) == [], (
-        "Mit der Klausel muss sich die seiten-URL-Map restlos aufloesen — "
-        "haengt hier noch etwas, liegt es NICHT am Spec-Track"
+    ueberlappung_ausnahme = inline & auth11_ausnahmen()
+    assert not ueberlappung_ausnahme, (
+        "Inline-Liste ueberlappt die AUTH-11-Ausnahme-Tabelle — der Parser hat "
+        "vermutlich die Nachbar-Tabelle eingesammelt: %s"
+        % sorted(ueberlappung_ausnahme)
+    )
+    ueberlappung_schuld = inline & auth6_schuldstand()
+    assert not ueberlappung_schuld, (
+        "Inline-Liste ueberlappt den AUTH-6-Schuldstand — eine inline gegatete "
+        "Route kann nicht zugleich als public gefuehrt sein: %s"
+        % sorted(ueberlappung_schuld)
+    )
+    assert len(inline) <= 5, (
+        "Inline-Liste unerwartet gross (%d Eintraege): %s — Parse-Unfall oder "
+        "die Beweisform wird als Abkuerzung benutzt statt als n=1-Ausnahme."
+        % (len(inline), sorted(inline))
     )
 
 
