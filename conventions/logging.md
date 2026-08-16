@@ -28,9 +28,11 @@ Datensicherheit ist Constitution-Qualitätsattribut #3.
 Die Nennung der Kind-Sprache ist eine Wortlaut-Schärfung, kein neuer
 Beschluss: die Überschrift sagt „keine PII", und ein Kind, das mit dem
 Buddy spricht, ist der schutzbedürftigste Fall überhaupt. Anlass war
-xbuddy#1806 — drei Stellen protokollierten Transkripte wörtlich auf
-`INFO`. Wo der Inhalt fürs Debugging gebraucht wird, ist `DEBUG` die Bahn
-(LOG-2), nicht `INFO`.
+xbuddy#1806 — vier Stellen protokollierten Kind-Sprachinhalt wörtlich auf
+`INFO`: das Transkript, die Frage, die Modell-Antwort samt der daraus
+extrahierten Buzzwords und der von der Stille-Halluzinations-Filterung
+erkannte Text. Wo der Inhalt fürs Debugging gebraucht wird, ist `DEBUG`
+die Bahn (LOG-2), nicht `INFO`.
 
 Für notwendige Identifikation reichen anonymisierte IDs (z. B.
 `chat:abcd1234` statt Klarnamen).

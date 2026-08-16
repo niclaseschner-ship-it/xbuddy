@@ -1,8 +1,9 @@
 """LOG-3: Kind-Sprachinhalt darf nicht auf INFO landen (xbuddy#1806).
 
-Vor #1806 protokollierten drei Stellen woertlichen Kind-Sprachinhalt auf
-INFO: das STT-Transkript (stt_service.py), die Frage + Antwort des
-Sprach-Buddys (llm_service.py) und der von der Stille-Halluzinations-
+Vor #1806 protokollierten vier Stellen woertlichen Kind-Sprachinhalt auf
+INFO: das STT-Transkript, die Frage an den Sprach-Buddy, dessen
+Modell-Antwort samt der daraus extrahierten Buzzwords (alle drei in
+llm_service.py/stt_service.py) und der von der Stille-Halluzinations-
 Filterung erkannte Text (main.py). LOG-3 verbietet das explizit ("Nutzer-
 Inhalte erst recht nicht ... gesprochene Kind-Sprache").
 
@@ -26,7 +27,17 @@ from .test_endpoints import get_stream_event
 _TRANSKRIPT_MARKER = "Warum leuchten die Sterne nachts, Buddy?"
 _FRAGE_MARKER = "Wieso ist die Banane krumm, Buddy?"
 _ANTWORT_MARKER = "Die Banane waechst krumm wegen Photoperiodismus."
-_HALLUZINATION_MARKER = "Vielen Dank fürs Zuschauen"  # bekannte Whisper-Stille-Phrase
+
+# Transkript, das NUR per Indikator-Substring (nicht per Vollphrase) matcht
+# (KIBUDDY-12-H): der Rest des Satzes ist freier (fiktiver) Kind-Wortlaut,
+# der den Filter fälschlich mitgerissen hat — genau der False-Positive-Fall,
+# den die Watchdog-Nachschaerfung adressiert. "amara.org" ist die
+# Code-Konstante aus stt_service._STILLE_HALLUZINATION_INDIKATOREN und darf
+# als Diagnose-Treffer auf INFO stehen; der Rest des Satzes ist
+# Kind-Sprachinhalt und darf es nicht.
+_HALLUZINATION_VOLLTEXT = "Amara.org hat mir das mit den Delfinen erklärt"
+_HALLUZINATION_TREFFER = "amara.org"
+_HALLUZINATION_KINDINHALT = "delfinen erklärt"  # nur im Volltext, nicht im Treffer
 
 
 def _info_records(caplog):
@@ -89,12 +100,17 @@ def test_llm_frage_und_antwort_nicht_auf_info_aber_auf_debug(caplog, tmp_path):
 
 # ---- main.py: Stille-Halluzinations-Filter (Entry-Path: echter Endpunkt) ----
 
-def test_stille_halluzination_gefiltert_nicht_auf_info_aber_auf_debug(
+def test_stille_halluzination_gefiltert_kein_kindinhalt_auf_info_aber_treffer_diagnostizierbar(
         client, fake_stt, caplog):
-    """#1806/AC3: der vom Filter erkannte Wortlaut fehlt auf INFO, ist aber
-    auf DEBUG da. Laeuft ueber den echten POST /api/v1/kibuddy/frage-Pfad
-    (main.py generate()), nicht isoliert — Entry-Path-Coverage."""
-    fake_stt.transkript = _HALLUZINATION_MARKER
+    """#1806/AC3 + Watchdog-Nachschaerfung: der freie Kind-Wortlaut fehlt auf
+    INFO, aber die gematchte Code-Konstante (Treffer aus der geschlossenen
+    Halluzinations-Liste) steht weiterhin auf INFO — das ist kein
+    Kind-Sprachinhalt und LOG-3 greift hier nicht. Eine reine Zeichenzahl
+    waere ein False-Positive-Fall unsichtbar; der Treffer bleibt sichtbar.
+    Voller Wortlaut zusaetzlich auf DEBUG. Laeuft ueber den echten
+    POST /api/v1/kibuddy/frage-Pfad (main.py generate()), nicht isoliert —
+    Entry-Path-Coverage."""
+    fake_stt.transkript = _HALLUZINATION_VOLLTEXT
 
     with caplog.at_level(logging.DEBUG, logger="kibuddy.main"):
         resp = client.post(
@@ -112,8 +128,19 @@ def test_stille_halluzination_gefiltert_nicht_auf_info_aber_auf_debug(
     info_text = "\n".join(r.getMessage() for r in _info_records(caplog))
     debug_text = "\n".join(r.getMessage() for r in _debug_records(caplog))
 
-    assert _HALLUZINATION_MARKER not in info_text, (
-        "gefilterter Kind-Sprachinhalt auf INFO — LOG-3-Rueckfall")
-    assert _HALLUZINATION_MARKER in debug_text, (
-        "gefilterter Wortlaut muss weiterhin auf DEBUG diagnostizierbar sein "
-        "(Beweisstueck: hat der Filter richtig erkannt?)")
+    # Diagnose-Wert bleibt: die gematchte Code-Konstante steht auf INFO —
+    # eine reine Zeichenzahl haette einen echten Treffer nicht von einem
+    # gleich langen False-Positive unterscheiden koennen.
+    assert _HALLUZINATION_TREFFER in info_text, (
+        "gematchte Code-Konstante (kein Kind-Inhalt) muss auf INFO stehen — "
+        "sonst ist ein False-Positive des Filters im Betrieb unsichtbar")
+    # Kein Kind-Inhalt: der freie Teil des Satzes (alles ausser dem
+    # Listen-Treffer) darf auf INFO nicht auftauchen.
+    assert _HALLUZINATION_KINDINHALT not in info_text.lower(), (
+        "Kind-Sprachinhalt (freier Teil des Satzes) auf INFO — LOG-3-Rueckfall")
+    assert _HALLUZINATION_VOLLTEXT not in info_text, (
+        "voller Kind-Wortlaut auf INFO — LOG-3-Rueckfall")
+    # Diagnose-Faehigkeit erhalten: voller Wortlaut bleibt auf DEBUG
+    # auffindbar (Beweisstueck: hat der Filter richtig erkannt?).
+    assert _HALLUZINATION_VOLLTEXT in debug_text, (
+        "gefilterter Wortlaut muss weiterhin auf DEBUG diagnostizierbar sein")
