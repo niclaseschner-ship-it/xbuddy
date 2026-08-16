@@ -55,10 +55,19 @@ jobs:
 
       # verdict_check ist Harness-Logik (Ticket-Verdikt-Membran), kein
       # xbuddy-Projektcode — lebt seit RAT-23 Stufe 2 im public lotse-Repo.
+      # Repo-Slug via github.repository_owner statt hartkodiertem Org-Namen
+      # (Scrub-Platzhalter-Reparatur, xbuddy-prozess#99 / RAT-36). Belegt:
+      # lotse liegt unter demselben Account wie dieses Repo und ist public
+      # (`gh repo view`), und die github.repository_owner-Expansion selbst
+      # folgt closes-guard.yml:38 (OWNER: github.repository_owner) — dort
+      # aber als GraphQL-Variable gegen das EIGENE Repo, nicht als
+      # actions/checkout-Ziel eines FREMDEN Repos. Offen, nicht belegt: ob
+      # der Default-GITHUB_TOKEN diesen Cross-Repo-Checkout erlaubt — vor dem
+      # Merge nicht prüfbar (on: issues läuft nur vom Default-Branch).
       - name: Lotse-Harness auschecken (verdict_check)
         uses: actions/checkout@v4
         with:
-          repository: <your-org>/lotse
+          repository: ${{ github.repository_owner }}/lotse
           path: _lotse
 
       - name: status-ready validieren (State + Verdikt-Membran)
