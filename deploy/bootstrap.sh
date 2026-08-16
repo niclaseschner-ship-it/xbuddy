@@ -55,6 +55,24 @@ declare -A SVC_SRC=(
 SYSTEMD_DEST_DIR="${XBUDDY_SYSTEMD_DEST_DIR:-/etc/systemd/system}"
 
 # ---------------------------------------------------------------------------
+# Drop-In-Quelle: deploy/systemd/<svc>.service.d/*.conf (#1802)
+#
+# Bis #1802 rollte dieses Skript NUR die Basis-Units aus. Die Drop-Ins lagen
+# ausschließlich in /etc — ein Neuaufsetzen brachte die Dienste hoch, aber ohne
+# ihre Ergänzungen. Mindestens eine davon ist funktional nötig
+# (xbuddy-familie/10-data-path.conf rettet die SVC-5-Verletzung der
+# familie-Vorlage), der Ausfall war also nicht kosmetisch.
+#
+# Kein Eintrag in einer zweiten Map: die Quelle ist der Baum. Jede Datei unter
+# deploy/systemd/<svc>.service.d/ wird ausgerollt — damit kann eine versionierte
+# Datei nicht mehr im Repo liegenbleiben, ohne die Maschine zu erreichen (die
+# Gegenrichtung der Drift, #1785-memory.conf-Fall). Der Preis: ein Verzeichnis
+# für einen Dienst, den SVC_SRC nicht kennt, wäre eine tote Datei — deshalb der
+# harte Namens-Abgleich unten.
+# ---------------------------------------------------------------------------
+DROPIN_SRC_ROOT="deploy/systemd"
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 log()  { printf '[bootstrap.sh] %s\n' "$*"; }
@@ -198,6 +216,62 @@ for svc in "${!SVC_SRC[@]}"; do
 done
 
 log "Unit-Substitution abgeschlossen."
+
+# ---------------------------------------------------------------------------
+# Drop-In-Substitution (#1802)
+# ---------------------------------------------------------------------------
+DROPIN_ROOT_ABS="${REPO_ROOT}/${DROPIN_SRC_ROOT}"
+
+if [[ -d "${DROPIN_ROOT_ABS}" ]]; then
+    # Namens-Abgleich zuerst: ein Drop-In-Verzeichnis für einen Dienst, den
+    # SVC_SRC nicht kennt, landete in /etc neben einer Unit, die es nicht gibt —
+    # eine Datei, die aussieht als wirke sie, und nie wirkt. Hart abbrechen.
+    for dropin_dir in "${DROPIN_ROOT_ABS}"/*.service.d; do
+        [[ -d "${dropin_dir}" ]] || continue
+        dir_name="$(basename "${dropin_dir}")"
+        svc_name="${dir_name%.service.d}"
+        [[ -v SVC_SRC["${svc_name}"] ]] \
+            || die "Drop-In-Verzeichnis ohne Unit in SVC_SRC: ${DROPIN_SRC_ROOT}/${dir_name} — kein Dienst '${svc_name}.service' wird von diesem Bootstrap installiert. Entweder Unit in SVC_SRC ergänzen oder Verzeichnis entfernen."
+    done
+
+    dropin_count=0
+    for svc in "${!SVC_SRC[@]}"; do
+        src_dir="${DROPIN_ROOT_ABS}/${svc}.service.d"
+        [[ -d "${src_dir}" ]] || continue
+
+        dest_dir="${EFFECTIVE_DEST}/${svc}.service.d"
+        if [[ "${DRY_RUN}" -eq 1 ]]; then
+            mkdir -p "${dest_dir}"
+        else
+            sudo install -d -m 0755 "${dest_dir}"
+        fi
+
+        for src_conf in "${src_dir}"/*.conf; do
+            [[ -f "${src_conf}" ]] || continue
+            conf_name="$(basename "${src_conf}")"
+            dest_conf="${dest_dir}/${conf_name}"
+
+            if [[ -e "${dest_conf}" && "${DRY_RUN}" -eq 0 ]]; then
+                log "  Backup: ${dest_conf} → ${dest_conf}.bak"
+                sudo cp -p "${dest_conf}" "${dest_conf}.bak"
+            fi
+
+            if [[ "${DRY_RUN}" -eq 1 ]]; then
+                sed "${SED_EXPR[@]}" "${src_conf}" > "${dest_conf}"
+                info "  [dry-run] ${svc}.service.d/${conf_name} → ${dest_conf}"
+            else
+                sudo sed "${SED_EXPR[@]}" "${src_conf}" \
+                    | sudo tee "${dest_conf}" >/dev/null
+                sudo chmod 0644 "${dest_conf}"
+                log "  ${svc}.service.d/${conf_name} → ${dest_conf}"
+            fi
+            dropin_count=$((dropin_count + 1))
+        done
+    done
+    log "Drop-In-Substitution abgeschlossen (${dropin_count} Dateien)."
+else
+    info "Kein Drop-In-Verzeichnis ${DROPIN_SRC_ROOT} — übersprungen."
+fi
 
 # ---------------------------------------------------------------------------
 # Venv-Setup (optional, --setup-venv)
