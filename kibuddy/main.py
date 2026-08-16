@@ -569,7 +569,13 @@ def frage():
         # Untertitel-Halluzinationen ("Untertitel im Auftrag von Funk")
         # statt leerem String. Gleicher Fehler-Pfad wie leeres Transkript.
         if stt_service.ist_stille_halluzination(frage_text):
-            logger.info("stt: Stille-Halluzination gefiltert: '%s'", frage_text[:80])
+            # LOG-3: der gefilterte Wortlaut ist Kind-Sprachinhalt — nicht auf
+            # INFO. Dass der Filter griff (plus Laenge) bleibt als
+            # Diagnose-Signal auf INFO; der Wortlaut selbst ist nur auf
+            # DEBUG erreichbar (LOG-2-Override-Bahn) — dort ist er das
+            # Beweisstueck fuer "hat der Filter richtig erkannt?".
+            logger.info("stt: Stille-Halluzination gefiltert (%d Zeichen)", len(frage_text))
+            logger.debug("stt: Stille-Halluzination gefiltert: '%s'", frage_text[:80])
             yield json.dumps({"event": "error", "stage": "stt", "detail": "transkript leer — konnte die Frage nicht verstehen"}) + "\n"
             return
 
