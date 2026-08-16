@@ -44,11 +44,18 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
+import os
 import re
 import subprocess
 import sys
 
-REPO = "<your-org>/xbuddy"
+# Repo-Slug aus der Umgebung, nicht hartkodiert (Scrub-Platzhalter-Reparatur,
+# xbuddy-prozess#99 / RAT-36). `LOTSE_PROJECT_REPO` ist die vom lotse-Harness
+# etablierte Konvention (siehe lotse/hooks/restart_pending_log.py, per
+# `lotse/deploy.sh` in ~/.claude/settings.json als Projekt-ENV gesetzt) — kein
+# hartkodierter Org-Name hier, sonst schlägt leak-guard an (.gitleaks.toml,
+# Regel `xbuddy-github-org`).
+REPO = os.environ.get("LOTSE_PROJECT_REPO", "").strip()
 
 PREFLIGHT_RE = re.compile(r"<!--\s*card_pre_flight\s+v1\b")
 PREP_VERDICT_RE = re.compile(r"prep_verdict")
@@ -198,6 +205,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--days", type=int, default=7)
     args = parser.parse_args()
+    if not REPO:
+        sys.stderr.write(
+            "LOTSE_PROJECT_REPO ist nicht gesetzt — kann das Ziel-Repo nicht "
+            "auflösen. In einer Claude-Code-Session kommt es aus "
+            "~/.claude/settings.json (env), sonst z.B. "
+            "LOTSE_PROJECT_REPO=owner/repo tools/card_form_quote.py setzen.\n"
+        )
+        return 2
     print(_format(measure(args.days)))
     return 0
 
