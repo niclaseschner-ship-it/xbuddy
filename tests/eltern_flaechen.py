@@ -34,7 +34,7 @@ Es gibt zwei, und sie verhalten sich bei einer fehlerhaften Datei
 * `tools.views_manifest.load()` ist streng — ein einziger defekter Eintrag
   laesst die **ganze Datei** fallen.
 * Der im Betrieb genutzte Lader
-  (`seiten.aggregator._views_mit_per_view_resilienz`, SREG-3/DCOMP-3)
+  (`seiten.aggregator.lade_views_mit_per_view_resilienz`, SREG-3/DCOMP-3)
   ueberspringt **nur den kaputten Eintrag**.
 
 Real relevant: `hoerspiel/views.json:42` traegt `zielgruppe: "erwachsen"` —
@@ -45,12 +45,15 @@ verfehlt. Deshalb laeuft die Ableitung ueber die Ueberspringen-Semantik des
 Betriebs-Laders und meldet jeden uebersprungenen Eintrag **sichtbar**
 (Achse `lader`): ein kaputter Eintrag wird zum Befund, nicht zum blinden Fleck.
 
-Warum die private `_views_mit_per_view_resilienz` und nicht das oeffentliche
+Warum die per-Manifest-Naht und nicht das ebenfalls oeffentliche
 `aggregator.manifest_eintraege()`: letzteres ueberspringt Mini-App-Views, wenn
 die Bot-ENV nicht gesetzt ist (SREG-14/SREG-13). Das waere ein
 **umgebungsabhaengiger blinder Fleck** — `seiten/mini-app-uebersicht`
 verschwaende im CI aus der Liste. Die per-Manifest-Ebene traegt genau die
 Skip-Semantik des Betriebs, ohne die ENV-Abhaengigkeit.
+`lade_views_mit_per_view_resilienz` ist dafuer mit #1822 als oeffentliche Naht
+im Aggregator angelegt worden (MOD-5) — dieses Modul zieht an keinem
+Unterstrich-Namen.
 
 ## Der Verbund-Schluessel
 
@@ -109,6 +112,14 @@ ACHSE_MANTEL = "mantel"        # Eltern-Ansicht ohne vollen Mantel-Eintrag
 ACHSE_ANSCHLUSS = "anschluss"  # Komponente ohne Uebereinstimmungs-Pruefung
 ACHSE_PFAD = "pfad"            # deklarierte Adresse liefert 404
 ACHSE_LADER = "lader"          # Eintrag, den der Betriebs-Lader ueberspringt
+# Gegenrichtung: Mantel-Schluessel OHNE eltern-facing Ansicht. #1822 klammert
+# den Bau dieser Richtung ausdruecklich aus (er haette eine Produkt-Folge: die
+# Heim-Shell erschiene in der Seiten-Uebersicht). Sie wird deshalb nur GEMESSEN
+# und benannt, damit die bekannte Blindheit nicht stumm bleibt.
+ACHSE_GEGENRICHTUNG = "gegenrichtung"
+
+ACHSEN = (ACHSE_MANTEL, ACHSE_ANSCHLUSS, ACHSE_PFAD, ACHSE_LADER,
+          ACHSE_GEGENRICHTUNG)
 
 
 @dataclass(frozen=True)
@@ -189,16 +200,88 @@ AUSNAHMEN: tuple[Ausnahme, ...] = (
     Ausnahme(
         kennung="seiten",
         achse=ACHSE_ANSCHLUSS,
-        sorte=SORTE_AUSNAHME,
+        sorte=SORTE_SCHULDSTAND,
         begruendung=(
-            "#1822 nimmt seiten ausdruecklich aus: die Komponente fuehrt "
-            "ausschliesslich /api/v1/seiten/- und /seiten/-Pfade und keine "
-            "einzige /display/seiten/-Route. Die Uebereinstimmungs-Pruefung "
-            "ist auf die Routenform /display/<slug>/ gebaut und liefe hier "
-            "leere Menge gegen leere Menge — gruen ohne jeden Aussagewert. "
-            "Ein leerer Anschluss ist schlechter als eine benannte Ausnahme."
+            "ACHTUNG, GROESSE DER LUECKE: dies ist NICHT 'eine Komponente passt "
+            "nicht ins Schema', sondern die groesste verbleibende Blindheit "
+            "dieses Guards. Der Praefix /seiten/… hat im GANZEN Repo keine "
+            "Route→Manifest-Richtung: die Uebereinstimmungs-Pruefung ist auf "
+            "/display/<slug>/ gebaut (conventions/buddies.md:97), und "
+            "seiten/tests/test_views_manifest_eigentest.py:88 prueft 'Route "
+            "ohne Eintrag' nur fuer /api/v1/seiten. Unter /seiten/… liegen aber "
+            "essen/einkauf, plan/einstellungen, routine/anpassen, wetter/regeln "
+            "und hoerspiel/<kind_id>/eltern — FUENF der acht abgeleiteten "
+            "Eltern-Flaechen und saemtliche PWA-Flaechen. Nachgemessen: eine zur "
+            "Laufzeit in seiten.main.app registrierte Eltern-Route ohne jeden "
+            "views.json-Eintrag laesst ALLE Achsen dieses Guards leer. Das ist "
+            "genau die Auslassungs-Klasse aus der Ticket-Praemisse ('nichts "
+            "zwingt eine neue Komponente zu einem Eintrag') und der "
+            "wahrscheinlichste reale Fall: jemand baut die Seite und vergisst "
+            "das Manifest. Der /display/seiten/-Anschluss selbst liefe "
+            "zusaetzlich leere Menge gegen leere Menge — gruen ohne "
+            "Aussagewert; deshalb hier gefuehrt statt scheinbar angeschlossen."
         ),
-        quelle="seiten/views.json:5 (erster Pfad, /api/v1/seiten/uebersicht)",
+        quelle=(
+            "seiten/views.json:5 (erster Pfad, /api/v1/seiten/uebersicht); "
+            "Deckungsluecke: conventions/buddies.md:97 + "
+            "seiten/tests/test_views_manifest_eigentest.py:88"
+        ),
+        trigger=(
+            "#1890 baut die Route→Manifest-Richtung fuer den Praefix /seiten/… "
+            "(jede eltern-facing Route im seiten-Dienst braucht einen Eintrag "
+            "oder eine begruendete Ausnahme). Mit #1890 faellt diese Zeile weg. "
+            "Bewusst NICHT in #1822 gebaut: das ist eine Scope-Erweiterung ueber "
+            "die Abnahme dieses Tickets hinaus."
+        ),
+    ),
+    # ── Achse `gegenrichtung` ────────────────────────────────────────────────
+    Ausnahme(
+        kennung="shell",
+        achse=ACHSE_GEGENRICHTUNG,
+        sorte=SORTE_SCHULDSTAND,
+        begruendung=(
+            "Die Heim-Shell hat einen VOLLEN Mantel, aber keinen Eintrag im "
+            "Ansichts-Verzeichnis — sie traegt nirgends ein zielgruppe-Feld und "
+            "ist fuer die Ableitung dieses Guards strukturell unsichtbar. Bis "
+            "#1822 fing die Set-Gleichheit in seiten/tests/test_pwa_mantel.py "
+            "wenigstens das HINZUFUEGEN eines Registry-Schluessels; mit der "
+            "Drehung auf Pflicht-Enthaltensein (AC5) ist diese Fang-Wirkung "
+            "weg: ein Schluessel ohne zugehoerige Flaeche bricht nichts mehr. "
+            "Das ist ein bewusster Tausch — die alte Gleichheit fing das "
+            "Vergessen ueberhaupt nicht — aber es ist ein Verlust, und er steht "
+            "hier, statt nur im Docstring."
+        ),
+        quelle="seiten/pwa_mantel.py:403 (REGISTRY['shell'], start_url /shell/<panel_id>)",
+        trigger=(
+            "#1822 klammert die Heim-Shell ausdruecklich aus: die Gegenrichtung "
+            "zu schliessen waere technisch billig, haette aber eine "
+            "Produkt-Folge — die Shell erschiene damit in der "
+            "Seiten-Uebersicht. Das ist eine Entscheidung ueber die "
+            "Ziel-Default-Flaeche, kein Bau-Schritt. Sobald das eigene "
+            "Heim-Shell-Ticket entschieden ist, faellt diese Zeile weg."
+        ),
+    ),
+    Ausnahme(
+        kennung="hoerspiel-player",
+        achse=ACHSE_GEGENRICHTUNG,
+        sorte=SORTE_SCHULDSTAND,
+        begruendung=(
+            "Der Player traegt einen vollen Mantel und hat auch einen Eintrag "
+            "im Ansichts-Verzeichnis (seiten/views.json:48) — aber mit "
+            "zielgruppe 'kind'. Die Pflicht-Ableitung dieses Guards zieht nur "
+            "eltern-facing Ansichten, also faellt er aus der Menge und die "
+            "Gegenrichtung findet fuer seinen Registry-Schluessel keine "
+            "Flaeche. Kein Fehler, aber der zweite Fall derselben Blindheit: "
+            "installierbare Kind-Flaechen sind von dieser Baseline gar nicht "
+            "erfasst."
+        ),
+        quelle="seiten/pwa_mantel.py:492 (REGISTRY['hoerspiel-player']) ⇔ seiten/views.json:48",
+        trigger=(
+            "Sobald entschieden ist, ob die Baseline auch installierbare "
+            "Kind-Flaechen umfasst (gleiches Ticket wie der Heim-Shell-Fall), "
+            "wandert der Player entweder in die Pflicht-Menge oder in eine "
+            "ratifizierte Ausnahme — beides loescht diese Zeile."
+        ),
     ),
     # ── Achse `lader` ────────────────────────────────────────────────────────
     Ausnahme(
@@ -362,7 +445,7 @@ def durchlauf(root: str = REPO_ROOT) -> Durchlauf:
     kaputte: list[str] = []
     for komponente, _ist_controller, pfad in aggregator.discover_manifests(root):
         quelle = os.path.relpath(pfad, root)
-        views, ganz_kaputt = aggregator._views_mit_per_view_resilienz(pfad, komponente)
+        views, ganz_kaputt = aggregator.lade_views_mit_per_view_resilienz(pfad, komponente)
         if ganz_kaputt:
             kaputte.append(quelle)
             continue
@@ -474,6 +557,54 @@ def mantel_luecken(root: str = REPO_ROOT) -> list[Befund]:
     return [b for b in mantel_befunde(root) if b.ausnahme is None]
 
 
+# ── Achse `gegenrichtung` ────────────────────────────────────────────────────
+
+def gegenrichtung_befunde(root: str = REPO_ROOT) -> list[Befund]:
+    """Mantel-Schluessel, zu denen KEINE eltern-facing Ansicht gehoert.
+
+    Diese Richtung wird **gemessen und benannt, nicht durchgesetzt**: #1822
+    klammert sie ausdruecklich aus, weil ihre Schliessung eine Produkt-Folge
+    haette (die Heim-Shell erschiene in der Seiten-Uebersicht) — das ist eine
+    Entscheidung ueber die Ziel-Default-Flaeche, kein Bau-Schritt.
+
+    Sie steht trotzdem hier, weil die Drehung von Set-Gleichheit auf
+    Pflicht-Enthaltensein (AC5) eine Fang-Wirkung aufgibt: vorher brach ein
+    NEUER Registry-Schluessel die Gleichheit, jetzt nicht mehr. Der Verlust
+    gehoert benannt, nicht in einen Docstring versteckt.
+
+    Schluessel OHNE `start_url` bleiben hier aussen vor — sie sind auf gar
+    keine Flaeche abbildbar und werden auf der Mantel-Achse gefuehrt
+    (`seiten/mini-app-uebersicht`); ein zweiter Eintrag fuer denselben
+    Sachverhalt waere Rauschen.
+    """
+    pwa_mantel = importlib.import_module("seiten.pwa_mantel")
+    app = _seiten_app()
+    eltern_regeln = {
+        kanonische_regel(a.pfad, app) or a.pfad.rstrip("/")
+        for a in durchlauf(root).ansichten
+    }
+    befunde = []
+    for name, cfg in pwa_mantel.REGISTRY.items():
+        if not cfg.start_url:
+            continue
+        regel = kanonische_regel(cfg.start_url, app) or cfg.start_url.rstrip("/")
+        if regel in eltern_regeln:
+            continue
+        befunde.append(Befund(
+            ACHSE_GEGENRICHTUNG, name,
+            "Mantel-Schluessel %r (start_url %s, Regel %r) gehoert zu KEINER "
+            "eltern-facing Ansicht — er kann angelegt oder veraendert werden, "
+            "ohne dass eine Pruefung anschlaegt"
+            % (name, cfg.start_url, regel),
+        ))
+    return befunde
+
+
+def gegenrichtung_luecken(root: str = REPO_ROOT) -> list[Befund]:
+    """Undokumentierte Gegenrichtungs-Befunde — die Benennungs-Pflicht."""
+    return [b for b in gegenrichtung_befunde(root) if b.ausnahme is None]
+
+
 # ── Achse `lader` ────────────────────────────────────────────────────────────
 
 def lader_befunde(root: str = REPO_ROOT) -> list[Befund]:
@@ -577,7 +708,19 @@ ANSCHLUESSE: tuple[Anschluss, ...] = (
                   "/display/hoerspiel/<kind_id>/alben — deshalb loest diese "
                   "Pruefung auf die Regel auf, statt Pfad-Strings zu vergleichen. "
                   "static/manifest.webmanifest ist eine PWA-Asset-Route (#1858), "
-                  "keine View, und deshalb ausgenommen."
+                  "keine View, und deshalb ausgenommen. "
+                  "EINSCHRAENKUNG, offengelegt: Richtung B (Route→Eintrag) ist "
+                  "hier heute LEER. kanonische_display_pfade verwirft "
+                  "parametrische Regeln (tools/views_manifest.py:308), und nach "
+                  "Abzug der Asset-Route bleibt fuer hoerspiel keine einzige "
+                  "literale /display/-Route uebrig — gemessen 0, waehrend essen, "
+                  "photo, plan, routine und wetter je 1 haben. Der Anschluss "
+                  "wirkt damit Richtung-A-only: er faengt einen Eintrag ohne "
+                  "Route, aber keine Route ohne Eintrag. Das ist derselbe "
+                  "Massstab, mit dem die seiten-Zeile oben als Schuldstand "
+                  "gefuehrt wird; hier ist die Fang-Wirkung nur halb, nicht "
+                  "null, und die Alben-Routen sind ueber Richtung A gedeckt. "
+                  "Die fehlende Haelfte gehoert zur selben Luecke wie #1890."
               )),
     Anschluss("photo", "photo.main", begruendung="Bestand: photo/tests/test_views_photo.py:57."),
     Anschluss("plan", "plan.main", begruendung="Bestand: plan/tests/test_views_plan.py:50."),
@@ -632,7 +775,7 @@ def uebereinstimmung_pruefen(anschluss: Anschluss, root: str = REPO_ROOT) -> lis
     slug = anschluss.komponente
     praefix = "/display/%s/" % slug
     pfad = os.path.join(root, slug, "views.json")
-    views, _ganz_kaputt = aggregator._views_mit_per_view_resilienz(pfad, slug)
+    views, _ganz_kaputt = aggregator.lade_views_mit_per_view_resilienz(pfad, slug)
 
     abweichungen = []
     regeln_im_verzeichnis = set()

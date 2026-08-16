@@ -137,10 +137,16 @@ def test_registry_enthaelt_jede_pflichtige_eltern_flaeche():
     `tests/eltern_flaechen.py`; der repo-weite Guard ist
     `tests/test_eltern_flaechen_vollstaendig.py`.
 
-    Die Gegenrichtung (ein Mantel-Schluessel OHNE Eintrag im
-    Ansichts-Verzeichnis — der Fall Heim-Shell) ist in #1822 ausdruecklich
-    ausgeklammert: sie haette eine Produkt-Folge (die Shell erschiene in der
-    Seiten-Uebersicht) und ist damit eine eigene Entscheidung, kein Bau-Schritt.
+    ACHTUNG, bewusst aufgegebene Fang-Wirkung: die alte Set-Gleichheit brach
+    auch, wenn ein Registry-Schluessel HINZUKAM. Diese Richtung faengt der
+    gedrehte Test nicht mehr. #1822 klammert ihren Bau ausdruecklich aus (sie
+    haette eine Produkt-Folge: die Heim-Shell erschiene in der
+    Seiten-Uebersicht — eine Entscheidung, kein Bau-Schritt). Der Verlust ist
+    deshalb nicht nur hier notiert, sondern als Schuldstand mit Trigger
+    gefuehrt: `tests/eltern_flaechen.py:AUSNAHMEN`, Achse `gegenrichtung`,
+    Eintraege `shell` und `hoerspiel-player`. Er wird bei jedem Testlauf als
+    Warnung ausgegeben, und `test_mantel_eintraege_ohne_eltern_flaeche_sind_benannt`
+    erzwingt, dass ein NEUER solcher Schluessel wenigstens benannt wird.
     """
     fehlend = eltern_flaechen.fehlende_registrierungen()
     assert not fehlend, (

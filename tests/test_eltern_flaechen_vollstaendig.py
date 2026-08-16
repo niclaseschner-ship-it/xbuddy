@@ -220,6 +220,31 @@ def test_betriebs_lader_ueberspringt_nichts_undokumentiertes():
     )
 
 
+def test_mantel_eintraege_ohne_eltern_flaeche_sind_benannt():
+    """Die Gegenrichtung wird gemessen und BENANNT — gebaut wird sie nicht.
+
+    #1822 klammert sie ausdruecklich aus: sie zu schliessen haette eine
+    Produkt-Folge (die Heim-Shell erschiene in der Seiten-Uebersicht) und ist
+    damit eine Entscheidung, kein Bau-Schritt. Dieser Test erzwingt deshalb
+    keine Registrierung, sondern nur eine **Benennungs-Pflicht**: wer einen
+    Mantel-Schluessel anlegt, zu dem keine eltern-facing Flaeche gehoert, muss
+    das mit Begruendung eintragen, statt es stumm zu lassen.
+
+    Der Anlass: die Drehung von Set-Gleichheit auf Pflicht-Enthaltensein
+    (AC5) gibt die alte Fang-Wirkung fuer HINZUGEFUEGTE Registry-Schluessel
+    auf. Real betroffen sind heute `shell` und `hoerspiel-player`.
+    """
+    unbenannt = ef.gegenrichtung_luecken()
+    assert not unbenannt, (
+        "Mantel-Schluessel ohne eltern-facing Flaeche, die nirgends benannt "
+        "sind (#1822):\n"
+        + "\n".join("  - %s" % b.text for b in unbenannt)
+        + "\n\nDieser Test verlangt KEINE Registrierung — nur einen Eintrag mit "
+        "Begruendung in tests/eltern_flaechen.py:AUSNAHMEN "
+        "(Achse 'gegenrichtung')."
+    )
+
+
 def test_kein_ansichts_verzeichnis_faellt_komplett_aus():
     """Ein komplett unlesbares `views.json` wuerde eine ganze Komponente
     unsichtbar machen — das darf nie stillschweigend passieren."""
@@ -249,8 +274,7 @@ def test_ausnahme_liste_ist_wohlgeformt():
         if anker in kennungen:
             maengel.append("%s: doppelter Eintrag" % anker)
         kennungen.add(anker)
-        if eintrag.achse not in (ef.ACHSE_MANTEL, ef.ACHSE_ANSCHLUSS,
-                                 ef.ACHSE_PFAD, ef.ACHSE_LADER):
+        if eintrag.achse not in ef.ACHSEN:
             maengel.append("%s: unbekannte Achse %r" % (anker, eintrag.achse))
         if eintrag.sorte not in (ef.SORTE_AUSNAHME, ef.SORTE_SCHULDSTAND):
             maengel.append("%s: unbekannte Sorte %r" % (anker, eintrag.sorte))
@@ -292,6 +316,7 @@ def test_ausnahmen_sind_noch_real():
         ef.ACHSE_ANSCHLUSS: {
             k for k in aggregator_komponenten if ef.anschluss_fuer(k) is None
         },
+        ef.ACHSE_GEGENRICHTUNG: {b.kennung for b in ef.gegenrichtung_befunde()},
     }
     veraltet = [
         "%s/%s (%s)" % (e.achse, e.kennung, e.quelle)
@@ -338,22 +363,26 @@ def test_befunde_sind_im_lauf_sichtbar(capsys):
     assert schuldstaende >= 1, "Kein Schuldstand ausgegeben — Sichtbarkeit ungeprueft."
 
 
-def test_ohne_die_ausnahme_liste_faerben_genau_diese_befunde_rot(monkeypatch):
+def test_ohne_die_ausnahme_liste_bleiben_genau_diese_befunde_offen(monkeypatch):
     """AC4-Form, behavioral geprueft: die Ausnahmen sind Daten, keine Verzweigung.
 
-    Nimmt man die Liste weg, faerben **genau** die dort gefuehrten Befunde rot
-    — kein einziger mehr (dann waere ein Befund im Code weggezweigt) und kein
-    einziger weniger (dann waere ein Eintrag Dekoration, die kuenftig einen
-    NEUEN Fehler derselben Kennung stillschweigend abdeckte).
+    Nimmt man die Liste weg, bleiben **genau** die dort gefuehrten Befunde
+    offen — kein einziger mehr (dann waere ein Befund im Code weggezweigt) und
+    kein einziger weniger (dann waere ein Eintrag Dekoration, die kuenftig
+    einen NEUEN Fehler derselben Kennung stillschweigend abdeckte).
 
     Das ist zugleich die zweite Fehlerpfad-Probe: sie loest jeden
-    dokumentierten Befund echt aus, statt seine Existenz zu behaupten.
+    dokumentierten Befund echt aus, statt seine Existenz zu behaupten. Vier
+    der fuenf Achsen machen einen offenen Befund rot; die Achse
+    `gegenrichtung` verlangt nur seine Benennung (#1822 klammert ihren Bau
+    aus) — offen ist er in beiden Faellen.
     """
     erwartet = {(e.achse, e.kennung) for e in ef.AUSNAHMEN}
     monkeypatch.setattr(ef, "AUSNAHMEN", ())
 
     offen = set()
     for befund in (ef.mantel_luecken() + ef.anschluss_luecken()
+                   + ef.gegenrichtung_luecken()
                    + [b for b in ef.pfad_befunde() if b.ausnahme is None]
                    + [b for b in ef.lader_befunde() if b.ausnahme is None]):
         offen.add((befund.achse, befund.kennung))
