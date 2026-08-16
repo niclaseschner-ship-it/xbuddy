@@ -320,9 +320,11 @@ def test_mistral_explicit_model_also_prefixed(jsonl_path):
 # ----------------------------------------------------------------------
 
 
-def test_lib_adapter_passes_max_tokens_4096_to_vendor(jsonl_path):
-    """LibAgentAdapter reicht max_tokens=4096 (Alt-Wert claude.py:32) an den
-    litellm-Motor durch — completion wird mit max_tokens=4096 gerufen."""
+def test_lib_adapter_passes_max_tokens_8192_to_vendor(jsonl_path):
+    """LibAgentAdapter reicht max_tokens=8192 an den litellm-Motor durch —
+    completion wird mit max_tokens=8192 gerufen. Angehoben von 4096 (T1807,
+    gemessen: claude-opus-5 lässt auf diesem `tool_choice`="auto"-Pfad
+    automatisches Thinking zu, das denselben Topf wie der Antworttext teilt)."""
     fake = _fake_litellm(_litellm_response("Ok."))
 
     with patch.dict(sys.modules, {"litellm": fake}), \
@@ -330,7 +332,7 @@ def test_lib_adapter_passes_max_tokens_4096_to_vendor(jsonl_path):
         adapter = LibAgentAdapter(provider="claude", provider_model="")
         adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
 
-    assert fake.completion.call_args.kwargs["max_tokens"] == 4096
+    assert fake.completion.call_args.kwargs["max_tokens"] == 8192
 
 
 def test_missing_usage_yields_none(jsonl_path):

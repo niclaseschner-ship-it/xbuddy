@@ -1149,7 +1149,21 @@ _AGENT_SLOT_FOR_PROVIDER = {
 }
 
 # T1281: MAX_TOKENS aus den entfernten Alt-Providern hier zentralisiert.
-# claude=8192 — Sicherheits-Puffer für ~3500-Token-Folge.
+# claude=8192 — Sicherheits-Puffer für ~3500-Token-Folge. T1807/AC3, GEMESSEN
+# statt geraten (Modell jetzt claude-opus-5): die Folgen-Generierung
+# (`complete_structured` → `_vendor/litellm.singleshot_structured`) zwingt
+# `tool_choice` auf das EINE `folgen_vorschlag`-Tool — Anthropic schaltet
+# automatisches Thinking bei erzwungenem `tool_choice` AUS. Realer Lauf über
+# die echte Route (identisches Schema/System-Prompt-Muster, max_tokens=8192):
+# 5597/8192 Token verbraucht (68 %), 0 Thinking-Blöcke, finish_reason
+# "tool_calls" (nicht "length") — der Modell-Wechsel ändert an diesem Budget
+# nichts. OFFEN (nicht gemessen, gleicher Konstanten-Topf): `complete()`
+# (Synopse, `get_completion`/Freitext, kein Tool-Zwang) und
+# `recherche_agent()` (`get_agent` auf dem anthropic-Hand-Vendor, ebenfalls
+# KEIN erzwungener `tool_choice`) hängen an DERSELBEN 8192-Konstante, sind
+# aber strukturell dem eltern-chat-Fall ähnlicher (Thinking könnte dort
+# an sein) — nicht live gemessen (hoerspiel/providers/lib_adapter.py ist in
+# diesem Ticket nicht im Schreib-Scope, siehe Handoff-Befund).
 # mistral=4096 — ratifizierter Wert HSP-27b.
 _MAX_TOKENS_FOR_PROVIDER = {
     "claude": 8192,
@@ -1173,8 +1187,9 @@ def _build_llm(cfg) -> LLMProvider | None:
     slot = litellm_slot_for_provider(_CALLER, cfg.llm_provider)
     agent_slot = _AGENT_SLOT_FOR_PROVIDER[cfg.llm_provider]
     max_tokens = _MAX_TOKENS_FOR_PROVIDER[cfg.llm_provider]
-    # `model` + `max_tokens` durchreichen: Modell-Erhalt (z. B. claude-opus-4-7)
-    # und Token-Limit (T1084: DEFAULT_MAX_TOKENS=2048 < ~3500 Token Folgentext).
+    # `model` + `max_tokens` durchreichen: Modell-Erhalt (z. B. claude-opus-5,
+    # T1807) und Token-Limit (T1084: DEFAULT_MAX_TOKENS=2048 < ~3500 Token
+    # Folgentext).
     # LLMP-S13 (#1463): der Mistral-`mistral/`-Präfix ist jetzt ZENTRAL gelöst —
     # `tools.llm` normalisiert den blanken Mistral-Modellnamen
     # (`mistral-medium-2508` → `mistral/mistral-medium-2508`) vor den `get_*`-

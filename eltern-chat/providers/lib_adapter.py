@@ -92,18 +92,32 @@ class LibAgentAdapter:
         self._provider = provider
         self._slot = slot
 
-        # Lib-Fassade EINMAL bauen (Slot + effektives Modell + alt-treuem
-        # max_tokens). Ein `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler
-        # (fehlender Key, Capability-Mismatch) — er propagiert klar (wie der alte
+        # Lib-Fassade EINMAL bauen (Slot + effektives Modell + max_tokens). Ein
+        # `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler (fehlender Key,
+        # Capability-Mismatch) — er propagiert klar (wie der alte
         # fehlender-Key-Pfad) und wird NICHT als ProviderError verschluckt.
-        # max_tokens=4096: historischer Wert aus dem inzwischen gelöschten
-        # Hand-Vendor providers/claude.py MAX_TOKENS=4096 (T1129, #1510-Abriss);
-        # ohne explizite Übergabe würde die Lib DEFAULT_MAX_TOKENS=2048 nutzen —
-        # stille Halbierung, die lange Antworten trunkieren kann (vgl. #1084-502).
-        # T1807/AC3: claude-opus-5 erlaubt laut litellm-Katalog max_output_tokens
-        # 128000 — 4096 bleibt weit darunter, kein Cutoff-Risiko durch den
-        # Modell-Wechsel selbst.
-        self._agent = get_agent(slot=slot, model=self._model, max_tokens=4096)
+        #
+        # max_tokens=8192 (T1807, angehoben von 4096 — historischer Wert aus dem
+        # inzwischen gelöschten Hand-Vendor providers/claude.py MAX_TOKENS=4096,
+        # T1129/#1510-Abriss). Grund der Anhebung — GEMESSEN, nicht geraten:
+        # dieser Pfad (`agent_step`, `tool_choice` UNGESETZT = "auto") lässt bei
+        # claude-opus-5 automatisches Thinking zu, das denselben `max_tokens`-
+        # Topf wie der sichtbare Antworttext teilt (anders als der erzwungene
+        # `tool_choice`-Pfad in foto_analyse.py/hoerspiel — dort ist Thinking
+        # AUS, s. dortige Kommentare). Realer A/B-Lauf über die echte Route
+        # (SYSTEM_PROMPT + wetter-Tool, identischer Prompt, max_tokens=4096):
+        # claude-opus-4-7 kein Thinking, 1944 completion_tokens für eine
+        # vollständige Antwort — claude-opus-5 MIT Thinking, 3497 completion_
+        # tokens (≈+80 %) für eine vergleichbar lange sichtbare Antwort, macht
+        # 85 % des alten 4096er-Budgets voll (n=2 A/B-Paare, zweiter Lauf
+        # +1,6 % — die Schwankung ist die Fragen-Komplexität, nicht Rauschen).
+        # 8192 verdoppelt den alten (bereits 2x-Halbierungs-Puffer, #1084-502)
+        # Wert — genug Kopfraum, um das gemessene Worst-Case-Thinking-Delta
+        # nochmal ~1,7x aufzunehmen, ohne `thinking` selbst zu setzen (das wäre
+        # eine Verhaltensentscheidung über dieses Ticket hinaus, T1807-S4-
+        # Vorgabe: adaptives Denken ist die vorgesehene Betriebsart).
+        # `thinking` bleibt unangetastet (kein `thinking=`-Kwarg an get_agent).
+        self._agent = get_agent(slot=slot, model=self._model, max_tokens=8192)
 
     def generate(self, request):
         """Führt eine Anbieter-Anfrage über `tools.llm` aus und liefert eine

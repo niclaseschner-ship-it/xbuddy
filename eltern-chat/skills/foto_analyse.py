@@ -109,9 +109,18 @@ _FOTO_MODEL = "claude-opus-5"
 # TAB-5: Token-Budget wie der (gelöschte) Legacy-Adapter
 # `_multimodal/claude.py:120` MAX_TOKENS = 4096; ohne explizite Übergabe nähme
 # die Lib DEFAULT_MAX_TOKENS=2048 — stille Halbierung, die lange Termin-Listen
-# trunkieren könnte (vgl. #1084-502). T1807/AC3: claude-opus-5 erlaubt laut
-# litellm-Katalog max_output_tokens 128000 — 4096 bleibt weit darunter, kein
-# Cutoff-Risiko durch den Modell-Wechsel selbst.
+# trunkieren könnte (vgl. #1084-502). T1807/AC3, GEPRÜFT statt geraten: dieser
+# Pfad ruft `get_singleshot(...).complete_structured(...)` →
+# `_vendor/litellm.singleshot_structured`, die `tool_choice` fest auf das
+# EINE `extract_termine`-Tool zwingt (benannte Form, nicht "auto"). Anthropic
+# schaltet automatisches Thinking bei erzwungenem `tool_choice` AUS — real
+# gemessen am selben Code-Pfad (hoerspiel-Folgengenerierung, identischer
+# Vendor-Mechanismus): 0 Thinking-Blöcke, `reasoning_tokens=0`, 5597/8192
+# Token bei erzwungenem Tool-Call. Der claude-opus-5-Wechsel ändert an diesem
+# Pfad also nichts am Budget-Verbrauch (anders als lib_adapter.py, dessen
+# `agent_step`-Pfad `tool_choice` UNGESETZT lässt — dort IST Thinking an, s.
+# dortiger Kommentar). max_output_tokens laut litellm-Katalog: 128000 — 4096
+# bleibt so oder so weit darunter.
 _MAX_TOKENS = 4096
 
 
