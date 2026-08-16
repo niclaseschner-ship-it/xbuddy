@@ -288,15 +288,25 @@ mit den echten Werten wäre es ein PII-Leak in ein öffentliches Repo, das
 
 Der Ausnahme-Satz lebt zusätzlich als `NUR_AUF_DER_MASCHINE` in
 `deploy/tests/test_dropins_vollstaendig.py`: der Test wird rot, wenn eine dieser
-Dateien doch im Repo landet. **Offener Punkt (#1802):** ob es für Kind-Identität
-eine Platzhalter-Form geben soll (`__XBUDDY_KIND_*__`) ist eine Konventions-Frage
-und liegt bei Nic — hier bewusst nicht selbst entschieden.
+Dateien doch im Repo landet.
+
+**Träger dieses Schuldstands ist #1892** („Platzhalter-Form für
+Kind-Identitäten"), nicht dieses Ticket — ob es `__XBUDDY_KIND_*__` geben soll,
+ist eine Konventions-Frage. Zwei mechanisch prüfbare Trigger, bei denen #1892
+fällig wird:
+
+1. **Familie 2 wird aufgesetzt** — dann braucht der Bootstrap die Form wirklich.
+2. **Ein drittes Per-Person-Drop-In entsteht** — n=3 statt Vorrats-Konvention
+   (CLAUDE.md §6).
 
 Ein sechstes Drop-In ist **verwaist**, nicht ausgenommen:
 `xbuddy-geraete.service.d/10-data-path.conf`. Der Dienst ist mit RAT-31
 (`cf0dbb1e`) aus dem Repo gelöscht, die Unit am Pi meldet `inactive`/`disabled`.
 Die Datei konfiguriert nichts und wird **entfernt, nicht versioniert** — das
-Aufräumen in `/etc` gehört zum Unit-Aufräumen der abgerissenen Dienste (#1862):
+Aufräumen in `/etc` gehört zum Unit-Aufräumen der abgerissenen Dienste. An
+**#1862** ist der Sachverhalt inzwischen **vermerkt** (Verwaisungs-Beleg und die
+`rm`-Befehle als Kommentar); die **Übernahme steht aus** — angenommen hat den
+Vorschlag dort noch niemand.
 
 ```bash
 sudo rm -rf /etc/systemd/system/xbuddy-geraete.service.d/

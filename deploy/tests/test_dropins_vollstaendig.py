@@ -55,7 +55,12 @@ ETC_PREFIX = "/etc/systemd/system/"
 # hier mit erfundenen Ersatzwerten zu versionieren waere eine Konvention aus dem
 # Stegreif; sie mit den echten Werten zu versionieren waere ein PII-Leak in ein
 # oeffentliches Repo (.gitleaks.toml blockt genau diese Muster, #1724).
-# Vorgelegt als offener Punkt in #1802.
+#
+# Traeger dieses Schuldstands ist **#1892** („Platzhalter-Form fuer
+# Kind-Identitaeten"), NICHT #1802 — #1802 schliesst mit diesem PR. Zwei
+# mechanisch pruefbare Trigger, bei denen #1892 faellig wird:
+#   1. Familie 2 wird aufgesetzt (dann braucht der Bootstrap die Form wirklich), ODER
+#   2. ein drittes Per-Person-Drop-In entsteht (n=3 statt Vorrats-Konvention).
 NUR_AUF_DER_MASCHINE: dict[str, str] = {
     "xbuddy-eltern-chat.service.d/30-master-id.conf":
         "ELTERNCHAT_MASTER_TELEGRAM_USER_ID — echte Telegram-Konto-ID. "
@@ -77,7 +82,9 @@ NUR_AUF_DER_MASCHINE: dict[str, str] = {
 # Verwaist und deshalb weder versioniert noch in der Soll-Liste: der Dienst
 # xbuddy-geraete ist mit RAT-31 (cf0dbb1e) aus dem Repo geloescht, die Unit am
 # Pi ist `inactive`/`disabled`. Das Aufraeumen der Datei in /etc gehoert zum
-# Unit-Aufraeumen in #1862.
+# Unit-Aufraeumen in #1862 — dort ist der Sachverhalt inzwischen **vermerkt**
+# (Verwaisungs-Beleg + rm-Befehle als Kommentar). Die Uebernahme steht aus:
+# angenommen hat den Vorschlag noch niemand.
 VERWAIST = "xbuddy-geraete.service.d/10-data-path.conf"
 
 
@@ -94,7 +101,21 @@ def _soll_liste() -> dict[str, str]:
         treffer = zeilen_muster.match(zeile)
         if treffer:
             repo_pfad, etc_pfad = treffer.group(1), treffer.group(2)
-            soll[repo_pfad[len("deploy/systemd/"):]] = etc_pfad
+            rel = repo_pfad[len("deploy/systemd/"):]
+            # Doppelter Schluessel MUSS hart brechen, nicht ueberschreiben: eine
+            # zweite Zeile fuer dieselbe Datei liesse die erste (ggf. mit falschem
+            # /etc-Ziel) unbemerkt in der Anleitung stehen — beide Richtungen des
+            # Abgleichs waeren gruen, weil das dict nur den letzten Wert haelt.
+            # Der einzige Falsch-Gruen-Pfad dieses Guards.
+            assert rel not in soll, (
+                "Doppelte Zeile in der Drop-In-Tabelle "
+                f"(deploy/systemd/README.md) fuer: {rel}\n"
+                f"  erst:  {soll[rel]}\n"
+                f"  dann:  {etc_pfad}\n"
+                "Eine Datei = eine Zeile. Sonst bleibt die falsche Zeile "
+                "unbemerkt stehen, weil nur die letzte gewinnt."
+            )
+            soll[rel] = etc_pfad
     return soll
 
 
