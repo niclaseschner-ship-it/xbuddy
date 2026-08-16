@@ -122,5 +122,9 @@ def transkribiere(audio_bytes: bytes, stt_engine, filename: str = "audio.webm") 
     """
     logger.info("stt: transkribiere %d bytes (%s)", len(audio_bytes), filename)
     text = stt_engine.transkribiere(audio_bytes, filename=filename)
-    logger.info("stt: transkript='%s'", text[:80])
+    # LOG-3: Transkript ist Kind-Sprachinhalt — nicht auf INFO. Laenge bleibt
+    # als Diagnose-Signal (wurde ueberhaupt etwas erkannt?); der Wortlaut
+    # selbst ist nur auf DEBUG erreichbar (LOG-2-Override-Bahn).
+    logger.info("stt: transkript erhalten (%d Zeichen)", len(text))
+    logger.debug("stt: transkript='%s'", text[:80])
     return text
