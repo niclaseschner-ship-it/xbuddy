@@ -16,7 +16,9 @@ eingehängt und `litellm.completion` gemockt (Spiegel test_chat_jsonl_endtoend,
 das `anthropic` mockt). KEIN echter litellm-Call.
 """
 
+import importlib.util
 import json
+import os
 import sys
 import time
 from unittest.mock import MagicMock, patch
@@ -138,6 +140,83 @@ def test_ohne_fixture_zeigt_telemetrie_pfad_trotzdem_nicht_auf_live_default():
         "repo-weite autouse-Telemetrie-Guard (Wurzel-conftest.py) greift "
         "nicht mehr." % DEFAULT_DATA_DIR
     )
+
+
+def _get_root_conftest_module():
+    """Findet das geladene Wurzel-`conftest.py`-Modulobjekt über seinen
+    `__file__`-Pfad — NICHT über `import conftest` als bloßen Kurznamen.
+
+    Das Repo hat viele paketlose `conftest.py`-Dateien (analog dem
+    `main`-Kollisionsproblem, s. `pytest.ini`-Kommentar). Beim vollen
+    Suite-Lauf importiert pytest sie alle; je nach Sammelreihenfolge landet
+    unter `sys.modules["conftest"]` mal die Wurzel-Datei, mal eine andere
+    (z. B. `eltern-chat/tests/integration/conftest.py`) — der bare Name ist
+    mehrdeutig, ein `import conftest` picken sich die falsche. Der Lookup
+    hier vergleicht `__file__`-Pfade statt sich auf den Modulnamen zu
+    verlassen und ist damit sammelreihenfolge-unabhängig."""
+    root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)))))
+    conftest_path = os.path.join(root_path, "conftest.py")
+
+    for mod in list(sys.modules.values()):
+        if getattr(mod, "__file__", None) == conftest_path:
+            return mod
+
+    # Fallback (z. B. Einzeltest-Lauf ohne vorherige Sammlung durch pytest):
+    # direkt per Pfad laden, unter garantiert eindeutigem Namen.
+    spec = importlib.util.spec_from_file_location(
+        "_xbuddy_root_conftest_direct", conftest_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_tripwire_erkennt_schreiben_an_env_vorbei(tmp_path, monkeypatch):
+    """#1821-AC2 Schicht 2 (Hosenträger). Das ENV-Umbiegen (Schicht 1) deckt
+    nur den ENV-Weg ab — ein Schreiber, der die Live-Datei über einen
+    ANDEREN Weg erreicht (Absolutpfad, eigenes `env=...` an `write_call`
+    vorbei am gesetzten ENV), würde davon NICHT erwischt. Der Wurzel-
+    `conftest.py`-Guard merkt sich darum vor dem Test `stat()` der
+    Live-Datei und vergleicht danach — bei Abweichung schlägt der Test fehl
+    statt still weiterzulaufen.
+
+    Treibt den Fixture-Generator aus `conftest.py` DIREKT an (kein echter
+    Sub-`pytest`-Lauf nötig) und ersetzt NUR die Live-Pfad-Auflösung durch
+    eine Attrappe unter `tmp_path` — die echte Live-Datei
+    (`~/xbuddy-data/llm/provider_calls.jsonl`) bleibt dabei unberührt
+    (AC3): dieser Test schreibt nie auf den echten Pfad, nur auf die
+    Attrappe."""
+    root_conftest = _get_root_conftest_module()
+
+    decoy_live = tmp_path / "decoy-live" / "provider_calls.jsonl"
+    decoy_live.parent.mkdir()
+    decoy_live.write_text("bereits-vorhandene-zeile\n")
+    monkeypatch.setattr(root_conftest, "_live_jsonl_path", lambda: str(decoy_live))
+
+    class _FakeNode:
+        nodeid = "faketest::simuliert_env_umgehung"
+
+    class _FakeRequest:
+        node = _FakeNode()
+
+    inner_tmp = tmp_path / "inner-test-tmp"
+    inner_tmp.mkdir()
+    inner_monkeypatch = pytest.MonkeyPatch()
+    try:
+        gen = root_conftest._xbuddy_data_dir_isolieren.__wrapped__(
+            inner_tmp, inner_monkeypatch, _FakeRequest()
+        )
+        next(gen)  # Setup-Hälfte: ENV umgebogen, "vorher"-stat gemerkt.
+
+        # Simuliert einen Schreiber, der das umgebogene ENV umgeht.
+        decoy_live.write_text("bereits-vorhandene-zeile\nNEUE-ZEILE-AM-ENV-VORBEI\n")
+
+        with pytest.raises(pytest.fail.Exception) as excinfo:
+            next(gen)  # Teardown-Hälfte: stat weicht ab -> muss failen.
+    finally:
+        inner_monkeypatch.undo()
+
+    assert "faketest::simuliert_env_umgehung" in str(excinfo.value)
 
 
 # ----------------------------------------------------------------------
