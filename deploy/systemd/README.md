@@ -201,10 +201,12 @@ Familie (Drift-Schutz, SVC-2). Deshalb leben versionierte Drop-Ins ab #1785 hier
 |---|---|---|
 | `deploy/systemd/xbuddy-plan.service.d/memory.conf` | `/etc/systemd/system/xbuddy-plan.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) |
 | `deploy/systemd/xbuddy-familie.service.d/memory.conf` | `/etc/systemd/system/xbuddy-familie.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) |
+| `deploy/systemd/xbuddy-plan.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-plan.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1801 |
+| `deploy/systemd/xbuddy-familie.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-familie.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1801 |
 
-Diese beiden Drop-Ins enthalten **keine** `__XBUDDY_*__`-Platzhalter:
-`MemoryHigh` und `OOMScoreAdjust` sind host-unabhängig. Der `sed`-Schritt aus
-„Ausrollen" entfällt für sie — `cp` genügt.
+Alle vier Drop-Ins enthalten **keine** `__XBUDDY_*__`-Platzhalter: ihre Werte
+sind host-unabhängig. Der `sed`-Schritt aus „Ausrollen" entfällt für sie —
+`cp` genügt.
 
 Zwei bekannte Abweichungen, absichtlich so gelassen und hier notiert statt
 still gefixt:
@@ -290,6 +292,75 @@ den Dienst kippen — deshalb Schritt 1 zuerst.
 
 Rollback ist symmetrisch: Drop-In löschen, `daemon-reload`, `restart`.
 
+### Ausrollen der Neustart-Bremse — Reihenfolge (#1801)
+
+Selbe Reihenfolge-Logik wie oben: erst prüfen, dann laden, dann anwenden,
+dann belegen. `StartLimitIntervalSec`/`StartLimitBurst` sind reine
+Unit-Direktiven — sie brauchen keinen Prozess-Neustart, ein `daemon-reload`
+reicht, den Zähler auf den neuen Wert umzustellen. Alle Befehle mit
+repo-relativen Pfaden (`deploy/systemd/...`) laufen aus dem Wurzelverzeichnis
+des Checkouts (`__XBUDDY_REPO__`, z. B. `/home/buddy/repos/xbuddy` — siehe
+Platzhalter-Tabelle oben), nicht aus `deploy/systemd/` selbst.
+
+1. **Drift-Check vor allem anderen** (identisch zum Speicher-Abschnitt oben,
+   hier wichtiger: Schritt 3 verlangt gleich einen vorgeführten Crash-Loop,
+   und genau dort wird eine `ExecStart`-Drift scharf — ein umgebogener
+   `ExecStart` auf einer bereits driftenden Unit testet die falsche Sache).
+   Vergleiche das effektive `ExecStart` der Live-Unit mit der
+   `argparse`-Signatur des Dienstes:
+
+   ```bash
+   systemctl cat xbuddy-plan.service xbuddy-familie.service | grep -n 'ExecStart\|Restart='
+   grep -n 'add_argument' plan/main.py familie/main.py
+   ```
+
+   Jedes `--flag` im `ExecStart` muss in `parse_args()` existieren. Weicht
+   etwas ab: **stopp**, erst die Unit richten. (Stand 2026-08-10: die
+   Live-`ExecStart` beider Dienste sind argparse-konform — siehe „Bekannte
+   Vorlagen-Drift" unten für die *Repo-Vorlagen*-Drift, die unabhängig davon
+   bekannt und unbehoben ist.)
+
+2. **Drop-Ins kopieren** (Arbeitsverzeichnis: Repo-Root):
+
+   ```bash
+   for svc in xbuddy-plan xbuddy-familie; do
+     sudo install -d -m 0755 "/etc/systemd/system/${svc}.service.d"
+     sudo install -m 0644 "deploy/systemd/${svc}.service.d/restart-window.conf" \
+       "/etc/systemd/system/${svc}.service.d/restart-window.conf"
+   done
+   sudo systemctl daemon-reload
+   ```
+
+3. **Live belegen** (Abnahme-Kriterium des Tickets):
+
+   ```bash
+   systemctl show -p Restart -p RestartUSec -p StartLimitIntervalUSec \
+     -p StartLimitBurst xbuddy-plan.service xbuddy-familie.service
+   ```
+
+   Erwartet: `StartLimitIntervalUSec=2min` (= 120s), `StartLimitBurst=5`,
+   `RestartUSec=10s` für beide. Vor dem Rollout (Stand 2026-08-17, gemessen
+   für dieses Ticket) zeigte derselbe Befehl `StartLimitIntervalUSec=10s`
+   (systemd-Default, ungesetzt) — identisch mit `RestartUSec`, die Bremse
+   konnte nie greifen.
+
+4. **Vorgeführt, nicht gerechnet** (Abnahme verlangt einen vorgeführten
+   Dauerabsturz, kein Papier-Beweis): einen künstlichen Crash-Loop erzeugen
+   (z. B. `ExecStart` kurzzeitig auf einen sofort abstürzenden Befehl setzen
+   oder den Prozess wiederholt `kill -SEGV` schicken) und beobachten, dass
+   systemd nach dem fünften Versuch **innerhalb** von 120s mit
+   `start-limit-hit` stoppt:
+
+   ```bash
+   journalctl -u xbuddy-plan -f
+   # erwartete Zeile: "... start request repeated too quickly, refusing to start."
+   systemctl status xbuddy-plan   # Active: failed (Result: start-limit-hit)
+   ```
+
+   Reset danach: `sudo systemctl reset-failed xbuddy-plan xbuddy-familie`.
+
+Rollback ist symmetrisch: Drop-In löschen, `daemon-reload`.
+
 ### Bekannte Vorlagen-Drift (Stand 2026-08-10, #1785)
 
 Diese Abweichungen sind **gemeldet, nicht gefixt** — sie zu ändern gehört in ein
@@ -301,7 +372,7 @@ Live-Dienst anfasst:
 | `familie/familie.service` → `ExecStart` | ohne `--host`/`--port` | `--host 127.0.0.1 --port 5010` | Harmlos: `familie/main.py` `RUNTIME_SCHEMA` hat genau diese Werte als Default. Trotzdem Drift. |
 | `familie/familie.service` → `--registry` | `__XBUDDY_REPO__/familie/familie.json` (**im Checkout**) | `__XBUDDY_DATA__/familie/familie.json` (per Drop-In `10-data-path.conf`) | Die Vorlage verletzt SVC-5; live rettet das nur ein Drop-In mit `ExecStart=`-Reset. |
 | `plan/plan.service` → `EnvironmentFile` | inline in der Vorlage | per Drop-In `20-eltern-token.conf` | Doppelter Ort für dieselbe Zuweisung. |
-| beide → `Restart=` | `on-failure` (SVC-3-konform) | `always` (hand-editiert) | Siehe SVC-3 in `conventions/services.md`. Die Drift lebt **nur** in `/etc`; ein `bootstrap.sh`-Lauf würde sie von allein beseitigen. |
+| beide → `Restart=` | `on-failure` (SVC-3-konform) | `always` (hand-editiert) | Siehe SVC-3 in `conventions/services.md`. Die Drift lebt **nur** in `/etc`; ein `bootstrap.sh`-Lauf würde sie von allein beseitigen. Für #1801 re-verifiziert (2026-08-17): `systemctl show xbuddy-plan xbuddy-familie -p Restart` zeigt weiterhin `always` auf beiden. |
 
 ## Restart nach Code-Update (Pflicht)
 
