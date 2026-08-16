@@ -326,7 +326,7 @@ def _post_durable_comment(
         sys.path.insert(0, TOOLS_DIR)
         try:
             import card_form_quote as cfq
-            repo = cfq.REPO
+            repo = cfq.resolve_repo()
         finally:
             sys.path[:] = old_path
         subprocess.run(
