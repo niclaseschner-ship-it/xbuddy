@@ -165,6 +165,27 @@ def _tts():
     return runtime.get("tts_engine")
 
 
+def _stille_halluzination_treffer(text: str) -> str:
+    """Liefert die aus stt_service._STILLE_HALLUZINATION_PHRASEN/-INDIKATOREN
+    gematchte Konstante (#1806-Nachschaerfung).
+
+    Kein Kind-Sprachinhalt: die Trefferliste ist eine geschlossene
+    Code-Konstante in stt_service.py (Whisper-Stille-Halluzinationen), kein
+    freier Wortlaut — LOG-3 greift hier nicht, anders als beim Transkript
+    selbst. Spiegelt exakt die Matching-Reihenfolge aus
+    stt_service.ist_stille_halluzination() (Vollphrase vor Indikator-
+    Substring), nur mit der gematchten Konstante als Rueckgabewert statt bool.
+    Nur fuer bereits als Halluzination erkannten Text aufrufen.
+    """
+    norm = stt_service._normalisiere(text)
+    if norm in stt_service._STILLE_HALLUZINATION_PHRASEN:
+        return norm
+    for indikator in stt_service._STILLE_HALLUZINATION_INDIKATOREN:
+        if indikator in norm:
+            return indikator
+    return "?"  # unerreichbar, wenn der Aufrufer vorher ist_stille_halluzination() prueft
+
+
 def _registry() -> SessionRegistry:
     return runtime["session_registry"]
 
@@ -569,7 +590,18 @@ def frage():
         # Untertitel-Halluzinationen ("Untertitel im Auftrag von Funk")
         # statt leerem String. Gleicher Fehler-Pfad wie leeres Transkript.
         if stt_service.ist_stille_halluzination(frage_text):
-            logger.info("stt: Stille-Halluzination gefiltert: '%s'", frage_text[:80])
+            # LOG-3 greift hier NICHT auf den Treffer selbst: der gematchte
+            # Wert ist eine Code-Konstante aus der geschlossenen
+            # Halluzinations-Liste (stt_service.py), kein Kind-Sprachinhalt —
+            # voller Diagnosewert auf INFO (unterscheidet einen echten
+            # Whisper-Stille-Treffer von einem False-Positive, was eine
+            # reine Zeichenzahl nicht koennte). Der volle Wortlaut des
+            # Kindes bleibt trotzdem Kind-Sprachinhalt und ist nur auf
+            # DEBUG erreichbar (LOG-2-Override-Bahn) — dort ist er das
+            # Beweisstueck fuer "hat der Filter richtig erkannt?".
+            treffer = _stille_halluzination_treffer(frage_text)
+            logger.info("stt: Stille-Halluzination gefiltert (Treffer=%r)", treffer)
+            logger.debug("stt: Stille-Halluzination gefiltert: '%s'", frage_text[:80])
             yield json.dumps({"event": "error", "stage": "stt", "detail": "transkript leer — konnte die Frage nicht verstehen"}) + "\n"
             return
 

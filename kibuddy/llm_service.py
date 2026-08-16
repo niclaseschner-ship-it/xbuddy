@@ -196,7 +196,12 @@ def beantworte_frage(
     """
     system = _load_prompt(data_root)
     turns = memory.turns()
-    logger.info("llm-service: frage='%s' history_len=%d", frage_text[:60], len(turns))
+    # LOG-3: Kind-Frage ist Kind-Sprachinhalt — nicht auf INFO. history_len
+    # bleibt (Diagnose: mit wie viel Kontext lief der Call?); der Wortlaut
+    # selbst ist nur auf DEBUG erreichbar (LOG-2-Override-Bahn).
+    logger.info("llm-service: frage erhalten (%d Zeichen) history_len=%d",
+                len(frage_text), len(turns))
+    logger.debug("llm-service: frage='%s'", frage_text[:60])
 
     raw_response = llm.complete_multiturn(
         system=system,
@@ -212,7 +217,16 @@ def beantworte_frage(
     memory.append_user(frage_text)
     memory.append_assistant(antwort_text)
 
+    # LOG-3: Antwort-Wortlaut UND die daraus extrahierten Buzzwords sind
+    # Kind-Sprachinhalt (die Buzzwords sind woertliche Themen-Woerter aus dem
+    # Gespraech) — nicht auf INFO. Laengen/Anzahl bleiben als Diagnose-Signal;
+    # der Inhalt selbst ist nur auf DEBUG erreichbar (LOG-2-Override-Bahn).
     logger.info(
+        "llm-service: antwort erhalten (%d Zeichen) buzzwords=%d",
+        len(antwort_text),
+        len(buzzwords),
+    )
+    logger.debug(
         "llm-service: antwort='%s' buzzwords=%r",
         antwort_text[:80],
         buzzwords,
