@@ -127,8 +127,8 @@ def _request(messages, *, system="Du bist ein Assistent.", correlation_id="turn-
 
 def test_claude_slot_and_effective_model_opus(jsonl_path):
     """provider='claude' wählt Slot eltern-chat-litellm-claude-api-key (LLMP-S13);
-    leeres provider_model → effektives Modell claude-opus-4-7 (Alt-Adapter-Default,
-    blank an litellm — litellm erkennt Claude ohne Präfix)."""
+    leeres provider_model → effektives Modell claude-opus-5 (Vendor-Default,
+    T1807; blank an litellm — litellm erkennt Claude ohne Präfix)."""
     fake = _fake_litellm(_litellm_response("Hallo."))
 
     with patch.dict(sys.modules, {"litellm": fake}), \
@@ -136,8 +136,8 @@ def test_claude_slot_and_effective_model_opus(jsonl_path):
         adapter = LibAgentAdapter(provider="claude", provider_model="")
         adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
 
-    # Effektives Modell = opus-4-7 (blank, kein Präfix für Claude).
-    assert fake.completion.call_args.kwargs["model"] == "claude-opus-4-7"
+    # Effektives Modell = opus-5 (blank, kein Präfix für Claude).
+    assert fake.completion.call_args.kwargs["model"] == "claude-opus-5"
     # Slot landet im JSONL als anbieter-benannter litellm-Claude-Slot.
     line = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
     assert line["slot"] == "eltern-chat-litellm-claude-api-key"
@@ -174,13 +174,13 @@ def test_claude_tool_use_roundtrip_and_usage(jsonl_path):
     assert resp.usage.output_tokens == 40
     assert resp.usage.cache_read_tokens == 5
     assert resp.usage.cache_creation_tokens == 7
-    assert resp.usage.model_id == "claude-opus-4-7"
+    assert resp.usage.model_id == "claude-opus-5"
 
     # JSONL-Doppelschreibung mit correlation_id=turn_id.
     line = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
     assert line["correlation_id"] == "turn-42"
     assert line["input_tokens"] == 120
-    assert line["model_id"] == "claude-opus-4-7"
+    assert line["model_id"] == "claude-opus-5"
 
 
 def test_claude_image_and_tool_result_to_wire(jsonl_path):

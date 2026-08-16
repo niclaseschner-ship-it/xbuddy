@@ -47,7 +47,7 @@ ENV_AZURE_KEY = "HOERSPIEL_AZURE_OPENAI_KEY"
 VALID_PROVIDERS = ("claude", "mistral")
 VALID_VOICES = ("shimmer", "onyx")
 
-DEFAULT_LLM_MODEL = "claude-opus-4-7"
+DEFAULT_LLM_MODEL = "claude-opus-5"
 DEFAULT_VOICE = "onyx"
 # T1382/OPEN-HSP-W/-X: kein Code-Default-Serien-Name mehr (Mia-Leak). serien_name
 # ist rein instanz-getragen (instance.json, HSP-27); neutral leer wenn ungesetzt.

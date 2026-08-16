@@ -285,7 +285,7 @@ def test_foto_durchlauf_schreibt_telemetrie_mit_foto_slot(tmp_path, monkeypatch)
     assert line["slot"] == FOTO_ANALYSE_SLOT
     assert "foto-analyse" in line["slot"]
     assert "litellm" in line["slot"]  # #1509: LiteLLM-Vendor-Segment
-    assert line["model_id"] == "claude-opus-4-7"
+    assert line["model_id"] == "claude-opus-5"
 
     # Bild-Block landete im litellm.completion-Call (AC1 OpenAI-Vision-Wire-Form).
     call = fake_litellm.completion.call_args

@@ -39,12 +39,13 @@ from tools.llm import ProviderError as LibProviderError
 logger = logging.getLogger(__name__)
 
 # Anbieter-Default-Modell pro Brand-Vendor (EC-15: Anbieter-Modell = Anbieter-
-# Default). Spiegelt die Alt-Adapter-Defaults (providers/claude.py:31
-# `claude-opus-4-7`, providers/mistral.py:38 `mistral-medium-2508`), damit der
-# Lib-Pfad EXAKT das Modell nutzt, das der alte Pfad nutzte (Orchestrator-
-# Entscheid T1085: Verhalten erhalten).
+# Default). Ursprünglich gespiegelt von den Alt-Adaptern providers/claude.py /
+# providers/mistral.py (T1085) — beide sind seit dem Hand-Vendor-Abriss #1510
+# gelöscht. Kein Spec-Pin dahinter: der konkrete Wert lebt seither allein hier.
+# `anthropic` auf `claude-opus-5` gehoben (T1807, gleicher Preis wie
+# `claude-opus-4-7`, s. Handoff für den Katalog-Beleg).
 _VENDOR_DEFAULT_MODEL = {
-    "anthropic": "claude-opus-4-7",
+    "anthropic": "claude-opus-5",
     "mistral": "mistral-medium-2508",
 }
 
@@ -73,9 +74,9 @@ class LibAgentAdapter:
         # Lokaler Import: bricht keinen Zyklus, hält den Modulkopf schlank und
         # spiegelt das Lazy-Muster der Alt-Adapter (anthropic/httpx lazy).
         # `vendor_slug_for_adapter` NUR für den Alt-Modell-Default-Lookup:
-        # `claude` → `anthropic` → `claude-opus-4-7`, `mistral` → `mistral` →
-        # `mistral-medium-2508` (EC-15, exakt der Alt-Pfad). Der Slug wird NICHT
-        # in den Slot-Namen gebaut — der Slot ist anbieter-benannt (LLMP-S13).
+        # `claude` → `anthropic` → `claude-opus-5`, `mistral` → `mistral` →
+        # `mistral-medium-2508` (EC-15, `_VENDOR_DEFAULT_MODEL`). Der Slug wird
+        # NICHT in den Slot-Namen gebaut — der Slot ist anbieter-benannt (LLMP-S13).
         from onboarding_store import vendor_slug_for_adapter
 
         vendor = vendor_slug_for_adapter(provider)
@@ -84,9 +85,9 @@ class LibAgentAdapter:
         # Konfig-Fehler (KeyError) — sichtbar am Boot, kein Silent-Fallback.
         slot = litellm_slot_for_provider(_CALLER, provider)
         # Effektives Modell: konfiguriertes Modell, sonst Anbieter-Default des
-        # Brand-Vendors (EC-15) — exakt der Alt-Pfad (claude.py:36 /
-        # mistral.py:DEFAULT_MODEL). BLANK (`mistral-medium-2508`); das
-        # `mistral/`-Präfix ergänzt `tools.llm` zentral (LLMP-S13).
+        # Brand-Vendors (`_VENDOR_DEFAULT_MODEL`, EC-15) — blanker Modellname
+        # (z. B. `mistral-medium-2508`); das `mistral/`-Präfix ergänzt
+        # `tools.llm` zentral (LLMP-S13).
         self._model = (provider_model or "").strip() or _VENDOR_DEFAULT_MODEL.get(vendor, "")
         self._provider = provider
         self._slot = slot
@@ -95,9 +96,13 @@ class LibAgentAdapter:
         # max_tokens). Ein `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler
         # (fehlender Key, Capability-Mismatch) — er propagiert klar (wie der alte
         # fehlender-Key-Pfad) und wird NICHT als ProviderError verschluckt.
-        # max_tokens=4096: Alt-Wert aus claude.py:32 MAX_TOKENS=4096 (T1129);
+        # max_tokens=4096: historischer Wert aus dem inzwischen gelöschten
+        # Hand-Vendor providers/claude.py MAX_TOKENS=4096 (T1129, #1510-Abriss);
         # ohne explizite Übergabe würde die Lib DEFAULT_MAX_TOKENS=2048 nutzen —
         # stille Halbierung, die lange Antworten trunkieren kann (vgl. #1084-502).
+        # T1807/AC3: claude-opus-5 erlaubt laut litellm-Katalog max_output_tokens
+        # 128000 — 4096 bleibt weit darunter, kein Cutoff-Risiko durch den
+        # Modell-Wechsel selbst.
         self._agent = get_agent(slot=slot, model=self._model, max_tokens=4096)
 
     def generate(self, request):

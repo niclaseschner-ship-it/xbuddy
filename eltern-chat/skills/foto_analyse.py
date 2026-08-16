@@ -99,14 +99,19 @@ class MultimodalError(Exception):
 # OpenAI-Vision-Format übersetzt (LiteLLM routet transparent zum Anthropic-Backend).
 FOTO_ANALYSE_SLOT = "eltern-chat-litellm-foto-analyse-api-key"
 
-# TAB-5 / E-TAB-6: Foto-Modell. Spiegelt den Legacy-Fallback
-# (`_multimodal/claude.py:119` `_FALLBACK_MODEL = "claude-opus-4-7"`), damit der
-# Lib-Pfad EXAKT das multimodal-fähige Modell des Alt-Pfads nutzt (Verhalten
-# erhalten). Konstruktor-Override möglich (config `multimodal_model`).
-_FOTO_MODEL = "claude-opus-4-7"
-# TAB-5: Token-Budget wie Legacy (`_multimodal/claude.py:120` MAX_TOKENS = 4096);
-# ohne explizite Übergabe nähme die Lib DEFAULT_MAX_TOKENS=2048 — stille
-# Halbierung, die lange Termin-Listen trunkieren könnte (vgl. #1084-502).
+# TAB-5 / E-TAB-6: Foto-Modell. Ursprünglich gespiegelt vom Legacy-Fallback
+# `_multimodal/claude.py:119` (`_FALLBACK_MODEL = "claude-opus-4-7"`) — diese
+# Datei ist seit der #1334-Löschung (Typen-Heimat-Wanderung hierher) nicht
+# mehr im Repo. Kein Spec-Pin dahinter: der konkrete Wert lebt seither allein
+# hier. Auf `claude-opus-5` gehoben (T1807, gleicher Preis, s. Handoff für den
+# Katalog-Beleg). Konstruktor-Override möglich (config `multimodal_model`).
+_FOTO_MODEL = "claude-opus-5"
+# TAB-5: Token-Budget wie der (gelöschte) Legacy-Adapter
+# `_multimodal/claude.py:120` MAX_TOKENS = 4096; ohne explizite Übergabe nähme
+# die Lib DEFAULT_MAX_TOKENS=2048 — stille Halbierung, die lange Termin-Listen
+# trunkieren könnte (vgl. #1084-502). T1807/AC3: claude-opus-5 erlaubt laut
+# litellm-Katalog max_output_tokens 128000 — 4096 bleibt weit darunter, kein
+# Cutoff-Risiko durch den Modell-Wechsel selbst.
 _MAX_TOKENS = 4096
 
 
