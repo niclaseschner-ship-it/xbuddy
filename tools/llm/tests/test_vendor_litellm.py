@@ -116,6 +116,30 @@ def jsonl_path(tmp_path, monkeypatch):
     return tmp_path / "llm" / "provider_calls.jsonl"
 
 
+def test_ohne_fixture_zeigt_telemetrie_pfad_trotzdem_nicht_auf_live_default():
+    """#1821-AC2: Rückfall-Wächter. DIESE Testfunktion fordert bewusst KEINE
+    Telemetrie-Fixture an (kein `jsonl_path`, kein eigenes `monkeypatch`) —
+    genau die Lücke, durch die vorher ~30 von 51 Testfunktionen dieser Datei
+    echte Zeilen in `/home/buddy/xbuddy-data/llm/provider_calls.jsonl`
+    schrieben.
+
+    Der repo-weite autouse-Guard (Wurzel-`conftest.py`) biegt `XBUDDY_DATA_DIR`
+    für JEDEN Test um, auch für diesen hier. `resolve_jsonl_path()` liest also
+    schon die umgebogene ENV, sobald diese Testfunktion läuft. Fällt der Guard
+    weg (autouse-Fixture gelöscht/kaputt), fällt `env` auf `os.environ` ohne
+    Override zurück, und dieser Test wird ROT — er beweist die AN-Wesenheit
+    der Umbiegung, nicht nur, dass der Pfad heute zufällig stimmt."""
+    from tools.llm.telemetry import DEFAULT_DATA_DIR, resolve_jsonl_path
+
+    path = resolve_jsonl_path()
+
+    assert not path.startswith(DEFAULT_DATA_DIR), (
+        "resolve_jsonl_path() zeigt auf den Live-Default (%s) — der "
+        "repo-weite autouse-Telemetrie-Guard (Wurzel-conftest.py) greift "
+        "nicht mehr." % DEFAULT_DATA_DIR
+    )
+
+
 # ----------------------------------------------------------------------
 #  AC1 — CAPABILITIES
 # ----------------------------------------------------------------------
