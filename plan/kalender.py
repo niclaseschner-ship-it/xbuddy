@@ -81,14 +81,17 @@ class Event:
     Felder: stabile `id` (trägt die Multi-Day-Gruppierung, PLAN-14), `titel`,
     `beginn` und `ende` (date oder datetime), `ganztags` (bool), `personen`
     (Liste aufgelöster Personen-`id`, PLAN-19 V1.1 Multi-Person — immer eine
-    Liste, max 2 Einträge, leer wenn keine Zuordnung). Google-Rohfelder, die V1
-    nicht braucht, werden nicht durchgereicht (CLAUDE.md §6).
+    Liste, max 2 Einträge, leer wenn keine Zuordnung), `ort` und `notiz`
+    (PLAN-17 V1.5, beide optional und "" wenn der Termin sie nicht trägt).
+    Google-Rohfelder, die V1 nicht braucht, werden nicht durchgereicht
+    (CLAUDE.md §6).
 
     Backward-Compat: `person`-Property liefert `personen[0]` oder None —
     bestehende Konsumenten, die nur eine Person brauchen, bleiben kompatibel.
     """
 
-    def __init__(self, id, titel, beginn, ende, ganztags, personen=None):
+    def __init__(self, id, titel, beginn, ende, ganztags, personen=None,
+                 ort="", notiz=""):
         self.id = id
         self.titel = titel
         self.beginn = beginn
@@ -98,6 +101,12 @@ class Event:
         # Befund 4 (T473-S2): person-Kwarg entfernt — kein Aufrufer nutzte ihn;
         # personen ist der einzige Eingang.
         self.personen = list(personen) if personen is not None else []
+        # PLAN-17 V1.5 (#1875): Ort und Notiz. Konsument ist die Termin-
+        # Detailansicht (PLAN-38); die Schnittstelle reicht sie durch (PLAN-22).
+        # Immer str — ein fehlendes Feld ist "", nicht None (der Leerfall wird
+        # in der Ansicht per Wahrheitswert geprüft).
+        self.ort = ort or ""
+        self.notiz = notiz or ""
 
     @property
     def person(self):
@@ -114,6 +123,9 @@ class Event:
             "ganztags": self.ganztags,
             "personen": self.personen,
             "person": self.person,  # Backward-Compat für bestehende Konsumenten
+            # PLAN-22 V1.5 (#1875): Ort und Notiz gehen mit durch.
+            "ort": self.ort,
+            "notiz": self.notiz,
         }
 
 
@@ -483,6 +495,12 @@ class Kalender:
             ende=ende,
             ganztags=ganztags,
             personen=personen,
+            # PLAN-17 V1.5 (#1875): `location`/`description` liegen bereits im
+            # Roh-Item — `list_events` setzt KEINEN `fields`-Parameter, Google
+            # liefert die volle Repräsentation. Sie wurden hier bisher nur
+            # verworfen. Kein zusätzlicher Netz-Zugriff, kein OAuth-Scope.
+            ort=raw.get("location") or "",
+            notiz=raw.get("description") or "",
         )
 
     # -- Schreiben (PLAN-18) ---------------------------------------------

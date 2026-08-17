@@ -562,6 +562,9 @@ def woche():
         schedule=view["schedule"],
         appointments=view["appointments"],
         appointment_overflow=view["appointment_overflow"],
+        # PLAN-38 (#1875): die hinter dem `+M weitere`-Counter verdeckten
+        # Termine. Sie werden MITGERENDERT — das Detail-Pop-up lädt nichts nach.
+        appointment_hidden=view["appointment_hidden"],
         span_appointments=view["span_appointments"],
         span_cover=view["span_cover"],
         span_lanes=view["span_lanes"],
