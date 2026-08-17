@@ -55,6 +55,12 @@ _VENDOR_LOGO_SLUG = {"anthropic": "anthropic", "mistral": "mistral", "azure": "a
 # eltern-chat LLM → hoerspiel LLM → hoerspiel TTS → kibuddy LLM.
 _BUDDY_ORDER = ["eltern-chat", "hoerspiel", "kibuddy"]
 
+# #1905: Ton-Modalitäten der Telemetrie (`modality`-Feld, LLMP-S4/LLMP-S6) →
+# Anzeige-Label. Text-Calls tragen das Feld nicht; alles, was hier nicht steht,
+# gilt als Text.
+_TON_LABEL = {"tts": "Sprachausgabe", "stt": "Spracherkennung"}
+_TON_ORDER = ["stt", "tts"]  # erst zugehört, dann geantwortet
+
 
 def buddy_meta(caller):
     """caller → {label, emoji}. Unbekannte caller fallen auf einen Stecker."""
@@ -136,8 +142,13 @@ def _enrich(events):
 
 
 def _daily_list(daily, key):
-    """daily_series-Dict (Tupel-Key) → Liste für eine einzelne Gruppe."""
-    series = daily.get((key,), [])
+    """daily_series-Dict (Tupel-Key) → Liste für eine einzelne Gruppe.
+
+    `key` ist der Gruppen-Wert (ein Wert) oder bereits das fertige Schlüssel-
+    Tupel (mehrere group_keys, z. B. caller × modality seit #1905).
+    """
+    key = key if isinstance(key, tuple) else (key,)
+    series = daily.get(key, [])
     return [
         {
             "datum": p["datum"],
@@ -238,6 +249,42 @@ def _schnittstellen(events, today, slot_names):
     return rows
 
 
+def _ton_row(caller, modalitaet, modelle, daily):
+    """Baut eine Ton-Zeile (CONN-2/#1905) für einen caller aus Audio-Aggregaten.
+
+    Ton wird getrennt von Text ausgewiesen: TTS und STT rechnen nach anderen
+    Bezugsgrößen ab (Zeichen bzw. Sekunden) und liefen bis #1905 gar nicht durch
+    die Messung. Würden sie in die LLM-Zeile fallen, stünde `azure/tts` als
+    „Modell" neben claude-Zeilen und der Text-Preis wäre still verfälscht.
+    """
+    modelle = sorted(modelle, key=lambda m: m.get("calls", 0), reverse=True)
+    primary = modelle[0]
+    vendor, _logo = model_to_vendor(primary.get("model_id"))
+
+    calls = sum(m.get("calls", 0) for m in modelle)
+    kosten = sum(m.get("est_cost_eur") or 0.0 for m in modelle)
+    # Preis-Lücke bleibt Lücke: keine Zeile ohne Betrag → „—", nie 0,00 €
+    # (OPEN-LLMP-A; stop_rule #1905 „LEER statt Null").
+    hat_kosten = any(m.get("est_cost_eur") is not None for m in modelle)
+
+    meta = buddy_meta(caller)
+    return {
+        "buddy": meta["label"],
+        "emoji": meta["emoji"],
+        "funktion": _TON_LABEL.get(modalitaet, "Ton"),
+        "funktion_kind": "ton",
+        "vendor": vendor,
+        "modell": primary.get("model_id"),
+        "fallback_modell": None,
+        "calls": calls,
+        "kosten_eur": _round_eur(kosten) if hat_kosten else None,
+        "telemetrie_folgt": False,
+        "daily": _daily_list(daily, (caller, modalitaet)),
+        "wechsel": "v2",
+        "key": "%s-%s" % (caller, modalitaet),
+    }
+
+
 def _llm_row(caller, modelle, daily):
     """Baut eine LLM-Zeile (CONN-2) für einen caller aus seinen Modell-Aggregaten."""
     # Primärmodell = meiste Calls; weitere Modelle = Fallback.
@@ -262,7 +309,7 @@ def _llm_row(caller, modelle, daily):
         "calls": calls,
         "kosten_eur": _round_eur(kosten) if hat_kosten else None,
         "telemetrie_folgt": False,
-        "daily": _daily_list(daily, caller),
+        "daily": _daily_list(daily, (caller, None)),
         # CONN-6: nur eltern-chat ist über den Chat wechselbar (anbieter_wechseln).
         "wechsel": "chat" if caller == "eltern-chat" else "v2",
         "key": "%s-llm" % caller,
@@ -270,7 +317,23 @@ def _llm_row(caller, modelle, daily):
 
 
 def _tts_row():
-    """CONN-3: feste hoerspiel-TTS-Zeile, Kosten 'Telemetrie folgt' (LLMP-S6)."""
+    """CONN-3: feste hoerspiel-TTS-Zeile, Kosten 'Telemetrie folgt' (LLMP-S6).
+
+    Was noch fehlt, damit hier ein echter Betrag steht (#1905, Übergabe an die
+    Folgescheibe): hoerspiel ruft Azure direkt (`hoerspiel/tts/azure.py:38`,
+    aufgerufen aus `tts_service.py:80` und `album_builder.py:227`). Anders als
+    kibuddy hat hoerspiel **keine** `tts_provider`-Weiche — die Umstellung ist
+    dort kein Config-Wert, sondern ein Adapter-Umbau: eine `LitellmTTSEngine`
+    mit der schmaleren Signatur `synthese(*, text, voice)` (hoerspiel setzt
+    `speed` bewusst nie, HSP-14), ein neues Config-Feld samt Whitelist und
+    beiden `RuntimeConfig`-Bauplätzen (`hoerspiel/config.py`), ein Zweig in
+    `hoerspiel/main.py:_build_tts` und ein ZD-Slot `hoerspiel-litellm-tts-key`.
+    Der Preis-Teil ist mit #1905 bereits erledigt: dasselbe Azure-Deployment
+    `tts`, also dasselbe `base_model` `azure/tts-1-hd`, dieselbe Zeichen-
+    Bezugsgröße. Zu bedenken: hoerspiel läuft in mehreren Instanzen mit je
+    eigener Config-Datei (die Umstellung ist also n-fach), und die Stimme trifft
+    fertige Alben — ein Fehler fällt erst beim Hören auf, nicht beim Bauen.
+    """
     meta = buddy_meta("hoerspiel")
     return {
         "buddy": meta["label"],
@@ -290,20 +353,39 @@ def _tts_row():
 
 
 def _je_buddy(events, today):
-    """CONN-2: eine Zeile pro Buddy×Funktion in fester Reihenfolge."""
-    per_modell = aggregate(events, group_keys=("caller", "model_id"))
-    daily = daily_series(events, group_keys=("caller",), days=CHART_DAYS, today=today)
+    """CONN-2: eine Zeile pro Buddy×Funktion in fester Reihenfolge.
+
+    Ton getrennt von Text (#1905): `modality` fehlt bei Text-Calls und trägt
+    "tts"/"stt" bei Ton-Calls — deshalb gruppiert sowohl der Aggregat- als auch
+    der Verlaufs-Schnitt danach. Ohne diese Trennung würde ein Ton-Modell als
+    Primär-„Modell" einer LLM-Zeile auftauchen, sobald Ton-Telemetrie fließt.
+    """
+    per_modell = aggregate(events, group_keys=("caller", "modality", "model_id"))
+    daily = daily_series(
+        events, group_keys=("caller", "modality"), days=CHART_DAYS, today=today
+    )
 
     by_caller = defaultdict(list)
+    by_caller_ton = defaultdict(lambda: defaultdict(list))
     for r in per_modell:
-        by_caller[r.get("caller")].append(r)
+        modalitaet = r.get("modality")
+        if modalitaet in _TON_LABEL:
+            by_caller_ton[r.get("caller")][modalitaet].append(r)
+        else:
+            by_caller[r.get("caller")].append(r)
 
     rows = []
     for caller in _BUDDY_ORDER:
         if by_caller.get(caller):
             rows.append(_llm_row(caller, by_caller[caller], daily))
-        if caller == "hoerspiel":
-            # CONN-3: TTS-Zeile immer (synthetisch, unabhängig von LLM-Telemetrie).
+        for modalitaet in _TON_ORDER:
+            modelle = by_caller_ton.get(caller, {}).get(modalitaet)
+            if modelle:
+                rows.append(_ton_row(caller, modalitaet, modelle, daily))
+        if caller == "hoerspiel" and not by_caller_ton.get("hoerspiel"):
+            # CONN-3: solange hoerspiel-TTS am Anbieter-SDK vorbeiläuft, bleibt
+            # die ehrliche „Telemetrie folgt"-Zeile. Sie verschwindet von selbst,
+            # sobald echte hoerspiel-Ton-Zeilen ankommen (#1905-Folgescheibe).
             rows.append(_tts_row())
     return rows
 

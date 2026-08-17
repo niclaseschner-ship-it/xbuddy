@@ -60,6 +60,13 @@ DEFAULT_LITELLM_TTS_SLOT = "kibuddy-litellm-tts-key"
 DEFAULT_LITELLM_STT_SLOT = "kibuddy-litellm-stt-key"
 DEFAULT_LITELLM_TTS_MODEL = "azure/tts-1-hd"
 DEFAULT_LITELLM_STT_MODEL = "azure/whisper-1"
+# #1905: Azure-Deployments tragen frei gewählte Namen (`azure/tts`), die im
+# LiteLLM-Preis-Katalog nicht stehen. `litellm_tts_base_model` benennt das
+# Katalog-Modell dahinter, damit LiteLLM die Ton-Kosten selbst nachschlagen
+# kann. Zuordnung, kein Preis — nachprüfbar über
+# `GET <endpoint>/openai/deployments` (dort: id=tts → model=tts-hd).
+# Leer = Deployment-Name ist selbst der Katalog-Name (z. B. OpenAI-direkt).
+DEFAULT_LITELLM_TTS_BASE_MODEL = ""
 DEFAULT_AUFNAHME_QUELLE = "display"
 DEFAULT_AUFNAHME_MAX_SEK = 30
 DEFAULT_INAKTIVITAET_SEK = 60
@@ -112,6 +119,7 @@ class RuntimeConfig:
         litellm_stt_slot: str = DEFAULT_LITELLM_STT_SLOT,
         litellm_tts_model: str = DEFAULT_LITELLM_TTS_MODEL,
         litellm_stt_model: str = DEFAULT_LITELLM_STT_MODEL,
+        litellm_tts_base_model: str = DEFAULT_LITELLM_TTS_BASE_MODEL,
     ):
         self.listen_host = listen_host
         self.listen_port = listen_port
@@ -129,6 +137,7 @@ class RuntimeConfig:
         self.litellm_stt_slot = litellm_stt_slot
         self.litellm_tts_model = litellm_tts_model
         self.litellm_stt_model = litellm_stt_model
+        self.litellm_tts_base_model = litellm_tts_base_model
         self.aufnahme_quelle = aufnahme_quelle
         self.aufnahme_max_sek = aufnahme_max_sek
         self.inaktivitaet_sek = inaktivitaet_sek
@@ -260,6 +269,11 @@ def resolve_runtime(
     litellm_stt_slot = str(env.get("KIBUDDY_LITELLM_STT_SLOT") or file_cfg.get("litellm_stt_slot") or DEFAULT_LITELLM_STT_SLOT).strip()
     litellm_tts_model = str(env.get("KIBUDDY_LITELLM_TTS_MODEL") or file_cfg.get("litellm_tts_model") or DEFAULT_LITELLM_TTS_MODEL).strip()
     litellm_stt_model = str(env.get("KIBUDDY_LITELLM_STT_MODEL") or file_cfg.get("litellm_stt_model") or DEFAULT_LITELLM_STT_MODEL).strip()
+    litellm_tts_base_model = str(
+        env.get("KIBUDDY_LITELLM_TTS_BASE_MODEL")
+        or file_cfg.get("litellm_tts_base_model")
+        or DEFAULT_LITELLM_TTS_BASE_MODEL
+    ).strip()
 
     tts_voice = str(env.get("KIBUDDY_VOICE") or file_cfg.get("tts_voice") or DEFAULT_TTS_VOICE).strip().lower()
     tts_model = str(env.get("KIBUDDY_TTS_MODEL") or file_cfg.get("tts_model") or DEFAULT_TTS_MODEL).strip()
@@ -326,6 +340,7 @@ def resolve_runtime(
         litellm_stt_slot=litellm_stt_slot,
         litellm_tts_model=litellm_tts_model,
         litellm_stt_model=litellm_stt_model,
+        litellm_tts_base_model=litellm_tts_base_model,
         aufnahme_quelle=aufnahme_quelle,
         aufnahme_max_sek=aufnahme_max_sek,
         inaktivitaet_sek=inaktivitaet_sek,
@@ -366,6 +381,7 @@ def patch_aufnahme_quelle(cfg: RuntimeConfig, neue_quelle: str) -> RuntimeConfig
         litellm_stt_slot=cfg.litellm_stt_slot,
         litellm_tts_model=cfg.litellm_tts_model,
         litellm_stt_model=cfg.litellm_stt_model,
+        litellm_tts_base_model=cfg.litellm_tts_base_model,
         aufnahme_quelle=neue_quelle,
         aufnahme_max_sek=cfg.aufnahme_max_sek,
         inaktivitaet_sek=cfg.inaktivitaet_sek,

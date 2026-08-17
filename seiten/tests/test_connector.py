@@ -547,3 +547,75 @@ def test_t1662_connector_css_kein_body_overflow_hidden():
                 f"connector/style.css: '{selektor}'-Block enthaelt overflow:hidden "
                 f"— T1662 Scroll-Guard verletzt (Kiosk-Sorte auf Eltern-View):\n{block}"
             )
+
+
+# ── #1905: Ton getrennt von Text ──────────────────────────────────────────────
+
+def _ton_ev(caller, model_id, ts, cost, slot, modality, **extra):
+    """Audio-Telemetrie-Zeile (modality tts|stt) als JSONL-String."""
+    e = {
+        "caller": caller, "model_id": model_id, "ts": ts,
+        "input_tokens": 0, "output_tokens": 0,
+        "est_cost_eur": cost, "slot": slot, "modality": modality,
+    }
+    e.update(extra)
+    return json.dumps(e)
+
+
+_TON_LINES = [
+    _ton_ev("kibuddy", "azure/tts", "2026-06-25T09:00:00Z", 0.0003,
+            "kibuddy-litellm-tts-key", "tts", audio_chars=120),
+    _ton_ev("kibuddy", "whisper-1", "2026-06-25T09:00:00Z", 0.0004,
+            "kibuddy-litellm-stt-key", "stt", audio_seconds=4.2),
+]
+
+
+def test_1905_ton_zeilen_getrennt_von_llm_zeile():
+    """#1905/AC4: Ton-Calls bekommen eigene Zeilen — die kibuddy-LLM-Zeile
+    zeigt weiter ein Text-Modell, nicht `azure/tts`."""
+    ctx = connector_modul.baue_context(
+        list(_JSONL_LINES) + _TON_LINES, today=_HEUTE, slot_names=[])
+
+    paare = [(r["buddy"], r["funktion"]) for r in ctx["je_buddy"]]
+    assert ("kibuddy", "Spracherkennung") in paare
+    assert ("kibuddy", "Sprachausgabe") in paare
+
+    llm = next(r for r in ctx["je_buddy"]
+               if r["buddy"] == "kibuddy" and r["funktion"] == "LLM")
+    assert llm["modell"] == "claude-haiku-4-5"
+    assert llm["kosten_eur"] == 0.0001  # unveraendert gegenueber ohne Ton
+
+    tts = next(r for r in ctx["je_buddy"] if r["funktion"] == "Sprachausgabe")
+    assert tts["modell"] == "azure/tts"
+    assert tts["kosten_eur"] == 0.0003
+    assert tts["telemetrie_folgt"] is False
+
+
+def test_1905_ton_ohne_preis_bleibt_strich():
+    """#1905 stop_rule: Ton-Zeilen ohne Betrag zeigen '—' (None), nicht 0,00 €."""
+    ctx = connector_modul.baue_context(
+        [_ton_ev("kibuddy", "azure/tts", "2026-06-25T09:00:00Z", None,
+                 "kibuddy-litellm-tts-key", "tts")],
+        today=_HEUTE, slot_names=[])
+    tts = next(r for r in ctx["je_buddy"] if r["funktion"] == "Sprachausgabe")
+    assert tts["kosten_eur"] is None
+
+
+def test_1905_hoerspiel_tts_platzhalter_weicht_echter_telemetrie():
+    """#1905: Die 'Telemetrie folgt'-Zeile fuer hoerspiel-TTS verschwindet in dem
+    Moment, in dem echte hoerspiel-Ton-Zeilen ankommen — sie ist ein Platzhalter
+    fuer eine Luecke, kein Dauer-Eintrag."""
+    ohne = connector_modul.baue_context(list(_JSONL_LINES), today=_HEUTE, slot_names=[])
+    assert any(r["funktion"] == "TTS" and r["telemetrie_folgt"] for r in ohne["je_buddy"])
+
+    mit = connector_modul.baue_context(
+        [
+            *_JSONL_LINES,
+            _ton_ev("hoerspiel", "azure/tts", "2026-06-25T09:00:00Z", 0.42,
+                    "hoerspiel-litellm-tts-key", "tts"),
+        ],
+        today=_HEUTE, slot_names=[])
+    assert not any(r.get("telemetrie_folgt") for r in mit["je_buddy"])
+    hsp = next(r for r in mit["je_buddy"]
+               if r["buddy"] == "hoerspiel" and r["funktion"] == "Sprachausgabe")
+    assert hsp["kosten_eur"] == 0.42

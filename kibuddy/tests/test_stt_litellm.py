@@ -106,3 +106,87 @@ def test_litellm_tts_provider_error_maps_to_tts_error():
         engine = LitellmTTSEngine(slot="kibuddy-litellm-tts-key")
         with pytest.raises(TTSError):
             engine.synthese(text="x", voice="onyx", speed=0.9)
+
+
+# ----------------------------------------------------------------------
+#  #1905 — Aufnahme-Dauer als Bezugsgröße für den Ton-Preis
+# ----------------------------------------------------------------------
+
+
+def test_litellm_stt_misst_dauer_an_normalisierten_bytes():
+    """#1905: Die Dauer wird an genau den Bytes gemessen, die der Anbieter
+    abrechnet (nach ffmpeg, nicht am Roh-webm), und mit durchgereicht."""
+    fake_facade = MagicMock()
+    fake_facade.transcribe.return_value = "Hallo"
+
+    gemessen = {}
+
+    def fake_dauer(audio_bytes, filename="audio.mp3"):
+        gemessen["bytes"] = audio_bytes
+        gemessen["filename"] = filename
+        return 4.2
+
+    with patch("tools.llm.get_transcription", return_value=fake_facade), \
+         patch("kibuddy.stt_service._normalize_audio",
+               side_effect=lambda b, f="audio.webm": (b"MP3", "audio.mp3")), \
+         patch("kibuddy.stt_service.audio_dauer_sek", side_effect=fake_dauer):
+        from kibuddy.stt_service import LitellmSTTEngine
+
+        engine = LitellmSTTEngine(slot="kibuddy-litellm-stt-key")
+        engine.transkribiere(b"ROH_WEBM", filename="audio.webm")
+
+    assert gemessen["bytes"] == b"MP3"
+    assert gemessen["filename"] == "audio.mp3"
+    assert fake_facade.transcribe.call_args.kwargs["duration_seconds"] == 4.2
+
+
+def test_litellm_stt_ohne_ffprobe_reicht_leer_durch():
+    """#1905 stop_rule: Ist die Dauer nicht messbar, geht `None` durch — nicht
+    0.0. Sonst stünde in der Messdatei ein erfundener Null-Preis."""
+    fake_facade = MagicMock()
+    fake_facade.transcribe.return_value = "Hallo"
+
+    with patch("tools.llm.get_transcription", return_value=fake_facade), \
+         patch("kibuddy.stt_service._normalize_audio",
+               side_effect=lambda b, f="audio.webm": (b, f)), \
+         patch("kibuddy.stt_service.audio_dauer_sek", return_value=None):
+        from kibuddy.stt_service import LitellmSTTEngine
+
+        engine = LitellmSTTEngine(slot="kibuddy-litellm-stt-key")
+        engine.transkribiere(b"AUDIO", filename="audio.webm")
+
+    assert fake_facade.transcribe.call_args.kwargs["duration_seconds"] is None
+
+
+def test_audio_dauer_sek_misst_echte_datei(tmp_path):
+    """#1905: ffprobe-Messung am echten Byte-Strom — der Wert, mit dem der
+    Sekunden-Preis gerechnet wird, kommt nicht aus einer Schätzung."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("ffmpeg/ffprobe nicht verfügbar")
+
+    mp3 = tmp_path / "ton.mp3"
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+         str(mp3)],
+        check=True, capture_output=True, timeout=30,
+    )
+
+    from kibuddy.stt.openai_whisper import audio_dauer_sek
+
+    dauer = audio_dauer_sek(mp3.read_bytes(), "audio.mp3")
+    assert dauer is not None
+    assert 1.8 < dauer < 2.3
+
+
+def test_audio_dauer_sek_ohne_ffprobe_gibt_none():
+    """#1905: Fehlt ffprobe, ist die Antwort `None` (= nicht gemessen) — kein
+    Crash im Kind-Pfad und keine 0.0, die als Preis durchginge."""
+    from kibuddy.stt.openai_whisper import audio_dauer_sek
+
+    with patch("kibuddy.stt.openai_whisper.subprocess.run",
+               side_effect=FileNotFoundError("ffprobe")):
+        assert audio_dauer_sek(b"nicht-wirklich-audio", "audio.mp3") is None

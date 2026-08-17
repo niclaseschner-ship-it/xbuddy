@@ -64,7 +64,29 @@ def test_dispatch_tts_litellm_builds_litellm_engine():
 
     from kibuddy.tts_service import LitellmTTSEngine
     assert isinstance(engine, LitellmTTSEngine)
-    get_sp.assert_called_once_with("kibuddy-litellm-tts-key", model="azure/tts-1-hd")
+    get_sp.assert_called_once_with(
+        "kibuddy-litellm-tts-key", model="azure/tts-1-hd", base_model="",
+    )
+
+
+def test_dispatch_tts_litellm_reicht_base_model_durch():
+    """#1905: Bei einem frei getauften Azure-Deployment (`azure/tts`) schlägt
+    `litellm_tts_base_model` bis zur Fassade durch — sonst findet LiteLLM den
+    Ton-Preis nicht und die Zeile bliebe ohne Betrag."""
+    cfg = _resolve_with({
+        "KIBUDDY_TTS_PROVIDER": "litellm",
+        "KIBUDDY_LITELLM_TTS_SLOT": "kibuddy-litellm-tts-key",
+        "KIBUDDY_LITELLM_TTS_MODEL": "azure/tts",
+        "KIBUDDY_LITELLM_TTS_BASE_MODEL": "azure/tts-1-hd",
+    })
+    assert cfg.litellm_tts_base_model == "azure/tts-1-hd"
+
+    with patch("tools.llm.get_speech", return_value=MagicMock()) as get_sp:
+        main_mod._build_tts(cfg)
+
+    get_sp.assert_called_once_with(
+        "kibuddy-litellm-tts-key", model="azure/tts", base_model="azure/tts-1-hd",
+    )
 
 
 def test_dispatch_tts_default_stays_azure():
