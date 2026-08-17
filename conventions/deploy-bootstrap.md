@@ -7,9 +7,11 @@ Ratifiziert 2026-07-31 (`brainstorm/berater-runde/20260731-1130-RATIFIZIERT-pi-b
 Der Bootstrap liest ein **Host-Profil** (die 8 Pi-globalen Werte:
 `USER/HOME/REPO/PYTHON/DATA` + drei Display-Origins/`FQDN`, siehe
 `deploy/systemd/README.md`) und substituiert die vorhandenen
-`__XBUDDY_*__`-Platzhalter in den systemd-Unit-Vorlagen + richtet das Venv ein.
-Das ist ein **einmaliger Setup-Akt**, keine Laufzeit-Config. Idempotent mit
-Backup/Rollback (wie `deploy/nginx/install.sh`).
+`__XBUDDY_*__`-Platzhalter in den systemd-Unit-Vorlagen **und, denselben Weg,
+in deren Drop-Ins unter `deploy/systemd/<unit>.service.d/*.conf`** (#1802) +
+richtet das Venv ein. Das ist ein **einmaliger Setup-Akt**, keine
+Laufzeit-Config. Idempotent mit Backup/Rollback (wie
+`deploy/nginx/install.sh`).
 
 ## BOOT-2 — Verboten: Werte erzeugen (Cross-Ref INST-3)
 

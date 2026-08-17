@@ -268,6 +268,33 @@ def _views_mit_per_view_resilienz(pfad, app_slug):
     return gueltige, False
 
 
+def lade_views_mit_per_view_resilienz(pfad, app_slug):
+    """Öffentliche Naht auf die Lade-Semantik des Betriebs (MOD-5, #1822).
+
+    Liefert `(gültige_views, ganzes_manifest_kaputt)` — genau das Verhalten,
+    mit dem der laufende Dienst ein `views.json` liest: ein einzelner defekter
+    View-Eintrag wird übersprungen (Warnung), das übrige Manifest bleibt
+    vollständig; nur ein Datei-/Struktur-Fehler verwirft das ganze Manifest
+    (SREG-3/DCOMP-3).
+
+    **Kontrakt für Aufrufer:** wer eine Aussage über *alle* deklarierten Views
+    treffen will, braucht genau diese Semantik und NICHT
+    `views_manifest.load()`. Der strenge Lader wirft bei einem einzigen
+    fehlerhaften Eintrag die **ganze Datei** weg — eine Prüfung darauf wäre
+    grün, obwohl ihr Gegenstand aus der Menge verschwunden ist (realer Fall:
+    `hoerspiel/views.json` trägt einen ungültigen `zielgruppe`-Wert; mit dem
+    strengen Lader verschwände auch die Eltern-Ansicht derselben Datei).
+    Übersprungene Einträge sind deshalb ein **Befund**, kein blinder Fleck:
+    der Aufrufer soll die Differenz zur Roh-Liste melden.
+
+    Reine Delegation an `_views_mit_per_view_resilienz` — dies ist die Naht,
+    nicht eine zweite Implementierung. Neue Konsumenten (z. B.
+    `tests/eltern_flaechen.py`) hängen an dieser Funktion, statt am
+    Unterstrich-Namen zu ziehen.
+    """
+    return _views_mit_per_view_resilienz(pfad, app_slug)
+
+
 def manifest_eintraege(root, icons_erforderlich=False, funnel_domain=""):
     """Sammelt die Inventar-Einträge der Manifest-Sorten a/b/c/mini-app
     (SREG-2/SREG-4/SREG-10/SREG-14).

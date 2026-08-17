@@ -165,9 +165,26 @@ bleibt klar.
    done
    ```
 
-   Wer die Werte einmal in ein kleines Mapping-Skript packt, vermeidet
-   spätere Drift zwischen Repo-Vorlage und Pi-Stand — genau dieses
-   Installer-Skript ist Folge-Ticket (#178b).
+   **Dieser Schritt von Hand ist nur noch die Erklärung, was passiert.** Gebaut
+   ist er als `deploy/bootstrap.sh` (#1667, löst #178b): es liest die acht
+   Host-Werte aus einem Profil (`deploy/host-profile.example.env`), substituiert
+   sie in alle Unit-Vorlagen **und seit #1802 in alle Drop-Ins unter
+   `deploy/systemd/<unit>.service.d/`**, und macht ein `daemon-reload`.
+
+   ```bash
+   cp deploy/host-profile.example.env deploy/host-profile.env   # Werte anpassen
+   bash deploy/bootstrap.sh --profile deploy/host-profile.env --dry-run
+   bash deploy/bootstrap.sh --profile deploy/host-profile.env
+   ```
+
+   Vor #1802 rollte das Skript nur die Basis-Units aus. Ein Neuaufsetzen brachte
+   die Dienste damit hoch, aber ohne ihre Drop-Ins — und mindestens eines davon
+   ist funktional nötig (`xbuddy-familie/10-data-path.conf`, siehe Soll-Liste
+   unten). Genau an dem Punkt wurde die fehlende Versionierung von „unschön" zu
+   „kaputt".
+
+   Was der Bootstrap **nicht** anfasst: die nginx-Conf (BOOT-3, T966-Vorfall)
+   und die fünf Per-Person-Drop-Ins (siehe „Bewusst NICHT versioniert").
 
 4. **Aktivieren und starten:**
 
@@ -197,31 +214,113 @@ Die Basis-Unit einer Komponente liegt neben dem Code (SVC-2). **Drop-Ins**
 lagen bisher **nur** am Pi — was nur in `/etc` steht, kommt nicht in eine andere
 Familie (Drift-Schutz, SVC-2). Deshalb leben versionierte Drop-Ins ab #1785 hier:
 
+Seit #1802 sind es **alle** Drop-Ins der Instanz, nicht nur die beiden
+Notbremsen — und `deploy/bootstrap.sh` rollt sie mit aus (siehe „Ausrollen",
+Schritt 3). Die Tabelle unten ist damit nicht nur Doku, sondern die
+**Soll-Liste**: `deploy/tests/test_dropins_vollstaendig.py` hält sie in **beide
+Richtungen** gegen den Baum. Eine Datei ohne Zeile ist genauso rot wie eine
+Zeile ohne Datei.
+
+### Soll-Liste
+
 | Drop-In im Repo | Ziel auf der Instanz | Zweck |
 |---|---|---|
-| `deploy/systemd/xbuddy-plan.service.d/memory.conf` | `/etc/systemd/system/xbuddy-plan.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) |
-| `deploy/systemd/xbuddy-familie.service.d/memory.conf` | `/etc/systemd/system/xbuddy-familie.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) |
+| `deploy/systemd/xbuddy-eltern-chat.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-eltern-chat.service.d/10-data-path.conf` | SVC-5: `.env` + Konversations-DB außerhalb des Checkouts (`ExecStart=`-Reset) |
+| `deploy/systemd/xbuddy-eltern-chat.service.d/20-zugangsdaten.conf` | `/etc/systemd/system/xbuddy-eltern-chat.service.d/20-zugangsdaten.conf` | Zugangsdaten-Store-Pfad (ZD-8) |
+| `deploy/systemd/xbuddy-essen.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-essen.service.d/10-data-path.conf` | SVC-5-Datenpfade (ESSEN-21, CONFIG-5) |
+| `deploy/systemd/xbuddy-essen.service.d/20-fotos.conf` | `/etc/systemd/system/xbuddy-essen.service.d/20-fotos.conf` | Foto-Verzeichnis (ESSEN-23) |
+| `deploy/systemd/xbuddy-familie.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-familie.service.d/10-data-path.conf` | **Funktional nötig**: fängt die SVC-5-Verletzung der `familie`-Vorlage ab (`--registry` zeigt sonst in den Checkout) |
+| `deploy/systemd/xbuddy-familie.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-familie.service.d/40-auth-token.conf` | Bot-Token für HART-Auth (T1638) |
+| `deploy/systemd/xbuddy-familie.service.d/memory.conf` | `/etc/systemd/system/xbuddy-familie.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) — #1785 |
+| `deploy/systemd/xbuddy-familie.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-familie.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1801 |
+| `deploy/systemd/xbuddy-hoerspiel-emil.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-hoerspiel-emil.service.d/40-auth-token.conf` | Bot-Token für HART-Auth (T1640) |
+| `deploy/systemd/xbuddy-hoerspiel-finn.service.d/10-secrets.conf` | `/etc/systemd/system/xbuddy-hoerspiel-finn.service.d/10-secrets.conf` | ENV-Datei mit LLM-/Azure-Keys (HSP-27) |
+| `deploy/systemd/xbuddy-hoerspiel-finn.service.d/30-zugangsdaten-path.conf` | `/etc/systemd/system/xbuddy-hoerspiel-finn.service.d/30-zugangsdaten-path.conf` | Zugangsdaten-Store-Pfad (ZD-8) |
+| `deploy/systemd/xbuddy-hoerspiel-finn.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-hoerspiel-finn.service.d/40-auth-token.conf` | Bot-Token für HART-Auth (T1640) |
+| `deploy/systemd/xbuddy-hoerspiel.service.d/10-secrets.conf` | `/etc/systemd/system/xbuddy-hoerspiel.service.d/10-secrets.conf` | ENV-Datei mit LLM-/Azure-Keys (HSP-27) |
+| `deploy/systemd/xbuddy-hoerspiel.service.d/30-zugangsdaten-path.conf` | `/etc/systemd/system/xbuddy-hoerspiel.service.d/30-zugangsdaten-path.conf` | Zugangsdaten-Store-Pfad (ZD-8) |
+| `deploy/systemd/xbuddy-kibuddy.service.d/10-secrets.conf` | `/etc/systemd/system/xbuddy-kibuddy.service.d/10-secrets.conf` | ENV-Datei aus `sync_kibuddy_env.py` (KIBUDDY-21, CONFIG-3) |
+| `deploy/systemd/xbuddy-kibuddy.service.d/20-config-path.conf` | `/etc/systemd/system/xbuddy-kibuddy.service.d/20-config-path.conf` | Config-Datei-Pfad (KIBUDDY-21) |
+| `deploy/systemd/xbuddy-kibuddy.service.d/30-zugangsdaten-path.conf` | `/etc/systemd/system/xbuddy-kibuddy.service.d/30-zugangsdaten-path.conf` | Zugangsdaten-Store-Pfad (T1082-Folge) |
+| `deploy/systemd/xbuddy-panel.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-panel.service.d/10-data-path.conf` | SVC-5: `panels.json` außerhalb des Checkouts (`ExecStart=`-Reset) |
+| `deploy/systemd/xbuddy-panel.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-panel.service.d/40-auth-token.conf` | Bot-Token für das PBE-4-Dual-Gate (AUTH-7b, #1400) |
+| `deploy/systemd/xbuddy-photo.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-photo.service.d/10-data-path.conf` | SVC-5: Medien-Bibliothek außerhalb des Checkouts |
+| `deploy/systemd/xbuddy-photo.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-photo.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
+| `deploy/systemd/xbuddy-plan.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-plan.service.d/10-data-path.conf` | SVC-5: Config-JSON + SQLite-DB außerhalb des Checkouts |
+| `deploy/systemd/xbuddy-plan.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-plan.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
+| `deploy/systemd/xbuddy-plan.service.d/memory.conf` | `/etc/systemd/system/xbuddy-plan.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) — #1785 |
+| `deploy/systemd/xbuddy-plan.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-plan.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1801 |
+| `deploy/systemd/xbuddy-routine.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-routine.service.d/10-data-path.conf` | SVC-5-Datenpfad (Etappe-1b-Override) |
+| `deploy/systemd/xbuddy-seiten.service.d/30-token-sharing.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/30-token-sharing.conf` | Bot-Token-Sharing für Mini-App-Auth (RAT-16, T684) |
+| `deploy/systemd/xbuddy-seiten.service.d/30-zugangsdaten-path.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/30-zugangsdaten-path.conf` | Zugangsdaten-Store-Pfad für das Connector-Inventar (#1086) |
+| `deploy/systemd/xbuddy-seiten.service.d/40-auth-mode.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/40-auth-mode.conf` | AUTH-7b Hard-Flip (RAT-32, #1338) |
+| `deploy/systemd/xbuddy-seiten.service.d/auth-paired-at.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/auth-paired-at.conf` | `paired_at`-Store-Pfad (AUTH-2.a, T1389) |
+| `deploy/systemd/xbuddy-seiten.service.d/origins.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/origins.conf` | Funnel-Origin (SREG-7); Wert kommt als Platzhalter aus dem Host-Profil |
+| `deploy/systemd/xbuddy-wetter.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/10-data-path.conf` | SVC-5-Datenpfad |
+| `deploy/systemd/xbuddy-wetter.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
+| `deploy/systemd/xbuddy-wetter.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/40-auth-token.conf` | Bot-Token für `/api/v1/wetter/regeln` (AUTH-3, #1715) |
 
-Diese beiden Drop-Ins enthalten **keine** `__XBUDDY_*__`-Platzhalter:
-`MemoryHigh` und `OOMScoreAdjust` sind host-unabhängig. Der `sed`-Schritt aus
-„Ausrollen" entfällt für sie — `cp` genügt.
+Die Verzeichnisnamen folgen den **Repo-Unit-Namen** aus der `SVC_SRC`-Map von
+`deploy/bootstrap.sh` — die Kind-Instanzen des Hörspiel-Buddy heißen dort
+`xbuddy-hoerspiel-finn` (Port 5055) und `xbuddy-hoerspiel-emil` (Port 5056). Wer
+die Live-Maschine mit dem Repo vergleicht, ordnet über den **Port** zu, nicht
+über den Slug: eine Instanz kann am Pi unter einem anderen Kind-Slug laufen, die
+Unit-Definition ist dieselbe. Der Guard-Test prüft genau diese Zuordnung — ein
+Drop-In-Verzeichnis ohne Unit in `SVC_SRC` wird rot, und `bootstrap.sh` bricht
+mit derselben Meldung ab.
 
-Zwei bekannte Abweichungen, absichtlich so gelassen und hier notiert statt
-still gefixt:
+### Bewusst NICHT versioniert
+
+Fünf Drop-Ins der Instanz bleiben am Pi. Sie tragen **Per-Person-Werte**
+(Klarname, Alter, Telegram-Konto-ID), für die die Platzhalter-Tabelle oben keine
+Form kennt — sie deckt die acht **Host**-Werte ab, keine Identitäten. Mit
+erfundenen Ersatzwerten zu versionieren wäre eine Konvention aus dem Stegreif;
+mit den echten Werten wäre es ein PII-Leak in ein öffentliches Repo, das
+`.gitleaks.toml` (#1724) ohnehin blockt.
+
+| Nur auf der Maschine | Warum |
+|---|---|
+| `xbuddy-eltern-chat.service.d/30-master-id.conf` | `ELTERNCHAT_MASTER_TELEGRAM_USER_ID` — echte Telegram-Konto-ID (gitleaks-Regel `xbuddy-telegram-chat-id`) |
+| `xbuddy-hoerspiel.service.d/20-data-path.conf` | `HOERSPIEL_DATA_ROOT` endet auf dem Kind-Slug |
+| `xbuddy-hoerspiel.service.d/30-kind-id.conf` | Kind-Slug, Klarname, Alter — BOOT-4 verortet Per-Kind-Werte im Unit-Körper |
+| `xbuddy-hoerspiel-finn.service.d/20-data-path.conf` | wie oben, zweite Kind-Instanz |
+| `xbuddy-hoerspiel-finn.service.d/30-kind-id.conf` | wie oben, zweite Kind-Instanz |
+
+Der Ausnahme-Satz lebt zusätzlich als `NUR_AUF_DER_MASCHINE` in
+`deploy/tests/test_dropins_vollstaendig.py`: der Test wird rot, wenn eine dieser
+Dateien doch im Repo landet.
+
+**Träger dieses Schuldstands ist #1892** („Platzhalter-Form für
+Kind-Identitäten"), nicht dieses Ticket — ob es `__XBUDDY_KIND_*__` geben soll,
+ist eine Konventions-Frage. Zwei mechanisch prüfbare Trigger, bei denen #1892
+fällig wird:
+
+1. **Familie 2 wird aufgesetzt** — dann braucht der Bootstrap die Form wirklich.
+2. **Ein drittes Per-Person-Drop-In entsteht** — n=3 statt Vorrats-Konvention
+   (CLAUDE.md §6).
+
+Ein sechstes Drop-In ist **verwaist**, nicht ausgenommen:
+`xbuddy-geraete.service.d/10-data-path.conf`. Der Dienst ist mit RAT-31
+(`cf0dbb1e`) aus dem Repo gelöscht, die Unit am Pi meldet `inactive`/`disabled`.
+Die Datei konfiguriert nichts und wird **entfernt, nicht versioniert** — das
+Aufräumen in `/etc` gehört zum Unit-Aufräumen der abgerissenen Dienste. An
+**#1862** ist der Sachverhalt inzwischen **vermerkt** (Verwaisungs-Beleg und die
+`rm`-Befehle als Kommentar); die **Übernahme steht aus** — angenommen hat den
+Vorschlag dort noch niemand.
+
+```bash
+sudo rm -rf /etc/systemd/system/xbuddy-geraete.service.d/
+```
+
+### Bekannte Abweichung
 
 - **Datei-Name ohne Zahlen-Präfix.** Die am Pi hand-gepflegten Drop-Ins heißen
   `10-data-path.conf`, `20-eltern-token.conf`, `40-auth-token.conf`.
-  `memory.conf` sortiert alphabetisch **hinter** allen Ziffern, lädt also
-  zuletzt — unschädlich, weil es keinen Schlüssel mit den anderen teilt. Eine
-  Umbenennung auf `50-memory.conf` wäre die konsequente Form (Folge-Ticket).
-- **`deploy/bootstrap.sh` rollt Drop-Ins nicht aus.** Das Skript kennt nur die
-  `SVC_SRC`-Map der Basis-Units. Drop-Ins gehen deshalb bis auf Weiteres den
-  manuellen Weg unten. Das ist dasselbe Muster, mit dem `bootstrap.sh` schon
-  `nginx` behandelt (BOOT-3: bewusst außerhalb, dokumentierter Hand-Schritt) —
-  **aber aus einem anderen Grund**: nginx ist ausgeschlossen, weil ein
-  Automatik-Zugriff dort schon Schaden angerichtet hat (T966); Drop-Ins sind
-  nur noch nicht angebunden. Sie in `bootstrap.sh` aufzunehmen ist erwünscht
-  und Folge-Ticket, nicht verboten.
+  `memory.conf` und `restart-window.conf` sortieren alphabetisch **hinter** allen
+  Ziffern, laden also zuletzt — unschädlich, weil sie keinen Schlüssel mit den
+  anderen teilen. Eine Umbenennung auf `50-memory.conf` wäre die konsequente
+  Form (Folge-Ticket). Dasselbe gilt für `auth-paired-at.conf` und
+  `origins.conf` bei `seiten`.
 
 ### Ausrollen der Speicher-Notbremse — Reihenfolge
 
@@ -290,6 +389,75 @@ den Dienst kippen — deshalb Schritt 1 zuerst.
 
 Rollback ist symmetrisch: Drop-In löschen, `daemon-reload`, `restart`.
 
+### Ausrollen der Neustart-Bremse — Reihenfolge (#1801)
+
+Selbe Reihenfolge-Logik wie oben: erst prüfen, dann laden, dann anwenden,
+dann belegen. `StartLimitIntervalSec`/`StartLimitBurst` sind reine
+Unit-Direktiven — sie brauchen keinen Prozess-Neustart, ein `daemon-reload`
+reicht, den Zähler auf den neuen Wert umzustellen. Alle Befehle mit
+repo-relativen Pfaden (`deploy/systemd/...`) laufen aus dem Wurzelverzeichnis
+des Checkouts (`__XBUDDY_REPO__`, z. B. `/home/buddy/repos/xbuddy` — siehe
+Platzhalter-Tabelle oben), nicht aus `deploy/systemd/` selbst.
+
+1. **Drift-Check vor allem anderen** (identisch zum Speicher-Abschnitt oben,
+   hier wichtiger: Schritt 3 verlangt gleich einen vorgeführten Crash-Loop,
+   und genau dort wird eine `ExecStart`-Drift scharf — ein umgebogener
+   `ExecStart` auf einer bereits driftenden Unit testet die falsche Sache).
+   Vergleiche das effektive `ExecStart` der Live-Unit mit der
+   `argparse`-Signatur des Dienstes:
+
+   ```bash
+   systemctl cat xbuddy-plan.service xbuddy-familie.service | grep -n 'ExecStart\|Restart='
+   grep -n 'add_argument' plan/main.py familie/main.py
+   ```
+
+   Jedes `--flag` im `ExecStart` muss in `parse_args()` existieren. Weicht
+   etwas ab: **stopp**, erst die Unit richten. (Stand 2026-08-10: die
+   Live-`ExecStart` beider Dienste sind argparse-konform — siehe „Bekannte
+   Vorlagen-Drift" unten für die *Repo-Vorlagen*-Drift, die unabhängig davon
+   bekannt und unbehoben ist.)
+
+2. **Drop-Ins kopieren** (Arbeitsverzeichnis: Repo-Root):
+
+   ```bash
+   for svc in xbuddy-plan xbuddy-familie; do
+     sudo install -d -m 0755 "/etc/systemd/system/${svc}.service.d"
+     sudo install -m 0644 "deploy/systemd/${svc}.service.d/restart-window.conf" \
+       "/etc/systemd/system/${svc}.service.d/restart-window.conf"
+   done
+   sudo systemctl daemon-reload
+   ```
+
+3. **Live belegen** (Abnahme-Kriterium des Tickets):
+
+   ```bash
+   systemctl show -p Restart -p RestartUSec -p StartLimitIntervalUSec \
+     -p StartLimitBurst xbuddy-plan.service xbuddy-familie.service
+   ```
+
+   Erwartet: `StartLimitIntervalUSec=2min` (= 120s), `StartLimitBurst=5`,
+   `RestartUSec=10s` für beide. Vor dem Rollout (Stand 2026-08-17, gemessen
+   für dieses Ticket) zeigte derselbe Befehl `StartLimitIntervalUSec=10s`
+   (systemd-Default, ungesetzt) — identisch mit `RestartUSec`, die Bremse
+   konnte nie greifen.
+
+4. **Vorgeführt, nicht gerechnet** (Abnahme verlangt einen vorgeführten
+   Dauerabsturz, kein Papier-Beweis): einen künstlichen Crash-Loop erzeugen
+   (z. B. `ExecStart` kurzzeitig auf einen sofort abstürzenden Befehl setzen
+   oder den Prozess wiederholt `kill -SEGV` schicken) und beobachten, dass
+   systemd nach dem fünften Versuch **innerhalb** von 120s mit
+   `start-limit-hit` stoppt:
+
+   ```bash
+   journalctl -u xbuddy-plan -f
+   # erwartete Zeile: "... start request repeated too quickly, refusing to start."
+   systemctl status xbuddy-plan   # Active: failed (Result: start-limit-hit)
+   ```
+
+   Reset danach: `sudo systemctl reset-failed xbuddy-plan xbuddy-familie`.
+
+Rollback ist symmetrisch: Drop-In löschen, `daemon-reload`.
+
 ### Bekannte Vorlagen-Drift (Stand 2026-08-10, #1785)
 
 Diese Abweichungen sind **gemeldet, nicht gefixt** — sie zu ändern gehört in ein
@@ -301,7 +469,7 @@ Live-Dienst anfasst:
 | `familie/familie.service` → `ExecStart` | ohne `--host`/`--port` | `--host 127.0.0.1 --port 5010` | Harmlos: `familie/main.py` `RUNTIME_SCHEMA` hat genau diese Werte als Default. Trotzdem Drift. |
 | `familie/familie.service` → `--registry` | `__XBUDDY_REPO__/familie/familie.json` (**im Checkout**) | `__XBUDDY_DATA__/familie/familie.json` (per Drop-In `10-data-path.conf`) | Die Vorlage verletzt SVC-5; live rettet das nur ein Drop-In mit `ExecStart=`-Reset. |
 | `plan/plan.service` → `EnvironmentFile` | inline in der Vorlage | per Drop-In `20-eltern-token.conf` | Doppelter Ort für dieselbe Zuweisung. |
-| beide → `Restart=` | `on-failure` (SVC-3-konform) | `always` (hand-editiert) | Siehe SVC-3 in `conventions/services.md`. Die Drift lebt **nur** in `/etc`; ein `bootstrap.sh`-Lauf würde sie von allein beseitigen. |
+| beide → `Restart=` | `on-failure` (SVC-3-konform) | `always` (hand-editiert) | Siehe SVC-3 in `conventions/services.md`. Die Drift lebt **nur** in `/etc`; ein `bootstrap.sh`-Lauf würde sie von allein beseitigen. Für #1801 re-verifiziert (2026-08-17): `systemctl show xbuddy-plan xbuddy-familie -p Restart` zeigt weiterhin `always` auf beiden. |
 
 ## Restart nach Code-Update (Pflicht)
 

@@ -14,6 +14,7 @@ Deckt:
 Lauf: python3 -m pytest seiten/tests/test_pwa_mantel.py -x -v
 """
 
+import importlib.util
 import os
 import sys
 
@@ -27,6 +28,28 @@ sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402
 from seiten import pwa_mantel  # noqa: E402
+
+
+def _lade_eltern_flaechen():
+    """Laedt `tests/eltern_flaechen.py` (#1822) unter eindeutigem Modulnamen.
+
+    Kein `from tests import ...`: `tools/tests/__init__.py` ist ein regulaeres
+    Paket namens `tests` und gewinnt im repo-weiten Lauf gegen das
+    Namensraum-Paket `tests/` in der Repo-Wurzel. Deshalb Pfad-Import mit
+    eigenem Namen — identisch zu tests/test_eltern_flaechen_vollstaendig.py,
+    beide teilen sich denselben sys.modules-Eintrag.
+    """
+    name = "xbuddy_eltern_flaechen"
+    if name not in sys.modules:
+        pfad = os.path.join(_REPO_ROOT, "tests", "eltern_flaechen.py")
+        spec = importlib.util.spec_from_file_location(name, pfad)
+        modul = importlib.util.module_from_spec(spec)
+        sys.modules[name] = modul
+        spec.loader.exec_module(modul)
+    return sys.modules[name]
+
+
+eltern_flaechen = _lade_eltern_flaechen()
 
 _EINKAUF_SW = "/seiten/essen/einkauf/sw.js"
 _PLAN_SW = "/seiten/plan/einstellungen/sw.js"
@@ -96,14 +119,41 @@ def test_read_sw_ersetzt_platzhalter(tmp_path):
 
 # ── T-LIB-UNIT — REGISTRY ────────────────────────────────────────────────────
 
-def test_registry_hat_sechs_keys_mit_source_set():
-    """PWAM-5: die 9 registrierten Konsumenten, jeder mit build_id_source_set
-    (6 Bestand + hoerspiel-player + hoerspiel-eltern + wetter-regeln #1715/ESB-1.a)."""
-    assert set(pwa_mantel.REGISTRY) == {
-        "einkauf", "plan", "connector", "shell",
-        "mini-app-uebersicht", "routine", "hoerspiel-player", "hoerspiel-eltern",
-        "wetter-regeln",
-    }
+def test_registry_enthaelt_jede_pflichtige_eltern_flaeche():
+    """PWAM-5 / #1822 AC5: jede pflichtige Eltern-Flaeche MUSS im Register stehen.
+
+    VORHER stand hier Set-Gleichheit gegen ein Literal
+    (`set(REGISTRY) == {"einkauf", "plan", ...}`). Das faengt **Hinzufuegen** —
+    ein neuer Registry-Schluessel bricht die Gleichheit — aber nicht
+    **Auslassen**: eine neue Eltern-Seite, die sich nie registriert, aendert
+    `REGISTRY` gar nicht und liess diesen Test gruen. Genau die Auslassung, die
+    #1822 behebt.
+
+    Gedreht auf Pflicht-Enthaltensein: die Pflicht-Menge wird aus den
+    Ansichts-Verzeichnissen (`*/views.json`, Eintraege mit
+    `zielgruppe: "eltern"`) ABGELEITET statt eingefroren, und jede abgeleitete
+    Flaeche muss einen VOLLEN Mantel-Eintrag haben. Die Ableitung samt Lader-
+    Wahl, Verbund-Schluessel und dokumentierter Ausnahme-Liste liegt in
+    `tests/eltern_flaechen.py`; der repo-weite Guard ist
+    `tests/test_eltern_flaechen_vollstaendig.py`.
+
+    ACHTUNG, bewusst aufgegebene Fang-Wirkung: die alte Set-Gleichheit brach
+    auch, wenn ein Registry-Schluessel HINZUKAM. Diese Richtung faengt der
+    gedrehte Test nicht mehr. #1822 klammert ihren Bau ausdruecklich aus (sie
+    haette eine Produkt-Folge: die Heim-Shell erschiene in der
+    Seiten-Uebersicht — eine Entscheidung, kein Bau-Schritt). Der Verlust ist
+    deshalb nicht nur hier notiert, sondern als Schuldstand mit Trigger
+    gefuehrt: `tests/eltern_flaechen.py:AUSNAHMEN`, Achse `gegenrichtung`,
+    Eintraege `shell` und `hoerspiel-player`. Er wird bei jedem Testlauf als
+    Warnung ausgegeben, und `test_mantel_eintraege_ohne_eltern_flaeche_sind_benannt`
+    erzwingt, dass ein NEUER solcher Schluessel wenigstens benannt wird.
+    """
+    fehlend = eltern_flaechen.fehlende_registrierungen()
+    assert not fehlend, (
+        "Diese eltern-facing Flaechen haben KEINEN vollen Mantel-Eintrag in "
+        "pwa_mantel.REGISTRY (#1822 AC5):\n"
+        + "\n".join(f"  - {zeile}" for zeile in fehlend)
+    )
     for name, cfg in pwa_mantel.REGISTRY.items():
         assert cfg.build_id_source_set, \
             f"{name}: build_id_source_set ist leer (PWAM-4)"

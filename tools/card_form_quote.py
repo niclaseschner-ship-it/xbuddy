@@ -44,11 +44,43 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
+import os
 import re
 import subprocess
 import sys
 
-REPO = "<your-org>/xbuddy"
+
+class RepoNotConfigured(RuntimeError):
+    """LOTSE_PROJECT_REPO ist nicht gesetzt oder leer."""
+
+
+def resolve_repo() -> str:
+    """Löst den Ziel-Repo-Slug aus der Umgebung auf — einzige Auflösungsstelle.
+
+    `LOTSE_PROJECT_REPO` ist die vom lotse-Harness etablierte Konvention
+    (siehe lotse/hooks/restart_pending_log.py, per `lotse/deploy.sh` in
+    ~/.claude/settings.json als Projekt-ENV gesetzt) — kein hartkodierter
+    Org-Name hier, sonst schlägt leak-guard an (.gitleaks.toml, Regel
+    `xbuddy-github-org`).
+
+    Bündelt Auflösung + Guard in einer Funktion statt einer Modul-Konstante
+    plus separatem CLI-Guard (Scrub-Platzhalter-Reparatur, xbuddy-prozess#99
+    / RAT-36): `main()` hier UND der zweite Einstieg
+    `tools/prep-karten/server.py:_post_durable_comment` (`gh issue comment`)
+    rufen dieselbe Funktion, damit auch der Karten-Post-Pfad die Meldung mit
+    dem ENV-Namen bekommt statt eines rohen gh-Fehlers ("Could not resolve
+    to a Repository").
+    """
+    repo = os.environ.get("LOTSE_PROJECT_REPO", "").strip()
+    if not repo:
+        raise RepoNotConfigured(
+            "LOTSE_PROJECT_REPO ist nicht gesetzt — kann das Ziel-Repo nicht "
+            "auflösen. In einer Claude-Code-Session kommt es aus "
+            "~/.claude/settings.json (env), sonst z.B. "
+            "LOTSE_PROJECT_REPO=owner/repo setzen."
+        )
+    return repo
+
 
 PREFLIGHT_RE = re.compile(r"<!--\s*card_pre_flight\s+v1\b")
 PREP_VERDICT_RE = re.compile(r"prep_verdict")
@@ -66,8 +98,11 @@ PAIN_RE = re.compile(
 
 
 def _gh_json(args: list[str]) -> object:
+    # resolve_repo() lebt hier (statt am Call-Ort in measure()) — Tests
+    # monkeypatchen _gh_json komplett und laufen damit nie in die Auflösung
+    # hinein; nur der echte gh-Aufruf braucht den Repo-Slug.
     result = subprocess.run(
-        ["gh", *args], capture_output=True, text=True, check=False,
+        ["gh", *args, "-R", resolve_repo()], capture_output=True, text=True, check=False,
     )
     if result.returncode != 0:
         sys.stderr.write(f"gh failed: {result.stderr.strip()}\n")
@@ -96,7 +131,7 @@ def measure(days: int) -> dict[str, object]:
     since = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
     issues = _gh_json(
         [
-            "issue", "list", "-R", REPO,
+            "issue", "list",
             "--label", "status:ready",
             "--state", "all",
             "--search", f"updated:>={since}",
@@ -198,7 +233,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--days", type=int, default=7)
     args = parser.parse_args()
-    print(_format(measure(args.days)))
+    try:
+        print(_format(measure(args.days)))
+    except RepoNotConfigured as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 2
     return 0
 
 
