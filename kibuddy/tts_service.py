@@ -28,18 +28,23 @@ class LitellmTTSEngine:
     identisch). Der Provider-Code lebt jetzt in der Lib hinter dem Slot — kein
     Azure-SDK-Aufruf mehr direkt in kibuddy (LLMP-S6).
 
-    `model` trägt das effektive TTS-Modell (z. B. `azure/tts-1-hd`) und wird an
+    `model` trägt das effektive TTS-Modell (z. B. `azure/tts`) und wird an
     `get_speech(slot, model=...)` durchgereicht. TTSError bei Provider-Fehler
     (die Lib wirft `tools.llm.ProviderError`; hier auf `TTSError` gemappt, damit
     der bestehende 503-Übersetzungs-Pfad im Caller erhalten bleibt).
+
+    `base_model` (#1905) benennt das Katalog-Modell hinter einem frei getauften
+    Azure-Deployment (`azure/tts` → `azure/tts-1-hd`). Es geht ausschließlich in
+    die Kosten-Ermittlung, nie in den Anbieter-Call — der Preis kommt weiter aus
+    LiteLLM, nicht aus kibuddy.
     """
 
     name = "litellm"
 
-    def __init__(self, slot: str, model: str = ""):
+    def __init__(self, slot: str, model: str = "", base_model: str = ""):
         from tools.llm import get_speech
 
-        self._speech = get_speech(slot, model=model)
+        self._speech = get_speech(slot, model=model, base_model=base_model)
 
     def synthese(self, *, text: str, voice: str, speed: float = 0.9) -> bytes:
         """Synthetisiert text zu MP3-Bytes über die get_speech-Fassade (LLMP-S6)."""

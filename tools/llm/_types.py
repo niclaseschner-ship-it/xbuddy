@@ -220,8 +220,14 @@ class ProviderCallEvent(TypedDict, total=False):
     `modality` (T1410, additiv, LLMP-S6): "tts" | "stt" für Audio-Calls
     (`get_speech` / `get_transcription`). Chat-/Text-Calls setzen es nicht —
     das Feld fehlt dann im JSONL (total=False). Audio-Einträge tragen
-    input/output_tokens=0 und est_cost_eur=None (Pricing kennt keine Audio-
-    Modelle; Telemetrie für Audio bewusst lockerer, RAT-28).
+    input/output_tokens=0 (Audio-Responses tragen keine Token-Usage).
+
+    `audio_chars` / `audio_seconds` (#1905, additiv): die Bezugsgröße, nach der
+    das Ton-Modell abrechnet — Zeichen bei TTS (`input_cost_per_character`),
+    Sekunden bei STT (`input_cost_per_second`). Beide stehen im Event, damit
+    `est_cost_eur` an der Zeile nachrechenbar ist statt nur plausibel
+    auszusehen. Konnte die Größe nicht bestimmt werden, fehlt das Feld UND
+    `est_cost_eur` bleibt None (leer, nicht null).
     """
 
     ts: str
@@ -236,3 +242,5 @@ class ProviderCallEvent(TypedDict, total=False):
     wall_ms: int
     est_cost_eur: float | None
     modality: str
+    audio_chars: int
+    audio_seconds: float

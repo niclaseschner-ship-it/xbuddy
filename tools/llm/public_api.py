@@ -400,10 +400,11 @@ class _SpeechFacade:
     nicht (analog `_ChatFacade`).
     """
 
-    def __init__(self, vendor: Any, caller: str, slot: str):
+    def __init__(self, vendor: Any, caller: str, slot: str, base_model: str = ""):
         self._vendor = vendor
         self._caller = caller
         self._slot = slot
+        self._base_model = base_model
         self.model = getattr(vendor, "model", "")
         self.name = "speech"
 
@@ -422,6 +423,7 @@ class _SpeechFacade:
             text,
             voice=voice,
             model=model,
+            base_model=self._base_model,
             speed=speed,
             response_format=response_format,
             caller=self._caller,
@@ -452,18 +454,24 @@ class _TranscriptionFacade:
         filename: str = "audio.mp3",
         model: str = "",
         language: str = "de",
+        duration_seconds: float | None = None,
         correlation_id: str | None = None,
     ) -> str:
         """Ein STT-Call → Transkript-Text (LLMP-S6).
 
         `audio` ist bereits normalisiert (ffmpeg-#1442 sitzt im STT-Engine-
         Adapter VOR diesem Call, nicht in der Lib).
+
+        `duration_seconds` (#1905): Länge der Aufnahme in Sekunden — die
+        Bezugsgröße, nach der Whisper abrechnet. Der Adapter misst sie an der
+        normalisierten Datei; ohne sie bleibt der Preis leer (nicht null).
         """
         return self._vendor.transcription(
             audio,
             filename=filename,
             model=model,
             language=language,
+            duration_seconds=duration_seconds,
             caller=self._caller,
             slot=self._slot,
             correlation_id=correlation_id,
@@ -584,7 +592,7 @@ def get_agent(slot: str, model: str = "", max_tokens: int = 0,
     return _AgentFacade(vendor, caller, slot_name, caps)
 
 
-def get_speech(slot: str, model: str = "") -> Any:
+def get_speech(slot: str, model: str = "", base_model: str = "") -> Any:
     """Liefert die TTS-Sicht (LLMP-S6/RAT-28, KIBuddy-TTS-Heimat).
 
     Required Capability (LLMP-3): `speech`. Boot-Fail bei Mismatch — ein
@@ -594,11 +602,17 @@ def get_speech(slot: str, model: str = "") -> Any:
     `model` (analog `get_singleshot`): wählt das effektive TTS-Modell explizit
     (z. B. `azure/tts-1-hd`); leer nutzt den Vendor-`DEFAULT_MODEL`. `max_tokens`
     entfällt (kein Text-Generierungs-Limit bei Audio).
+
+    `base_model` (#1905): nur für die Kosten-Ermittlung. Bei Azure ist `model`
+    der frei gewählte Deployment-Name (`azure/tts`), der im Preis-Katalog nicht
+    steht; `base_model` benennt das Katalog-Modell dahinter (`azure/tts-1-hd`).
+    Eine Deployment-Zuordnung, KEIN Preis — gerechnet wird weiter in LiteLLM.
+    Leer = Modellname ist selbst der Katalog-Name.
     """
     vendor, caller, slot_name, _caps = _build_vendor(
         slot, "get_speech", REQUIRED_SPEECH, model,
     )
-    return _SpeechFacade(vendor, caller, slot_name)
+    return _SpeechFacade(vendor, caller, slot_name, base_model)
 
 
 def get_transcription(slot: str, model: str = "") -> Any:

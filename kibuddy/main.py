@@ -847,10 +847,31 @@ def _build_llm(cfg) -> LLMProvider | None:
     return None
 
 
+def _azure_routing_env(cfg, model: str) -> None:
+    """Reicht Azure-Endpunkt/API-Version an LiteLLM durch (#1905).
+
+    KIBuddy kennt den Azure-Endpunkt als `AZURE_OPENAI_ENDPOINT` (Azure-SDK-
+    Konvention, kibuddy/config.py). LiteLLM liest `AZURE_API_BASE` /
+    `AZURE_API_VERSION`. Der Vendor gibt bewusst nur model/voice/api_key vor und
+    überlässt die Route dem Konsumenten (`_vendor/litellm.py`, speech-Docstring)
+    — genau das passiert hier: dieselbe Adresse, anderer Variablenname.
+
+    Nur für `azure/…`-Modelle und nur, wenn nichts gesetzt ist (eine bewusst
+    gesetzte ENV gewinnt). Ohne Endpunkt passiert nichts — dann scheitert der
+    Call sichtbar, statt still auf einen falschen Anbieter zu zeigen.
+    """
+    if not model.startswith("azure/") or not cfg.azure_endpoint:
+        return
+    os.environ.setdefault("AZURE_API_BASE", cfg.azure_endpoint)
+    if cfg.azure_api_version:
+        os.environ.setdefault("AZURE_API_VERSION", cfg.azure_api_version)
+
+
 def _build_stt(cfg):
     if cfg.stt_provider == "litellm":
         # LLMP-S6/RAT-28 (T1410): STT über die tools.llm-Fassade hinter einem
         # ZD-Slot. ffmpeg-#1442 sitzt im LitellmSTTEngine VOR dem Provider-Call.
+        _azure_routing_env(cfg, cfg.litellm_stt_model)
         return stt_service.LitellmSTTEngine(
             slot=cfg.litellm_stt_slot,
             model=cfg.litellm_stt_model,
@@ -883,9 +904,12 @@ def _build_tts(cfg):
         # LLMP-S6/RAT-28 (T1410): TTS über die tools.llm-Fassade hinter einem
         # ZD-Slot. Die Voice/Speed kommen weiter aus der Config (durchgereicht im
         # synthetisiere()-Aufruf, tts_service.py).
+        _azure_routing_env(cfg, cfg.litellm_tts_model)
         return tts_service.LitellmTTSEngine(
             slot=cfg.litellm_tts_slot,
             model=cfg.litellm_tts_model,
+            # #1905: Katalog-Modell hinter dem Deployment — nur für den Preis.
+            base_model=cfg.litellm_tts_base_model,
         )
     # azure_openai (Default)
     if not (cfg.azure_endpoint and cfg.azure_key):

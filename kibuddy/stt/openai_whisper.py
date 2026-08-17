@@ -18,7 +18,60 @@ from .azure_whisper import STTError  # einzige STTError-Klasse (Schnitt analog L
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["OpenAIWhisperSTT", "STTError"]
+__all__ = ["OpenAIWhisperSTT", "STTError", "audio_dauer_sek"]
+
+
+def audio_dauer_sek(audio_bytes: bytes, filename: str = "audio.mp3") -> float | None:
+    """Misst die Länge einer Aufnahme in Sekunden via ffprobe (#1905).
+
+    Whisper rechnet pro SEKUNDE ab, die Transkriptions-Antwort trägt die Dauer
+    aber nicht. Ohne diese Messung bliebe der Ton-Preis in der Telemetrie leer.
+    Gemessen wird hier — an der Stelle, an der die Audio-Datei tatsächlich liegt.
+
+    ffprobe kommt mit demselben Paket wie das ffmpeg aus `_normalize_audio`; ist
+    es nicht da oder scheitert der Aufruf, kommt `None` zurück. `None` heißt
+    „nicht gemessen" und führt zu einem LEEREN Preis — nie zu einer Null.
+    """
+    suffix = os.path.splitext(filename)[1] or ".mp3"
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+            tmp = f.name
+            f.write(audio_bytes)
+
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                tmp,
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "ffprobe-Dauermessung fehlgeschlagen (returncode=%d) — Ton-Preis bleibt leer",
+                result.returncode,
+            )
+            return None
+
+        dauer = float(result.stdout.decode(errors="replace").strip())
+        if dauer <= 0:
+            return None
+        return dauer
+
+    except FileNotFoundError:
+        logger.warning("ffprobe nicht gefunden — Ton-Preis bleibt leer (kein Regress)")
+        return None
+    except (ValueError, subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("ffprobe-Fehler: %s — Ton-Preis bleibt leer", exc)
+        return None
+    finally:
+        if tmp and os.path.exists(tmp):
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
 
 
 def _normalize_audio(audio_bytes: bytes, filename: str = "audio.webm") -> tuple[bytes, str]:

@@ -33,6 +33,7 @@ from tools.llm import (
     public_api,
 )
 from tools.llm._vendor import litellm as litellm_vendor
+from tools.llm.pricing import EUR_PER_USD as _EUR_PER_USD
 
 # ----------------------------------------------------------------------
 #  Fakes: OpenAI-förmige LiteLLM-Response + gemocktes litellm-SDK
@@ -1443,3 +1444,161 @@ def test_langtext_budget_kommt_am_sdk_an(jsonl_path):
 
     assert (fake_litellm.completion.call_args.kwargs["timeout"]
             == LLM_TIMEOUT_LONGFORM_SECONDS)
+
+
+# ----------------------------------------------------------------------
+#  #1905 — Ton-Kosten: die Bezugsgröße kommt vom Aufrufort, der Preis aus
+#  LiteLLM. Keine eigene Ton-Preistabelle.
+# ----------------------------------------------------------------------
+
+
+def _make_audio_sdk_mit_kosten(*, speech_return=None, transcription_return=None,
+                               cost_usd=0.00027):
+    """Audio-SDK-Fake, dessen `completion_cost` wie das echte LiteLLM rechnet:
+    es liefert nur dann einen Betrag, wenn eine Bezugsgröße mitkommt."""
+    fake = MagicMock()
+    fake.exceptions.APIError = _FakeAPIError
+    fake.exceptions.Timeout = _FakeTimeout
+    fake.speech.return_value = speech_return
+    fake.transcription.return_value = transcription_return
+
+    def _cost(**kwargs):
+        call_type = kwargs.get("call_type")
+        if call_type == "speech":
+            if not kwargs.get("prompt"):
+                raise TypeError("speech ohne prompt: keine Zeichenzahl")
+            return cost_usd
+        if call_type == "transcription":
+            resp = kwargs.get("completion_response")
+            hidden = getattr(resp, "_hidden_params", None) or {}
+            if not hidden.get("audio_transcription_duration"):
+                raise TypeError("transcription ohne Dauer")
+            return cost_usd
+        raise TypeError("Text-Pfad: hier nicht erwartet")
+
+    fake.completion_cost.side_effect = _cost
+    return fake
+
+
+def test_tts_reicht_zeichenzahl_an_den_preis_durch(jsonl_path):
+    """#1905/AC2: Der gesprochene Text geht als `prompt` in `completion_cost` —
+    das ist die Bezugsgröße, die der Audio-Antwort fehlt. Die gezählten Zeichen
+    stehen mit in der Zeile, sonst ist der Betrag nicht nachrechenbar."""
+    speech_resp = MagicMock()
+    speech_resp.content = b"mp3"
+    speech_resp._hidden_params = {"response_cost": None}
+    fake = _make_audio_sdk_mit_kosten(speech_return=speech_resp)
+
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_speech
+        speech = get_speech("kibuddy-litellm-tts-key", model="azure/tts",
+                            base_model="azure/tts-1-hd")
+        speech.synth("Hallo Welt", voice="onyx", speed=0.9)
+
+    kw = fake.completion_cost.call_args.kwargs
+    assert kw["call_type"] == "speech"
+    assert kw["prompt"] == "Hallo Welt"
+    assert kw["model"] == "azure/tts"
+    # Deployment-Zuordnung, kein Preis: LiteLLM schlägt selbst nach.
+    assert kw["base_model"] == "azure/tts-1-hd"
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["modality"] == "tts"
+    assert parsed["audio_chars"] == 9  # "HalloWelt" — Leerzeichen zählen nicht
+    assert parsed["est_cost_eur"] == pytest.approx(0.00027 * _EUR_PER_USD)
+
+
+class _StummeTranskription:
+    """Transkriptions-Antwort OHNE eigene Dauer — so antworten Anbieter, die nur
+    Text zurückgeben. Kein MagicMock: dessen `__float__` täuscht eine Dauer vor."""
+
+    def __init__(self, text, hidden=None, duration=None):
+        self.text = text
+        self._hidden_params = hidden if hidden is not None else {}
+        if duration is not None:
+            self.duration = duration
+
+
+def test_stt_reicht_aufnahme_dauer_an_den_preis_durch(jsonl_path):
+    """#1905/AC2: Die Aufnahme-Dauer landet dort, wo LiteLLM sie für den
+    Sekunden-Preis liest (`_hidden_params`), und als `audio_seconds` in der Zeile."""
+    trans_resp = _StummeTranskription("Warum ist der Himmel blau?")
+    fake = _make_audio_sdk_mit_kosten(transcription_return=trans_resp,
+                                      cost_usd=0.00042)
+
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_transcription
+        stt = get_transcription("kibuddy-litellm-stt-key", model="whisper-1")
+        stt.transcribe(b"mp3", filename="audio.mp3", duration_seconds=4.2)
+
+    kw = fake.completion_cost.call_args.kwargs
+    assert kw["call_type"] == "transcription"
+    assert kw["model"] == "whisper-1"
+    resp = kw["completion_response"]
+    assert resp._hidden_params["audio_transcription_duration"] == 4.2
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["modality"] == "stt"
+    assert parsed["audio_seconds"] == 4.2
+    assert parsed["est_cost_eur"] == pytest.approx(0.00042 * _EUR_PER_USD)
+
+
+def test_stt_ohne_dauer_bleibt_leer_nicht_null(jsonl_path):
+    """#1905 stop_rule: Konnte die Dauer nicht gemessen werden, bleibt der Preis
+    LEER. Eine erfundene Null wäre schlimmer als eine ehrliche Lücke — sie
+    würde sich in der Monatssumme als „kostet nichts" tarnen."""
+    trans_resp = _StummeTranskription("hm")
+    fake = _make_audio_sdk_mit_kosten(transcription_return=trans_resp)
+
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_transcription
+        stt = get_transcription("kibuddy-litellm-stt-key", model="whisper-1")
+        stt.transcribe(b"mp3", filename="audio.mp3", duration_seconds=None)
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["est_cost_eur"] is None
+    assert "audio_seconds" not in parsed  # kein 0-Platzhalter
+
+
+def test_text_pfad_ruft_completion_cost_unveraendert(jsonl_path):
+    """#1905-Gegenprobe: Der Text-Pfad reicht weiter NUR die Response durch —
+    die Audio-Argumente dürfen ihn nicht anfassen (kein Kollateral am
+    teuersten Pfad)."""
+    fake = _make_fake_litellm_sdk(_make_fake_litellm_response("ok"))
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        chat = public_api.get_chat("kibuddy-litellm-api-key")
+        chat.complete_multiturn(system="S", turns=[], user_message="hi")
+
+    kw = fake.completion_cost.call_args.kwargs
+    assert set(kw) == {"completion_response"}
+
+
+def test_stt_anbieter_dauer_schlaegt_eigene_messung(jsonl_path):
+    """#1905/AC2: Liefert der Anbieter die Dauer selbst mit (OpenAI-Whisper tut
+    das), rechnet LiteLLM damit — dann muss auch `audio_seconds` diese Zahl
+    tragen. Sonst stünde in der Zeile eine Menge, aus der sich der danebenstehende
+    Betrag NICHT ergibt, und die Handprobe schlüge fehl."""
+    trans_resp = _StummeTranskription(
+        "Warum ist der Himmel blau?",
+        hidden={"response_cost": 0.000158},
+        duration=1.58,
+    )
+    fake = _make_audio_sdk_mit_kosten(transcription_return=trans_resp)
+
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_transcription
+        stt = get_transcription("kibuddy-litellm-stt-key", model="whisper-1")
+        # Die eigene ffprobe-Messung weicht ab (Container vs. Audiostrom).
+        stt.transcribe(b"mp3", filename="audio.mp3", duration_seconds=1.632)
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["audio_seconds"] == 1.58, "Anbieter-Dauer muss gewinnen"
+    assert parsed["est_cost_eur"] == pytest.approx(0.000158 * _EUR_PER_USD)
+    # Handprobe an genau dieser Zeile: 1.58 s × 0,0001 USD/s × 0,92 EUR/USD
+    assert parsed["est_cost_eur"] == pytest.approx(
+        parsed["audio_seconds"] * 0.0001 * _EUR_PER_USD)

@@ -142,18 +142,43 @@ def _pricing_to_litellm_entry(prices, as_of):
     }
 
 
-def _litellm_response_cost_eur(response: Any, litellm_sdk: Any) -> float | None:
-    """Liest `est_cost_eur` aus einer LiteLLM-Response (litellm-native, #1635).
+def _litellm_response_cost_eur(
+    response: Any,
+    litellm_sdk: Any,
+    *,
+    model: str = "",
+    call_type: str | None = None,
+    base_model: str = "",
+    prompt: str = "",
+    duration_seconds: float | None = None,
+) -> float | None:
+    """Liest `est_cost_eur` aus einer LiteLLM-Response (litellm-native, #1635/#1905).
 
     Reihenfolge:
     1. `response._hidden_params.get("response_cost")` (USD, LiteLLM-native) → EUR.
-    2. Fallback: `litellm.completion_cost(completion_response=response)` → EUR.
-    3. Ist beides None/0/Fehler → None (z. B. Audio ohne LiteLLM-Kosten-Wissen).
+    2. Fallback: `litellm.completion_cost(...)` → EUR.
+    3. Ist beides None/0/Fehler → None (ehrliche Lücke, KEINE erfundene Null).
+
+    **Audio-Bezugsgrößen (#1905).** Eine `speech()`-Response besteht aus Audio-
+    Bytes und trägt keine Zeichenzahl; eine `transcription()`-Response trägt
+    keine Dauer. Der Motor kennt die Ton-Preise (`azure/tts-1-hd`
+    `input_cost_per_character`, `whisper-1` `input_cost_per_second`) — ihm fehlt
+    nur die Menge. Genau die reichen `call_type` + `prompt` (TTS) bzw.
+    `duration_seconds` (STT) hier durch. **Keine eigene Preistabelle** (RAT-26-
+    Amendment/RAT-28 §4): der Preis kommt weiter ausschließlich aus
+    `litellm.model_cost`.
+
+    `base_model` (Azure-Deployment-Auflösung): bei Azure heißt das Modell
+    `azure/<deployment>` — ein frei gewählter Name (hier `azure/tts`), der im
+    LiteLLM-Katalog nicht steht. `base_model` sagt LiteLLM, WELCHES Modell hinter
+    dem Deployment steckt (per `GET /openai/deployments` nachgeschlagen:
+    `tts` → `tts-hd` → `azure/tts-1-hd`). Das ist eine Deployment-Zuordnung,
+    kein Preis — den schlägt LiteLLM selbst nach.
 
     USD→EUR-Kurs: `pricing.EUR_PER_USD` (0.92, fest wie bisher, E-EC-11).
     `litellm_sdk` wird als Parameter übergeben, damit Tests den Mock nutzen können.
     """
-    if response is None:
+    if response is None and call_type is None:
         return None
 
     # 1. Primär: _hidden_params.response_cost (USD)
@@ -169,20 +194,134 @@ def _litellm_response_cost_eur(response: Any, litellm_sdk: Any) -> float | None:
     except Exception:
         pass  # Defensiv: kein Absturz bei unerwartetem hidden_params-Typ
 
-    # 2. Fallback: litellm.completion_cost()
+    # 2. Fallback: litellm.completion_cost() — mit der Bezugsgröße, die der
+    #    Antwort fehlt (Audio) bzw. ohne sie (Text, unverändertes Verhalten).
     if cost_usd is None:
         try:
-            fb = litellm_sdk.completion_cost(completion_response=response)
+            kwargs: dict[str, Any] = _completion_cost_kwargs(
+                response,
+                model=model,
+                call_type=call_type,
+                base_model=base_model,
+                prompt=prompt,
+                duration_seconds=duration_seconds,
+            )
+            fb = litellm_sdk.completion_cost(**kwargs)
             if fb is not None:
                 fval_fb = float(fb)
                 if fval_fb > 0:
                     cost_usd = fval_fb
         except Exception:
-            pass  # Best-effort; Audio/unbekannte Modelle können hier 0/Exception geben
+            pass  # Best-effort; unbekannte Modelle können hier 0/Exception geben
 
     if cost_usd is None:
         return None
     return cost_usd * pricing.EUR_PER_USD
+
+
+def _completion_cost_kwargs(
+    response: Any,
+    *,
+    model: str,
+    call_type: str | None,
+    base_model: str,
+    prompt: str,
+    duration_seconds: float | None,
+) -> dict[str, Any]:
+    """Baut die `completion_cost()`-Kwargs je Modalität (#1905).
+
+    - Text (`call_type=None`): `completion_response=response` — wortgleich zum
+      Verhalten vor #1905.
+    - TTS (`speech`): die Zeichenzahl steckt im gesprochenen Text, nicht in der
+      Antwort → `prompt=` + `model=`. Die Audio-Bytes selbst taugen nicht als
+      `completion_response` und bleiben draußen.
+    - STT (`transcription`): die Dauer steckt in der Aufnahme, nicht in der
+      Antwort → sie wird in `_hidden_params["audio_transcription_duration"]`
+      gelegt, genau dort liest LiteLLM sie (cost_calculator.py:1401).
+    """
+    if call_type is None:
+        return {"completion_response": response}
+
+    kwargs: dict[str, Any] = {"call_type": call_type, "model": model}
+    if base_model:
+        kwargs["base_model"] = base_model
+
+    if call_type == "speech":
+        kwargs["prompt"] = prompt
+        return kwargs
+
+    # transcription: Dauer über _hidden_params an LiteLLM reichen.
+    if duration_seconds is not None:
+        hidden = getattr(response, "_hidden_params", None)
+        if not isinstance(hidden, dict):
+            hidden = {}
+        hidden = dict(hidden)
+        hidden["audio_transcription_duration"] = float(duration_seconds)
+        try:
+            response._hidden_params = hidden
+        except Exception:
+            # Response nimmt kein Attribut (z. B. slots) → eigener Träger, der
+            # LiteLLM genau das eine Feld anbietet, das der Preis braucht.
+            response = _DauerTraeger(hidden)
+    kwargs["completion_response"] = response
+    return kwargs
+
+
+def _abgerechnete_dauer_sek(response: Any, gemessen: float | None) -> float | None:
+    """Die Sekunden, nach denen tatsächlich abgerechnet wird (#1905).
+
+    Reihenfolge, und zwar in dieser:
+    1. Die Dauer aus der Anbieter-Antwort (`_hidden_params
+       ["audio_transcription_duration"]`, sonst `.duration`). OpenAI-Whisper
+       liefert sie mit; LiteLLM rechnet dann genau damit — die eigene Messung
+       darf sie NICHT überschreiben, sonst stünde in der Zeile eine andere Zahl
+       als die, aus der der Betrag entstand.
+    2. Sonst die am Aufrufort gemessene Dauer (ffprobe) — der Fall, in dem der
+       Anbieter nichts mitschickt.
+    3. Sonst None → Preis bleibt leer.
+    """
+    hidden = getattr(response, "_hidden_params", None)
+    if isinstance(hidden, dict):
+        roh = hidden.get("audio_transcription_duration")
+        if roh is not None:
+            try:
+                return float(roh)
+            except (TypeError, ValueError):
+                pass
+    roh = getattr(response, "duration", None)
+    if roh is not None:
+        try:
+            return float(roh)
+        except (TypeError, ValueError):
+            pass
+    return gemessen
+
+
+def _abrechnungs_zeichen(text: str) -> int:
+    """Zeichenzahl, wie LiteLLM sie für `input_cost_per_character` zählt (#1905).
+
+    Bevorzugt LiteLLMs eigene Funktion (`litellm.utils._count_characters`), damit
+    die im JSONL protokollierte Menge exakt die ist, mit der der Preis gerechnet
+    wurde. Fehlt sie (anderer litellm-Stand), gilt die dokumentierte Regel
+    „Leerzeichen zählen nicht" als Nachbau — sie ist Zählweise, kein Preis.
+    """
+    try:
+        from litellm.utils import _count_characters
+
+        return int(_count_characters(text=text))
+    except Exception:
+        return len("".join(c for c in text if not c.isspace()))
+
+
+class _DauerTraeger:
+    """Minimal-Träger für `audio_transcription_duration` (#1905, Notweg).
+
+    Nur benutzt, wenn die echte Response kein `_hidden_params` annimmt.
+    LiteLLM liest für Transkriptions-Kosten ausschließlich dieses Feld.
+    """
+
+    def __init__(self, hidden: dict[str, Any]):
+        self._hidden_params = hidden
 
 
 def _seed_model_cost(litellm) -> None:
@@ -378,6 +517,7 @@ class LitellmVendor(VendorBase):
         caller: str,
         slot: str,
         model: str = "",
+        base_model: str = "",
         speed: float = 1.0,
         response_format: str = "mp3",
         correlation_id: str | None = None,
@@ -400,6 +540,11 @@ class LitellmVendor(VendorBase):
         `.content` (bytes), sonst mit `.read()` (Stream), sonst bereits raw bytes.
         Telemetrie synchron im selben Call (modality=tts). LiteLLM-API-Fehler →
         `ProviderError`.
+
+        `base_model` (#1905): sagt der Kosten-Ermittlung, welches Katalog-Modell
+        hinter einem frei benannten Azure-Deployment steckt (z. B. `azure/tts` →
+        `azure/tts-1-hd`). Leer = Modellname ist selbst der Katalog-Name.
+        Der Preis kommt in beiden Fällen aus LiteLLM, nie aus eigenem Code.
         """
         eff_model = model or self.model
         t_start = time.monotonic()
@@ -425,6 +570,9 @@ class LitellmVendor(VendorBase):
             correlation_id=correlation_id,
             wall_ms=wall_ms,
             response=response,
+            call_type="speech",
+            base_model=base_model,
+            prompt=text,
         )
         return audio_bytes
 
@@ -437,6 +585,7 @@ class LitellmVendor(VendorBase):
         model: str = "",
         filename: str = "audio.mp3",
         language: str = "de",
+        duration_seconds: float | None = None,
         correlation_id: str | None = None,
     ) -> str:
         """STT über `litellm.transcription()` → Transkript-Text (LLMP-S6/RAT-28).
@@ -455,6 +604,12 @@ class LitellmVendor(VendorBase):
         diesem Call — sie sitzt im STT-Engine-Adapter (kibuddy/stt_service.py),
         nicht hier, damit der Vendor Provider-neutral bleibt. Telemetrie synchron
         (modality=stt). LiteLLM-API-Fehler → `ProviderError`.
+
+        `duration_seconds` (#1905): Länge der Aufnahme. Whisper wird pro SEKUNDE
+        abgerechnet, aber die Antwort trägt nur Text — ohne diese Zahl kann der
+        Motor nicht rechnen und der Preis bliebe (ehrlich) leer. Gemessen wird sie
+        am Aufrufort, wo die Audio-Datei liegt; hier wird sie nur durchgereicht.
+        `None` → Preis bleibt LEER, nicht null.
         """
         eff_model = model or self.model
         audio_file = io.BytesIO(audio)
@@ -481,6 +636,8 @@ class LitellmVendor(VendorBase):
             correlation_id=correlation_id,
             wall_ms=wall_ms,
             response=response,
+            call_type="transcription",
+            duration_seconds=duration_seconds,
         )
         return text
 
@@ -1011,20 +1168,42 @@ class LitellmVendor(VendorBase):
         correlation_id: str | None,
         wall_ms: int,
         response: Any = None,
+        call_type: str | None = None,
+        base_model: str = "",
+        prompt: str = "",
+        duration_seconds: float | None = None,
     ) -> None:
-        """Schreibt einen Audio-`ProviderCallEvent` (LLMP-S4/LLMP-S6, RAT-28, #1635).
+        """Schreibt einen Audio-`ProviderCallEvent` (LLMP-S4/LLMP-S6, RAT-28, #1635/#1905).
 
         Eigener Pfad neben `_emit_telemetry` (NICHT geteilt): Audio-Responses
         tragen KEINE `usage.prompt_tokens` — input/output_tokens bleiben 0.
         `est_cost_eur` kommt aus LiteLLM-native `response_cost` (falls vorhanden),
-        Fallback `completion_cost()`. Ist beides None/0/Fehler → bleibt `None`
-        (Audio-Ausnahme-Pfad LLMP-S6: LiteLLM kennt TTS/STT-Kosten nativ, aber
-        der Hand-Fallback aus pricing.py ist für Audio nicht vorhanden — None
-        ist der sichere Wert, wenn LiteLLM keine Kosten liefert).
+        Fallback `completion_cost()` — seit #1905 MIT der Bezugsgröße, die der
+        Antwort fehlt: Zeichenzahl bei TTS, Aufnahme-Dauer bei STT. Ist beides
+        None/0/Fehler → bleibt `None`, also LEER; eine erfundene Null wäre
+        schlimmer als eine ehrliche Lücke.
+
+        Die Bezugsgröße selbst wandert als `audio_chars` bzw. `audio_seconds`
+        MIT ins JSONL — sonst ist der Betrag in der Zeile nicht nachrechenbar
+        (#1905/AC2). Fehlt die Größe, fehlt auch das Feld (kein 0-Platzhalter).
+
         Das `modality`-Feld ("tts"|"stt") unterscheidet den Eintrag im JSONL.
         `write_call` bleibt SSoT (serialisiert beliebige Felder).
         """
-        est_cost_eur = _litellm_response_cost_eur(response, self._litellm) if response is not None else None
+        # Erst die abgerechnete Menge bestimmen, dann damit rechnen — so trägt
+        # die Zeile exakt die Zahl, aus der ihr Betrag entstanden ist (#1905/AC2).
+        if modality == "stt":
+            duration_seconds = _abgerechnete_dauer_sek(response, duration_seconds)
+
+        est_cost_eur = _litellm_response_cost_eur(
+            response,
+            self._litellm,
+            model=model_id,
+            call_type=call_type,
+            base_model=base_model,
+            prompt=prompt,
+            duration_seconds=duration_seconds,
+        )
 
         event = {
             "ts": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -1037,6 +1216,13 @@ class LitellmVendor(VendorBase):
             "wall_ms": wall_ms,
             "est_cost_eur": est_cost_eur,
         }
+        if modality == "tts" and prompt:
+            # Abrechnungs-Zeichenzahl == LiteLLMs eigene Zählung (Leerzeichen
+            # zählen nicht, litellm.utils._count_characters) — sonst ergäbe die
+            # Handprobe an der Zeile einen anderen Betrag als der geschriebene.
+            event["audio_chars"] = _abrechnungs_zeichen(prompt)
+        if modality == "stt" and duration_seconds is not None:
+            event["audio_seconds"] = round(float(duration_seconds), 3)
         if correlation_id is not None:
             event["correlation_id"] = correlation_id
 

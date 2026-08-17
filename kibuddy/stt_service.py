@@ -6,7 +6,7 @@ Orchestriert den STT-Adapter. V1 synchron (KIBUDDY-13).
 import logging
 
 from .stt.azure_whisper import STTError
-from .stt.openai_whisper import _normalize_audio
+from .stt.openai_whisper import _normalize_audio, audio_dauer_sek
 
 logger = logging.getLogger(__name__)
 
@@ -42,19 +42,24 @@ class LitellmSTTEngine:
     def transkribiere(self, audio_bytes: bytes, filename: str = "audio.webm") -> str:
         """Transkribiert audio_bytes über die get_transcription-Fassade (LLMP-S6).
 
-        Normalisiert zuerst via ffmpeg (#1442), reicht dann die normalisierten
-        Bytes + den (ggf. angepassten) Dateinamen an die Lib durch.
+        Normalisiert zuerst via ffmpeg (#1442), misst die Aufnahme-Dauer (#1905)
+        und reicht beides — normalisierte Bytes, Dateiname, Dauer — an die Lib
+        durch. Die Dauer ist die Bezugsgröße, nach der Whisper abrechnet; ohne
+        sie bliebe der Preis in der Messdatei leer.
         """
         from tools.llm import ProviderError
 
         # #1442: Browser-webm → MP3 VOR dem Provider-Call (kein Regress bei
         # ffmpeg-Abwesenheit — dann Roh-Bytes).
         norm_bytes, norm_filename = _normalize_audio(audio_bytes, filename)
+        # #1905: an genau denselben Bytes messen, die der Anbieter abrechnet.
+        dauer_sek = audio_dauer_sek(norm_bytes, norm_filename)
         try:
             return self._transcription.transcribe(
                 norm_bytes,
                 filename=norm_filename,
                 language=self._sprache,
+                duration_seconds=dauer_sek,
             )
         except ProviderError as e:
             logger.warning("litellm-STT nicht erreichbar: %s", e)
