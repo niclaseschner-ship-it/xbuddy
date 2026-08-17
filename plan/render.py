@@ -327,17 +327,92 @@ def _ring_fuer_person(person_id, registry):
 
 
 def _personen_rings(personen_ids, registry):
-    """Liste von {person, ring}-Dicts für eine Personen-ID-Liste (PLAN-19 V1.1).
+    """Liste von {person, ring, name}-Dicts für eine Personen-ID-Liste (PLAN-19 V1.1).
 
     Für die Termin-Leiste (PLAN-13): bis zu zwei Avatare nebeneinander.
     Liefert eine Liste mit 0, 1 oder 2 Einträgen.
+
+    PLAN-38 (#1875): `name` kommt mit — die Detailansicht zeigt die Personen
+    als Foto-im-Ring MIT Namen. Die Kachel nutzt nur `ring`/`person`.
     """
     result = []
     for pid in (personen_ids or []):
         ring = _ring_fuer_person(pid, registry)
         if ring is not None:
-            result.append({"person": pid, "ring": ring})
+            p = registry.get(pid)
+            result.append({
+                "person": pid,
+                "ring": ring,
+                "name": p.name if p is not None else pid,
+            })
     return result
+
+
+def _tag_label(d):
+    """`Di, 18.08.` — Wochentag DEUTSCH (PLAN-29).
+
+    NICHT `strftime('%a')`: das hängt an der Locale des Dienst-Prozesses und
+    liefert dort `Tue`. DAY_SHORT ist die eine deutsche Quelle dieser Datei.
+    """
+    return "%s, %02d.%02d." % (DAY_SHORT[d.weekday()], d.day, d.month)
+
+
+def _detail_zeit(ev):
+    """Zeit-Zeile der Termin-Detailansicht (PLAN-38 Punkt 2, PLAN-29).
+
+    - zeitgebunden, ein Tag:   `Di, 18.08. · 15:50 – 18:25 Uhr`
+    - zeitgebunden, ohne Ende: `Di, 18.08. · 15:50 Uhr`
+    - zeitgebunden, mehrtägig: `Di, 18.08. 15:50 – Mi, 19.08. 18:25 Uhr`
+    - ganztägig, ein Tag:      `Di, 18.08. · ganztägig`
+    - ganztägig, mehrtägig:    `Sa, 01.08. – Di, 18.08. · ganztägig`
+
+    Ganztägig-Testklausel (PLAN-29): das Google-Ende ist EXKLUSIV. Der
+    angezeigte letzte Tag ist `ende - 1 Tag` — ein Termin mit start=18.08. und
+    end=19.08. ist ein EINTÄGIGER Termin am 18.08., keine Spanne.
+    """
+    if ev.beginn is None:
+        return ""
+    if ev.ganztags:
+        start = _as_date(ev.beginn)
+        ende_exkl = _as_date(ev.ende) if ev.ende is not None else start + timedelta(days=1)
+        letzter = ende_exkl - timedelta(days=1)
+        if letzter <= start:
+            return "%s · ganztägig" % _tag_label(start)
+        return "%s – %s · ganztägig" % (_tag_label(start), _tag_label(letzter))
+
+    start = ev.beginn
+    if ev.ende is None:
+        return "%s · %s Uhr" % (_tag_label(_as_date(start)), start.strftime("%H:%M"))
+    ende = ev.ende
+    if _as_date(start) == _as_date(ende):
+        return "%s · %s – %s Uhr" % (
+            _tag_label(_as_date(start)),
+            start.strftime("%H:%M"),
+            ende.strftime("%H:%M"))
+    return "%s %s – %s %s Uhr" % (
+        _tag_label(_as_date(start)), start.strftime("%H:%M"),
+        _tag_label(_as_date(ende)), ende.strftime("%H:%M"))
+
+
+def _termin_detail(ev, registry, icon):
+    """Detail-Daten eines Termins für das Pop-up (PLAN-38).
+
+    Wird beim Bau des View-Modells MITGERENDERT — das Pop-up lädt nichts nach
+    (PLAN-38 „Datenquelle"). So zeigt es denselben Stand wie die Kacheln
+    darunter, auch wenn der Kalender gerade nicht erreichbar ist (PLAN-20).
+
+    `titel` ist der VOLLE Kalender-Titel: die Kachel streicht den Personen-
+    Namen heraus (PLAN-24/strip_person_name), das Pop-up tut das nicht
+    (PLAN-38 Punkt 1).
+    """
+    return {
+        "titel": ev.titel,
+        "zeit": _detail_zeit(ev),
+        "ort": ev.ort or "",
+        "notiz": ev.notiz or "",
+        "personen": _personen_rings(ev.personen, registry),
+        "icon": icon,
+    }
 
 
 def baue_tage(anker, anzahl_tage, wochenstart_wd, heute):
@@ -474,6 +549,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
             # Keine durchgehende Zeilen-Reservierung über das ganze Fenster
             # (verworfene heutige Form, Befund 2026-06-22).
             indices = sorted(iso_index[i] for i in tag_isos)
+            span_icon = termin_icon(ev.titel, cfg)
             span_appointments.append({
                 "start_day": indices[0],
                 "end_day": indices[-1],
@@ -483,8 +559,10 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
                 "ring": ring,
                 "person": ev.person,
                 "personen": _personen_rings(ev.personen, registry),
-                "icon": termin_icon(ev.titel, cfg),
+                "icon": span_icon,
                 "event_id": ev.id,
+                # PLAN-38 (#1875): auch eine Mehrtages-Spanne ist antippbar.
+                "detail": _termin_detail(ev, registry, span_icon),
             })
         else:
             appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg, registry))
@@ -516,6 +594,11 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     zeilen = termin_zeilen(len(slot_keys))
 
     appointment_overflow = {}
+    # PLAN-38 (#1875, löst QW4 ein): die vom Counter verdeckten Termine gehen
+    # NICHT mehr verloren. Sie werden hier je Tag aufbewahrt, damit der
+    # `+M weitere`-Counter sie öffnen kann — sonst bliebe der einzige Termin
+    # der Probe-Woche mit echtem Detail-Inhalt unerreichbar (PLAN-13-Befund).
+    appointment_hidden = {}
     for i_tag, t in enumerate(tage):
         iso = t["iso"]
         # occupied_lanes(d): Lanes, deren Balken diesen Tag berührt (Werte
@@ -537,18 +620,38 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         # Lane-Loch = über einem Balken der Nachbarspalte sein). Überschuss über
         # die freien Zellen dieser Spalte → Counter (PER SPALTE, nicht global).
         platziert = []
+        verdeckt = []
         for i, a in enumerate(sortiert):
             if i < len(free_rows):
                 a["row"] = free_rows[i]  # 0-basierte Grid-Zeile
                 platziert.append(a)
+            else:
+                verdeckt.append(a)
         appointment_overflow[iso] = max(0, len(sortiert) - len(free_rows))
         appointments[iso] = platziert
+        appointment_hidden[iso] = verdeckt
+
+    # PLAN-38 (#1875): jede antippbare Termin-Pille — sichtbar, verdeckt oder
+    # Spanne — bekommt eine im Dokument eindeutige `detail_id`. Das Template
+    # rendert daraus die versteckten Detail-Blöcke; die Pille verweist per
+    # `data-detail` darauf. Eine Quelle der Zuordnung (kein Jinja-Recompute),
+    # und `event_id` taugt nicht als Schlüssel: sie kann None sein und ein Kind-
+    # Aktivitäts-Event trägt dieselbe id in Slot und Termin-Leiste.
+    _naechste_detail_id = 0
+    for eintrag in (span_appointments
+                    + [a for t in tage for a in appointments[t["iso"]]]
+                    + [a for t in tage for a in appointment_hidden[t["iso"]]]):
+        eintrag["detail_id"] = _naechste_detail_id
+        _naechste_detail_id += 1
 
     return {
         "tage": tage,
         "schedule": schedule,
         "appointments": appointments,
         "appointment_overflow": appointment_overflow if mit_terminen else {},
+        # PLAN-38 (#1875): die hinter dem Counter verdeckten Termine je Tag —
+        # Quelle der Tages-Liste, die ein Tipp auf `+M weitere` öffnet.
+        "appointment_hidden": appointment_hidden if mit_terminen else {},
         "span_appointments": span_appointments if mit_terminen else [],
         # PLAN-14-PACKING (#1146): Tag-Indizes mit laufendem Span-Balken —
         # exponiert für Diagnose/Tests. Sortierte Liste.
@@ -588,15 +691,18 @@ def _einzel_termin(ev, ring, config, registry):
         uhrzeit = ev.beginn.strftime("%H:%M")
     # PLAN-19 V1.1: Personen-Liste für zwei Avatare in der Termin-Leiste.
     personen_rings = _personen_rings(ev.personen, registry)
+    icon = termin_icon(ev.titel, config)
     return {
         "time": uhrzeit,
         "label": strip_person_name(ev.titel, registry.alle()),
         "ring": ring,
         "person": ev.person,
         "personen": personen_rings,
-        "icon": termin_icon(ev.titel, config),
+        "icon": icon,
         "allday": ev.ganztags,
         "event_id": ev.id,
+        # PLAN-38 (#1875): Detail-Daten des Pop-ups — server-gerendert.
+        "detail": _termin_detail(ev, registry, icon),
     }
 
 

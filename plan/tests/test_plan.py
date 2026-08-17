@@ -54,23 +54,37 @@ def make_client(demo_config, demo_registry, transport, bot_token=None):
     return plan_main.app.test_client()
 
 
-def gcal_allday(eid, summary, start_iso, end_iso=None, creator=None):
-    """Ein ganztägiges Google-Roh-Event (date-Block)."""
+def gcal_allday(eid, summary, start_iso, end_iso=None, creator=None,
+                location=None, description=None):
+    """Ein ganztägiges Google-Roh-Event (date-Block).
+
+    `location`/`description` sind die Google-Felder hinter Ort und Notiz
+    (PLAN-17 V1.5, #1875) — sie liegen in der echten Antwort immer mit drin.
+    """
     ev = {"id": eid, "summary": summary, "start": {"date": start_iso}}
     if end_iso:
         ev["end"] = {"date": end_iso}
     if creator:
         ev["creator"] = {"email": creator}
+    if location is not None:
+        ev["location"] = location
+    if description is not None:
+        ev["description"] = description
     return ev
 
 
-def gcal_timed(eid, summary, start_dt, end_dt=None, creator=None):
+def gcal_timed(eid, summary, start_dt, end_dt=None, creator=None,
+               location=None, description=None):
     """Ein zeitgebundenes Google-Roh-Event (dateTime-Block)."""
     ev = {"id": eid, "summary": summary, "start": {"dateTime": start_dt}}
     if end_dt:
         ev["end"] = {"dateTime": end_dt}
     if creator:
         ev["creator"] = {"email": creator}
+    if location is not None:
+        ev["location"] = location
+    if description is not None:
+        ev["description"] = description
     return ev
 
 
@@ -942,6 +956,11 @@ def test_template_nutzt_server_termin_row(demo_config, demo_registry):
         "row": 4, "time": None, "label": "Gepackt", "icon": "3071",
         "ring": None, "person": None, "personen": [], "allday": True,
         "event_id": "srv1",
+        # PLAN-38 (#1875): jeder Termin-Eintrag traegt seinen server-
+        # gerenderten Detail-Block und dessen id.
+        "detail_id": 0,
+        "detail": {"titel": "Gepackt", "zeit": "Mo, 18.05. · ganztägig",
+                   "ort": "", "notiz": "", "personen": [], "icon": "3071"},
     }]
 
     plan_main.configure(demo_config, demo_registry, FakeTransport(),
@@ -956,6 +975,303 @@ def test_template_nutzt_server_termin_row(demo_config, demo_registry):
         "row=4 (render.py-Quelle) → grid-row: 5; ein Jinja-Recompute aus einer "
         "1-Element-Liste ergäbe grid-row 1 — Template rechnet die Zeile selbst?"
     )
+
+
+# ============================================================
+#  PLAN-38 — Termin-Detailansicht als Pop-up (#1875)
+#  (mit PLAN-17/PLAN-22 V1.5: Ort und Notiz; PLAN-13/QW4: Counter-Klick)
+# ============================================================
+
+_DETAIL_TEMPLATE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "templates", "plan_kinder.html")
+
+
+def _detail_js_block():
+    """Der JS-Block der Detailansicht aus dem Template — als Text.
+
+    Für die Nachweise „lädt nicht nach" (PLAN-38 Datenquelle) und „schließt
+    nur aktiv" (Nic-Setzung): beides sind Aussagen über ABWESENDEN Code, die
+    sich am gerenderten HTML allein nicht belegen lassen.
+    """
+    with open(_DETAIL_TEMPLATE, encoding="utf-8") as fh:
+        quelle = fh.read()
+    marke = "// ─── Termin-Detailansicht (PLAN-38"
+    assert marke in quelle, "JS-Block der Detailansicht nicht gefunden"
+    return quelle[quelle.index(marke):]
+
+
+def _woche_html(demo_config, demo_registry, raw, tag):
+    """Rendert /display/plan/woche mit den Roh-Events und liefert das HTML."""
+    client = make_client(demo_config, demo_registry, FakeTransport(raw),
+                         bot_token=_AUTH_TEST_BOT_TOKEN)
+    _auth_cookie_setzen(client)
+    r = client.get("/display/plan/woche?ab=%s" % tag.isoformat())
+    assert r.status_code == 200
+    return r.data.decode("utf-8")
+
+
+def test_normalise_reicht_ort_und_notiz_durch():
+    """PLAN-17 V1.5 (#1875), Stufe 1 der Kette: `location`/`description` liegen
+    bereits im Roh-Item — `list_events` setzt KEINEN `fields`-Parameter, Google
+    liefert die volle Repräsentation. Bisher hat `_normalise` sie nur verworfen.
+    Fehlt ein Feld, ist der Wert "" (nicht None) — die Ansicht prüft den
+    Leerfall per Wahrheitswert."""
+    raw = [
+        gcal_timed("mit", "Flug", "2026-08-18T15:50:00+02:00",
+                   "2026-08-18T18:25:00+02:00",
+                   location="Flughafen Südstadt", description="Buchung XY_123"),
+        gcal_allday("ohne", "Biotonne", "2026-08-18", "2026-08-19"),
+    ]
+    kal = kalender_mod.Kalender(FakeTransport(raw), [])
+    events = {e.id: e for e in kal.events(date(2026, 8, 17), 7)}
+    assert events["mit"].ort == "Flughafen Südstadt"
+    assert events["mit"].notiz == "Buchung XY_123"
+    assert events["ohne"].ort == "", "fehlendes location muss \"\" sein, nicht None"
+    assert events["ohne"].notiz == ""
+    # Kein zusätzlicher Netz-Zugriff: genau EIN list-Call, kein fields-Parameter.
+    assert kal._transport.calls == [("list", "2026-08-17T00:00:00Z",
+                                     "2026-08-24T00:00:00Z")]
+
+
+def test_termine_api_reicht_ort_und_notiz_durch(demo_config, demo_registry):
+    """PLAN-22 V1.5 (#1875), Stufe 2 der Kette: die Termin-Schnittstelle
+    serialisiert Ort und Notiz mit."""
+    raw = [gcal_timed("e1", "Flug", "2026-08-18T15:50:00+02:00",
+                      "2026-08-18T18:25:00+02:00",
+                      location="Flughafen Südstadt", description="Buchung XY_123")]
+    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r = client.get("/api/v1/plan/termine?ab=2026-08-17&tage=7")
+    assert r.status_code == 200
+    eintrag = r.get_json()[0]
+    assert eintrag["ort"] == "Flughafen Südstadt"
+    assert eintrag["notiz"] == "Buchung XY_123"
+
+
+def test_detail_zeit_ganztags_ende_ist_exklusiv():
+    """PLAN-29/PLAN-38: Google liefert das Ganztags-Ende EXKLUSIV. Der
+    angezeigte letzte Tag ist `ende - 1 Tag` — start 18.08./end 19.08. ist ein
+    EINTÄGIGER Termin am 18.08., keine Spanne bis zum 19."""
+    eintaegig = kalender_mod.Event(
+        id="a", titel="Biotonne", beginn=date(2026, 8, 18),
+        ende=date(2026, 8, 19), ganztags=True)
+    assert render_mod._detail_zeit(eintaegig) == "Di, 18.08. · ganztägig"
+
+    mehrtaegig = kalender_mod.Event(
+        id="b", titel="Sommerreise", beginn=date(2026, 8, 1),
+        ende=date(2026, 8, 19), ganztags=True)
+    assert render_mod._detail_zeit(mehrtaegig) == (
+        "Sa, 01.08. – Di, 18.08. · ganztägig"), (
+        "letzter angezeigter Tag muss ende-1 sein (Google-Ende exklusiv)")
+
+
+def test_detail_zeit_wochentage_deutsch():
+    """PLAN-29/PLAN-38: Wochentage DEUTSCH. `strftime('%a')` hängt an der
+    Locale des Dienst-Prozesses und liefert dort `Tue` — genau das ist im
+    Werft-Mockup passiert und erst im Screenshot aufgefallen."""
+    ev = kalender_mod.Event(
+        id="a", titel="Flug", beginn=datetime(2026, 8, 18, 15, 50),
+        ende=datetime(2026, 8, 18, 18, 25), ganztags=False)
+    zeit = render_mod._detail_zeit(ev)
+    assert zeit == "Di, 18.08. · 15:50 – 18:25 Uhr"
+    for englisch in ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"):
+        assert englisch not in zeit, "englischer Wochentag %r in %r" % (englisch, zeit)
+
+
+def test_ort_und_notiz_kommen_bis_in_die_ansicht_durch(demo_config, demo_registry):
+    """AC4/PLAN-38: die GANZE Kette — Roh-Item → Event → View-Modell → HTML.
+    Ort und Notiz stehen im gerenderten Dokument, mit ihren Piktogrammen
+    (ARASAAC 24161 Landkarte, 10312 Zettel mit Stift)."""
+    heute = date(2026, 8, 17)  # Mo
+    raw = [gcal_timed("e1", "Flug nach Nordstadt", "2026-08-18T15:50:00+02:00",
+                      "2026-08-18T18:25:00+02:00",
+                      location="Flughafen Südstadt",
+                      description="Buchungsnummer XY_DEMO123")]
+
+    # Stufe 3: View-Modell trägt die Detail-Daten mit.
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    termin = view["appointments"]["2026-08-18"][0]
+    assert termin["detail"]["ort"] == "Flughafen Südstadt"
+    assert termin["detail"]["notiz"] == "Buchungsnummer XY_DEMO123"
+    assert termin["detail"]["zeit"] == "Di, 18.08. · 15:50 – 18:25 Uhr"
+
+    # Stufe 4: HTML.
+    html = _woche_html(demo_config, demo_registry, raw, heute)
+    assert "Flughafen Südstadt" in html, "Ort fehlt im gerenderten Dokument"
+    assert "Buchungsnummer XY_DEMO123" in html, "Notiz fehlt im gerenderten Dokument"
+    assert "/display/_shared/icons/arasaac/24161.png" in html, "Ort-Piktogramm fehlt"
+    assert "/display/_shared/icons/arasaac/10312.png" in html, "Notiz-Piktogramm fehlt"
+    assert 'data-detail="%d"' % termin["detail_id"] in html, (
+        "Termin-Pille verweist nicht auf ihren Detail-Block")
+
+
+def test_detail_zeigt_titel_ungekuerzt_obwohl_kachel_kuerzt(demo_config, demo_registry):
+    """PLAN-38 Punkt 1: die Kachel streicht den Personen-Namen heraus (PLAN-24,
+    das Foto im Ring trägt die Identität) — das Pop-up zeigt den VOLLEN
+    Kalender-Titel. Beide Formen stehen deshalb im Dokument."""
+    heute = date(2026, 8, 17)
+    raw = [gcal_timed("e1", "Schwimmkurs Mia", "2026-08-18T15:00:00+02:00",
+                      "2026-08-18T16:00:00+02:00")]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    termin = view["appointments"]["2026-08-18"][0]
+    assert termin["label"] == "Schwimmkurs", "Kachel-Label muss gestrippt sein"
+    assert termin["detail"]["titel"] == "Schwimmkurs Mia", (
+        "Detail-Titel muss der volle Kalender-Titel sein")
+    # PLAN-38 Punkt 5: Personen mit NAMEN, in größerer Stufe als auf der Kachel.
+    assert [p["name"] for p in termin["detail"]["personen"]] == ["Mia"]
+    html = _woche_html(demo_config, demo_registry, raw, heute)
+    assert "Schwimmkurs Mia" in html
+    assert "size-54" in html, "Personen im Detail müssen die größere Stufe tragen"
+
+
+def test_leerfall_wird_ausdruecklich_gesagt(demo_config, demo_registry):
+    """PLAN-38: trägt ein Termin weder Ort noch Notiz, sagt das Pop-up das
+    AUSDRÜCKLICH statt eine leere Fläche zu zeigen. Das ist der Regelfall
+    (Live-Probe: 4 Orte, 1 Notiz auf 13 Termine)."""
+    heute = date(2026, 8, 17)
+    raw = [gcal_allday("e1", "Nachbar hat Geburtstag", "2026-08-18", "2026-08-19")]
+    html = _woche_html(demo_config, demo_registry, raw, heute)
+    assert "Kein Ort, keine Notiz hinterlegt." in html
+
+
+def test_counter_ist_antippbar_und_macht_verdeckte_termine_sichtbar(
+        demo_config, demo_registry):
+    """AC3/PLAN-38 (löst QW4 ein): der `+M weitere`-Counter bekommt einen
+    Klick-Pfad. Bei MEHREREN verdeckten Terminen öffnet er die Tages-Liste;
+    die verdeckten Termine samt Detail stehen dafür MIT im Dokument — ohne
+    diesen Pfad bliebe der einzige Termin der Probe-Woche mit echtem
+    Detail-Inhalt unerreichbar (PLAN-13-Befund)."""
+    heute = date(2026, 8, 17)  # Mo
+    # 7 Termine an EINEM Tag; die 7-Slot-Config zeigt 5 Zeilen → 2 verdeckt.
+    raw = [gcal_timed("e%d" % i, "Termin %d" % i,
+                      "2026-08-18T%02d:00:00+02:00" % (8 + i),
+                      "2026-08-18T%02d:30:00+02:00" % (8 + i),
+                      description=("VERDECKTER-HINWEIS-%d" % i) if i >= 5 else None)
+           for i in range(7)]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    assert view["appointment_overflow"]["2026-08-18"] == 2
+    verdeckt = view["appointment_hidden"]["2026-08-18"]
+    assert [a["label"] for a in verdeckt] == ["Termin 5", "Termin 6"], (
+        "die verdeckten Termine müssen erhalten bleiben, nicht verworfen werden")
+
+    html = _woche_html(demo_config, demo_registry, raw, heute)
+    assert 'data-liste="2026-08-18"' in html, "Counter ist nicht antippbar"
+    assert 'id="d-tag-2026-08-18"' in html, "Tages-Liste des Counters fehlt"
+    assert html.count("d-liste-eintrag") >= 2, "Tages-Liste zeigt nicht beide Termine"
+    # Der Detail-Inhalt der VERDECKTEN Termine ist erreichbar (das war der Befund).
+    assert "VERDECKTER-HINWEIS-5" in html
+    assert "VERDECKTER-HINWEIS-6" in html
+    for a in verdeckt:
+        assert 'id="d-detail-%d"' % a["detail_id"] in html
+
+
+def test_counter_mit_genau_einem_verdeckten_termin_geht_direkt_ins_detail(
+        demo_config, demo_registry):
+    """PLAN-38: ist nur EIN Termin verdeckt, führt der Counter direkt in dessen
+    Detail — die Tages-Liste wäre eine Liste mit einem Eintrag. Der Kopf zeigt
+    dann das generische Termin-Icon (es gibt keine angetippte Kachel)."""
+    heute = date(2026, 8, 17)
+    raw = [gcal_timed("e%d" % i, "Termin %d" % i,
+                      "2026-08-18T%02d:00:00+02:00" % (8 + i),
+                      "2026-08-18T%02d:30:00+02:00" % (8 + i))
+           for i in range(6)]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    assert view["appointment_overflow"]["2026-08-18"] == 1
+    einziger = view["appointment_hidden"]["2026-08-18"][0]
+
+    html = _woche_html(demo_config, demo_registry, raw, heute)
+    assert 'data-detail="%d" data-generisch="1"' % einziger["detail_id"] in html
+    assert 'id="d-tag-2026-08-18"' not in html, (
+        "bei genau einem verdeckten Termin braucht es keine Tages-Liste")
+
+
+def test_mehrtages_spanne_ist_ebenfalls_antippbar(demo_config, demo_registry):
+    """PLAN-38: getippt wird auf eine Termin-Pille — Tages-Termin ODER
+    Mehrtages-Spanne (PLAN-14)."""
+    heute = date(2026, 8, 17)
+    raw = [gcal_allday("s1", "Sommerreise", "2026-08-18", "2026-08-21",
+                       location="Nordstadt")]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    span = view["span_appointments"][0]
+    assert span["detail"]["zeit"] == "Di, 18.08. – Do, 20.08. · ganztägig"
+    assert span["detail"]["ort"] == "Nordstadt"
+    html = _woche_html(demo_config, demo_registry, raw, heute)
+    assert 'data-detail="%d"' % span["detail_id"] in html
+
+
+def test_detailansicht_laedt_nicht_nach(demo_config, demo_registry):
+    """AC5/PLAN-38 „Datenquelle": die Detail-Daten kommen aus DEMSELBEN
+    Server-Render wie die Kacheln. Das Pop-up lädt nicht nach — sonst bräche es
+    genau dann, wenn der Kalender nicht erreichbar ist (PLAN-20), statt
+    denselben Stand wie die Kacheln darunter zu zeigen.
+
+    Nachweis in zwei Teilen: (a) der Inhalt steht schon im ersten Dokument,
+    (b) im JS-Block der Detailansicht gibt es keinen Netz-Aufruf."""
+    heute = date(2026, 8, 17)
+    raw = [gcal_timed("e1", "Flug", "2026-08-18T15:50:00+02:00",
+                      "2026-08-18T18:25:00+02:00",
+                      location="Flughafen Südstadt", description="Buchung XY_123")]
+    html = _woche_html(demo_config, demo_registry, raw, heute)
+    assert "Flughafen Südstadt" in html and "Buchung XY_123" in html, (
+        "Detail-Inhalt fehlt im ERSTEN Dokument — er würde nachgeladen")
+
+    js = _detail_js_block()
+    for netz in ("fetch(", "XMLHttpRequest", "EventSource", "location.reload"):
+        assert netz not in js, (
+            "Detail-JS enthält %r — das Pop-up darf NICHTS nachladen (AC5)" % netz)
+
+
+def test_detailansicht_schliesst_nur_aktiv():
+    """AC2/PLAN-38 (Nic-Setzung 2026-08-17): das Pop-up schließt sich NICHT von
+    selbst. Kein Zeitablauf, kein automatischer Rückfall in die Übersicht — die
+    gewohnte Ansicht kommt erst zurück, wenn jemand aktiv schließt.
+
+    Das ist eine Aussage über ABWESENDEN Code: im JS-Block der Detailansicht
+    darf kein Timer stehen."""
+    js = _detail_js_block()
+    for timer in ("setTimeout", "setInterval", "requestAnimationFrame",
+                  "requestIdleCallback"):
+        assert timer not in js, (
+            "Detail-JS enthält %r — das Pop-up darf nur AKTIV schließen (AC2)" % timer)
+    # Die drei aktiven Wege, und nur die.
+    assert "schliesseDetail" in js
+    assert "detailClose" in js, "X-Knopf schließt nicht"
+    assert "e.target === detailBackdrop" in js, "Hintergrund-Tipp schließt nicht"
+    assert "'Escape'" in js, "Escape schließt nicht"
+
+
+def test_detailansicht_verletzt_responsive_konvention_nicht():
+    """RESP-1 (conventions/responsive-views.md): eine Anzeigefläche trägt keine
+    feste px-Schriftgröße — jede `font-size` rechnet gegen einen Container.
+    Prüfbar als Zahl: Treffer von `font-size:` mit px-Literal ohne `clamp(`
+    müssen in der Datei NULL sein. Das neue Pop-up darf diese Zahl nicht
+    verschieben."""
+    import re
+    with open(_DETAIL_TEMPLATE, encoding="utf-8") as fh:
+        quelle = fh.read()
+    treffer = [z for z in quelle.splitlines()
+               if re.search(r"font-size:\s*\d", z) and "clamp(" not in z]
+    assert treffer == [], "feste px-Schriftgrößen (RESP-1): %r" % treffer
 
 
 def test_n_sichtbar_reserviert_counter_kein_clip():

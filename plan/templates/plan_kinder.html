@@ -403,6 +403,8 @@
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
+    /* PLAN-38 (#1875): jede Termin-Pille öffnet ihre Detailansicht. */
+    cursor: pointer;
   }
   .pill.muted {
     background: var(--kids-weekend-bg);
@@ -424,9 +426,9 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
-  /* PLAN-13 V1.3 (Termin-Überschuss): gedimmter Counter unter den sichtbaren
-     Pillen einer Tagesspalte — reine Sichtbarkeits-Mechanik OHNE Klick-Pfad
-     (Tages-Overlay ist Folge-Ticket QW4). */
+  /* PLAN-13 (Termin-Überschuss): gedimmter Counter unter den sichtbaren
+     Pillen einer Tagesspalte. V1.5 (#1875, PLAN-38): er hat jetzt einen
+     Klick-Pfad — QW4 eingelöst. */
   /* T1907: font-size war hart 14px — Kappe bleibt. */
   .appts-more {
     font-family: var(--kids-font-display);
@@ -435,6 +437,7 @@
     opacity: 0.6;
     padding: 1px 8px;
     line-height: 1;
+    cursor: pointer;
   }
 
   /* Löschen-Icon (UI-Control, kein ARASAAC) */
@@ -570,6 +573,141 @@
     font-size: clamp(12px, 0.9376cqi, 18px); color: var(--kids-ink); line-height: 1;
     margin-top: 3px;
   }
+
+  /* ═══ Termin-Detailansicht (PLAN-38, #1875) ═══════════════════════
+     Form: Gate-B-Variante C (specs/mockups/plan-termin-detail/
+     gewaehlt-c-mit-counter.html) — abgesetzter Kopf mit dem Piktogramm der
+     angetippten Kachel, darunter Titel und Zeit; im Rumpf Ort, Notiz,
+     Personen.
+
+     DRITTER Container-Anker, nach demselben Muster wie .picker-backdrop
+     (RESP-4): er sitzt AUF dem fixierten Element, nicht darüber. Ein
+     Container über einem `position: fixed`-Nachfahren würde dessen
+     umschließenden Block verschieben — deshalb steht `container-type` hier
+     und NICHT auf .page/body, und die Karte darin ist `position: absolute`
+     (wie `.picker` im Picker-Overlay), nicht `fixed`.
+     `inline-size`, nicht `size` (RESP-3): die Höhe kommt aus `inset: 0`.
+
+     Gemessene Inhalts-Breite bei 1920×1080: 1920px (fixed + inset:0, kein
+     Padding — CDP-Messung 2026-08-17, identisch zu .picker-backdrop).
+     Grenzwert-Regel (RESP-1/2): `clamp(Boden, Kappe/19.20 in cqi, Kappe)`;
+     die Kappen sind die px-Werte der gewählten Mockup-Form, die Böden liegen
+     bei ~63 % der Kappe — wie in den beiden anderen Ankern dieser Datei. */
+  .detail-backdrop {
+    position: fixed; inset: 0; z-index: 120;
+    background: rgba(20, 16, 10, 0.55);
+    display: none;
+    container-type: inline-size;
+    container-name: plan-detail;
+  }
+  .detail-backdrop.open { display: block; }
+
+  /* Scrollt der RUMPF und nicht die Karte: eine lange Kalender-Notiz (die
+     Live-Probe fand eine mit 367 Zeichen) darf den Schließen-Knopf nicht
+     nach oben aus dem Bild schieben. Ein `position: absolute`-Kind eines
+     scrollenden Elements scrollt MIT — das X wäre bei langer Notiz weg, und
+     genau das X ist Nics gesetztes Schließ-Element. Deshalb: Karte selbst
+     ohne Scroll (flex-Spalte), Kopf fix, Rumpf scrollt. */
+  .detail-card {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: min(660px, 82vw); max-height: 78vh; overflow: hidden;
+    display: flex; flex-direction: column;
+    background: var(--kids-paper);
+    border: 4px solid var(--kids-ink);
+    border-radius: 26px;
+    box-shadow: 0 14px 0 rgba(0, 0, 0, 0.16);
+  }
+  #detailInhalt {
+    display: flex; flex-direction: column;
+    min-height: 0; flex: 1 1 auto;
+  }
+
+  /* Das gesetzte Schließ-Element (PLAN-38): dickes X oben rechts mit
+     großzügiger Tippfläche (::after erweitert sie über den Knopf hinaus). */
+  .detail-close {
+    position: absolute; top: 14px; right: 14px;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 3px solid var(--kids-ink); background: var(--kids-paper);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0; line-height: 0;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+    z-index: 1;
+  }
+  .detail-close::after { content: ""; position: absolute; inset: -10px; }
+
+  .detail-kopf {
+    display: flex; gap: 18px; align-items: center;
+    padding: 26px 34px 22px;
+    border-bottom: 3px dashed var(--kids-border-soft);
+    background: var(--kids-bg);
+    border-radius: 22px 22px 0 0;
+    flex: none;
+  }
+  .detail-kopf > img { flex: none; }
+  .detail-rumpf {
+    padding: 22px 34px 32px;
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  }
+
+  /* Kappe 36px (Mockup-Form). */
+  .d-titel {
+    font-family: var(--kids-font-display); font-weight: 700;
+    font-size: clamp(23px, 1.8750cqi, 36px);
+    line-height: 1.15; color: var(--kids-ink);
+    margin: 0 60px 6px 0;   /* Platz für den Schließen-Knopf */
+  }
+  /* Kappe 26px. */
+  .d-zeit {
+    font-size: clamp(16px, 1.3542cqi, 26px); font-weight: 700;
+    color: var(--kids-ink); opacity: 0.8;
+  }
+  .d-zeile { display: flex; gap: 12px; align-items: flex-start; margin-top: 14px; }
+  .d-zeile > img { flex: none; margin-top: 2px; }
+  /* Kappe 24px. */
+  .d-wert {
+    font-size: clamp(15px, 1.2500cqi, 24px); line-height: 1.35;
+    color: var(--kids-ink); min-width: 0;
+  }
+  /* Freier Kalender-Text: Zeilenumbrüche erhalten, lange Links brechen um. */
+  .d-notiz { white-space: pre-wrap; word-break: break-word; }
+  /* Kappe 21px. */
+  .d-leer {
+    font-size: clamp(13px, 1.0938cqi, 21px); opacity: 0.5;
+    font-style: italic; margin-top: 12px; color: var(--kids-ink);
+  }
+  .d-personen { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 20px; }
+  /* Kappe 22px. */
+  .d-person {
+    display: flex; gap: 8px; align-items: center;
+    font-size: clamp(14px, 1.1459cqi, 22px); font-weight: 700;
+    color: var(--kids-ink);
+  }
+
+  /* Tages-Liste hinter dem `+M weitere`-Counter (PLAN-38, löst QW4 ein). */
+  .d-liste { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .d-liste-eintrag {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 10px 14px; cursor: pointer; text-align: left;
+    background: var(--kids-bg);
+    border: 2.5px solid var(--kids-ink); border-radius: 14px;
+    box-shadow: 2px 3px 0 var(--kids-ink);
+    font-family: inherit; color: var(--kids-ink);
+  }
+  .d-liste-body { min-width: 0; flex: 1; }
+  /* Kappe 20px. */
+  .d-liste-zeit {
+    font-size: clamp(13px, 1.0417cqi, 20px); font-weight: 700;
+    color: var(--kids-ink-soft); line-height: 1.1;
+  }
+  /* Kappe 24px. */
+  .d-liste-label {
+    font-family: var(--kids-font-display); font-weight: 700;
+    font-size: clamp(15px, 1.2500cqi, 24px); line-height: 1.15;
+  }
+
+  /* Die server-gerenderten Detail-Blöcke selbst sind nie sichtbar — JS hebt
+     den passenden in die Karte. Kein Nachladen (PLAN-38 „Datenquelle"). */
+  #detailQuellen { display: none; }
 </style>
 </head>
 <body>
@@ -598,6 +736,52 @@
 {% macro face(ring, photo_url, size_class='size-76') %}
 <div class="face {{size_class}} ring-{{ring or 'gray'}}">
   {% if photo_url %}<img src="{{photo_url}}" alt="">{% endif %}
+</div>
+{% endmacro %}
+
+{# Macro: ein server-gerenderter Detail-Block (PLAN-38, #1875).
+   `t` ist ein Termin-Eintrag (Tages-Termin ODER Mehrtages-Spanne) mit
+   `detail_id` und `detail` aus render.py. Die Blöcke liegen versteckt im
+   Dokument; JS hebt den passenden in die Karte — es wird NICHTS nachgeladen
+   (PLAN-38 „Datenquelle"), das Pop-up zeigt denselben Stand wie die Kacheln
+   darunter, auch wenn der Kalender gerade nicht erreichbar ist (PLAN-20).
+   `fotos` wird explizit durchgereicht (person_photo_url). #}
+{% macro detail_block(t, fotos) %}
+<div id="d-detail-{{ t.detail_id }}">
+  <div class="detail-kopf">
+    {# Piktogramm der angetippten Kachel — stellt den Bezug her (Variante C). #}
+    {{ arasaac_img(t.detail.icon, 62) }}
+    <div>
+      {# Titel UNGEKÜRZT: die Kachel streicht den Personen-Namen (PLAN-24),
+         das Pop-up nicht (PLAN-38 Punkt 1). #}
+      <div class="d-titel">{{ t.detail.titel }}</div>
+      <div class="d-zeit">{{ t.detail.zeit }}</div>
+    </div>
+  </div>
+  <div class="detail-rumpf">
+    {# Ort und Notiz entfallen ERSATZLOS, wenn leer (PLAN-38 Punkte 3/4).
+       ARASAAC 24161 = Landkarte (Ort), 10312 = Zettel mit Stift (Notiz). #}
+    {% if t.detail.ort %}
+      <div class="d-zeile">{{ arasaac_img('24161', 34) }}<div class="d-wert">{{ t.detail.ort }}</div></div>
+    {% endif %}
+    {% if t.detail.notiz %}
+      <div class="d-zeile">{{ arasaac_img('10312', 34) }}<div class="d-wert d-notiz">{{ t.detail.notiz }}</div></div>
+    {% endif %}
+    {% if not t.detail.ort and not t.detail.notiz %}
+      {# Der Leerfall wird AUSDRÜCKLICH gesagt statt als leere Fläche gezeigt —
+         er ist der Regelfall (Live-Probe: 4 Orte, 1 Notiz auf 13 Termine). #}
+      <div class="d-leer">Kein Ort, keine Notiz hinterlegt.</div>
+    {% endif %}
+    {% if t.detail.personen %}
+      {# Personen als Foto-im-Ring MIT Namen, größere Stufe als auf der
+         Kachel (size-54 statt size-24) — PLAN-38 Punkt 5, PLAN-19/FAM-4. #}
+      <div class="d-personen">
+        {% for pr in t.detail.personen %}
+          <div class="d-person">{{ face(pr.ring, fotos.get(pr.person), 'size-54') }}<span>{{ pr.name }}</span></div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
 </div>
 {% endmacro %}
 
@@ -721,7 +905,10 @@
               {% for a in appointments[d.iso] %}
                 {# grid-row = gepackte 0-basierte Zeile + 1 (freie Zelle von oben,
                    inkl. Lane-Löcher — Regel i/ii). #}
-                <div class="pill" style="grid-row: {{ a.row + 1 }};">
+                {# PLAN-38 (#1875): `data-detail` verweist auf den versteckten,
+                   server-gerenderten Detail-Block weiter unten. #}
+                <div class="pill" style="grid-row: {{ a.row + 1 }};"
+                     data-detail="{{ a.detail_id }}">
                   {{ arasaac_img(a.icon, 22) }}
                   <div class="pill-body">
                     {% if a.time %}<div class="pill-time">{{ a.time }}</div>{% endif %}
@@ -740,16 +927,22 @@
                   {% endif %}
                 </div>
               {% endfor %}
-              {# PLAN-14-PACKING (#1146): Termin-Überschuss — gedimmter Counter,
-                 kein Klick. Sitzt in der Zeile UNTER der letzten belegten Zelle.
+              {# PLAN-14-PACKING (#1146): Termin-Überschuss — gedimmter Counter.
+                 Sitzt in der Zeile UNTER der letzten belegten Zelle.
                  Überschuss tritt nur auf, wenn alle freien Zellen voll sind →
                  die höchste belegte `row` ist die letzte, +2 = die Zeile danach
                  (bündig unten). Abgeleitet aus den platzierten `row`-Werten —
-                 keine Geometrie-Neuberechnung im Template. #}
+                 keine Geometrie-Neuberechnung im Template.
+                 PLAN-38 (#1875, QW4): der Counter ist jetzt antippbar. Genau
+                 ein verdeckter Termin → direkt sein Detail; mehrere → die
+                 Tages-Liste, aus der ein Tipp ins Detail führt. #}
               {% set overflow = appointment_overflow.get(d.iso, 0) %}
+              {% set verdeckt = appointment_hidden.get(d.iso, []) %}
               {% if overflow > 0 %}
                 {% set letzte_zeile = appointments[d.iso] | map(attribute='row') | max | default(-1) %}
-                <div class="appts-more" style="grid-row: {{ letzte_zeile + 2 }};">+{{ overflow }} weitere</div>
+                <div class="appts-more" style="grid-row: {{ letzte_zeile + 2 }};"
+                     {% if verdeckt | length == 1 %}data-detail="{{ verdeckt[0].detail_id }}" data-generisch="1"{% else %}data-liste="{{ d.iso }}"{% endif %}
+                     role="button" tabindex="0">+{{ overflow }} weitere</div>
               {% endif %}
             </div>
           {% endfor %}
@@ -761,8 +954,10 @@
               {# #1092 S5: grid-column = berührte Spalten (durchgehender Balken),
                  grid-row = gepackte Lane (nicht-überlappende Spans teilen sich
                  eine Lane). #}
+              {# PLAN-38 (#1875): auch eine Mehrtages-Spanne ist antippbar. #}
               <div class="pill span"
-                   style="grid-column: {{ s.start_day + 1 }} / {{ s.end_day + 2 }}; grid-row: {{ s.lane + 1 }};">
+                   style="grid-column: {{ s.start_day + 1 }} / {{ s.end_day + 2 }}; grid-row: {{ s.lane + 1 }};"
+                   data-detail="{{ s.detail_id }}">
                 {{ arasaac_img(s.icon, 22) }}
                 <div class="pill-body">
                   <div class="pill-label">{{ s.label }}</div>
@@ -811,6 +1006,67 @@
     </div>
   </div>
 </div>
+
+{% if show_appointments %}
+{# ─── Termin-Detailansicht (PLAN-38, #1875) ───────────────────────────
+   Wie der Event-Picker ein direktes body-Kind: die Overlay-Schicht ist
+   `position: fixed` und trägt ihren Container-Anker SELBST (RESP-4) — sie
+   darf nicht unter `.frame` liegen, dessen Container sie sonst aus dem
+   Viewport-Bezug reißen würde. #}
+<div class="detail-backdrop" id="detailBackdrop">
+  <div class="detail-card" id="detailCard" role="dialog" aria-modal="true" aria-label="Termin-Details">
+    {# Das gesetzte Schließ-Element (PLAN-38): dickes X oben rechts. #}
+    <button class="detail-close" id="detailClose" type="button" aria-label="Schließen">
+      {{ icon_x_close(30) }}
+    </button>
+    <div id="detailInhalt"></div>
+  </div>
+</div>
+
+{# Alle Detail-Blöcke — server-gerendert, versteckt, KEIN Nachladen (AC5). #}
+<div id="detailQuellen">
+  {# Generisches Termin-Piktogramm: Kopf-Ikon, wenn das Pop-up über den
+     Counter geöffnet wird (PLAN-38 Form-Absatz). Eine Icon-Quelle: das
+     arasaac_img-Makro, kein zweiter hartcodierter Pfad im JS. #}
+  <span id="detailIkonGenerisch">{{ arasaac_img('3071', 62) }}</span>
+
+  {% for s in span_appointments %}{{ detail_block(s, person_photo_url) }}{% endfor %}
+  {% for d in days %}
+    {% for a in appointments[d.iso] %}{{ detail_block(a, person_photo_url) }}{% endfor %}
+    {% for a in appointment_hidden.get(d.iso, []) %}{{ detail_block(a, person_photo_url) }}{% endfor %}
+
+    {# Tages-Liste hinter `+M weitere`, sobald MEHR als ein Termin verdeckt
+       ist (bei genau einem springt der Counter direkt ins Detail). #}
+    {% if appointment_hidden.get(d.iso, []) | length > 1 %}
+      <div id="d-tag-{{ d.iso }}">
+        <div class="detail-kopf">
+          {{ arasaac_img('3071', 62) }}
+          <div>
+            <div class="d-titel">Weitere Termine</div>
+            <div class="d-zeit">{{ d.weekday }}, {{ d.date_short }}</div>
+          </div>
+        </div>
+        <div class="detail-rumpf">
+          <div class="d-liste">
+            {% for a in appointment_hidden.get(d.iso, []) %}
+              <button class="d-liste-eintrag" type="button" data-detail="{{ a.detail_id }}">
+                {{ arasaac_img(a.icon, 34) }}
+                <div class="d-liste-body">
+                  {% if a.time %}<div class="d-liste-zeit">{{ a.time }}</div>{% endif %}
+                  <div class="d-liste-label">{{ a.label }}</div>
+                </div>
+                {% if a.personen %}
+                  {% for pr in a.personen %}{{ face(pr.ring, person_photo_url.get(pr.person), 'size-24') }}{% endfor %}
+                {% endif %}
+              </button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
 
 <script>
 // PLAN-7 V1.3 (Toggle-All, RAT-4-Auflösung 2026-06-22): der Cycle iteriert
@@ -949,6 +1205,75 @@ picker.addEventListener('click', async (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && pickerBackdrop.classList.contains('open')) closePicker();
 });
+
+// ─── Termin-Detailansicht (PLAN-38, #1875) ───
+// Die Detail-Daten stehen bereits im Dokument (#detailQuellen, server-
+// gerendert). Es wird NICHTS nachgeladen: kein fetch, kein XHR — deshalb
+// zeigt das Pop-up denselben Stand wie die Kacheln darunter, auch wenn der
+// Kalender gerade nicht erreichbar ist (PLAN-20).
+//
+// Das Pop-up schliesst AUSSCHLIESSLICH aktiv (Nic-Setzung 2026-08-17):
+// X-Knopf, Hintergrund-Tipp, Escape. Es gibt hier bewusst KEINEN Timer —
+// weder verzoegert noch periodisch — und keinen automatischen Rueckfall in
+// die Uebersicht. Ein Test in plan/tests/test_plan.py haelt das fest.
+const detailBackdrop = document.getElementById('detailBackdrop');
+if (detailBackdrop) {
+  const detailCard    = document.getElementById('detailCard');
+  const detailInhalt  = document.getElementById('detailInhalt');
+  const ikonGenerisch = document.querySelector('#detailIkonGenerisch img');
+
+  function zeigeDetail(quelle, generisch) {
+    if (!quelle) return;
+    detailInhalt.innerHTML = quelle.innerHTML;
+    // Ueber den Counter geoeffnet zeigt der Kopf das generische Termin-Icon
+    // (PLAN-38 Form-Absatz) — es gibt keine angetippte Kachel, auf die sich
+    // ein spezifisches Piktogramm beziehen koennte.
+    if (generisch && ikonGenerisch) {
+      const kopfIkon = detailInhalt.querySelector('.detail-kopf img');
+      if (kopfIkon) kopfIkon.setAttribute('src', ikonGenerisch.getAttribute('src'));
+    }
+    detailBackdrop.classList.add('open');
+    detailCard.scrollTop = 0;
+  }
+
+  function oeffneDetail(id, generisch) {
+    zeigeDetail(document.getElementById('d-detail-' + id), generisch);
+  }
+
+  function schliesseDetail() {
+    detailBackdrop.classList.remove('open');
+    detailInhalt.innerHTML = '';
+  }
+
+  document.addEventListener('click', (e) => {
+    // Eintrag der Tages-Liste → dessen Detail (Counter-Pfad, PLAN-38).
+    const eintrag = e.target.closest('.d-liste-eintrag');
+    if (eintrag) { oeffneDetail(eintrag.dataset.detail, false); return; }
+
+    // Termin-Pille (Tages-Termin ODER Mehrtages-Spanne) → ihr Detail.
+    const pille = e.target.closest('.pill[data-detail]');
+    if (pille) { oeffneDetail(pille.dataset.detail, false); return; }
+
+    // `+M weitere` → genau ein verdeckter Termin: direkt sein Detail;
+    // mehrere: die Tages-Liste (QW4, PLAN-38).
+    const counter = e.target.closest('.appts-more');
+    if (counter) {
+      if (counter.dataset.detail) {
+        oeffneDetail(counter.dataset.detail, counter.dataset.generisch === '1');
+      } else if (counter.dataset.liste) {
+        zeigeDetail(document.getElementById('d-tag-' + counter.dataset.liste), false);
+      }
+    }
+  });
+
+  document.getElementById('detailClose').addEventListener('click', schliesseDetail);
+  detailBackdrop.addEventListener('click', (e) => {
+    if (e.target === detailBackdrop) schliesseDetail();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && detailBackdrop.classList.contains('open')) schliesseDetail();
+  });
+}
 </script>
 
 </body>
