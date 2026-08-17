@@ -152,3 +152,76 @@ ersetzt **NICHT** Ein-Pi-pro-Familie (`apps.md:90` /
 `brainstorm/berater-runde/20260731-0100-RATIFIZIERT-config-separation-weg-c.md`
 (Nic „ja b", Antiberater-geprüft: C3 gebrochen, C2 gestärkt, C4-Anker gefixt).
 Tickets: #1656 (Weg-C-Fundament), Part of #1309.
+
+---
+
+## Nachtrag 2026-07-31 — #1314 „Config-Parametrierung" geschlossen, weil Weg C ihn erledigt hat
+
+Nic hatte #1314 am selben Tag neu gefasst: *„Repo parametriert, Daten in Config statt
+Code, für die zweite Familie adaptierbar"* — bewusst als **generischer
+Config-Mechanismus** gelesen, mit ausdrücklichem Reopen von RAT-6 unter dem Trigger
+„public / Familie 2".
+
+Die Vorprüfung verdiktete **NOT-READY** und kam nicht mit einem Vorschlag zurück,
+sondern mit einem Befund: **der Kern des Anlasses war an diesem Tag bereits
+ratifiziert und gebaut.** Eine zweite Runde hätte das Weg-C-Amendment oben
+re-litigiert.
+
+Der Anlass zerfiel bei genauem Hinsehen in drei Achsen mit sehr verschiedenem
+Reifegrad:
+
+| Achse | Befund |
+|---|---|
+| (a) Instanz-Config-Separation | **erledigt** — genau das Weg-C-Amendment oben, `instanzen-config.md` INST-1..6 gebaut, Konsumenten lesen live, Live-Config nicht getrackt |
+| (b) handverdrahtete Origins/Ports in Config heben | **kollidiert** mit RAT-17 Pkt.2 / INST-3 — „erzeugtes Routing" ist verworfen. Wäre Re-Litigation eines ratifizierten Werts, kein neuer Call |
+| (c) RAT-6 generischer Config-**Skill** (Familie pflegt Werte im Chat statt per Datei-Edit) | der einzige echt offene RAT-6-Teil — aber ein Skill-/Validator-Thema, nicht Config-Separation. Braucht Vorleistungen, die nicht existieren |
+
+**Nic-Landung 2026-07-31: schließen.** #1314 wurde reconciled geschlossen, weil sein
+Kern am selben Tag gebaut worden war. Der Rest (Beispiel-Daten mit Klarnamen,
+IP-Links) ging in einen allgemeinen Aufräum-Hunt, nicht in eine Architektur-Runde.
+
+**Reopen-Trigger:** ein Nic-Re-Scope auf **(b)** oder **(c)**. Achse (a) ist zu.
+
+**Evidenz:**
+`brainstorm/berater-runde/20260731-154452-RATIFIZIERT-ENTSCHEID-1314-config-parametrierung.md`.
+
+---
+
+## Fußnote 2026-08-01 — der Mirror-Weg (#1170) ist überholt, nicht gültig
+
+Am 2026-07-30 wurde ein eigener Weg zum öffentlichen Repo ratifiziert: ein
+**Orphan-Squash-Snapshot** (history-los, ein Init-Commit) plus ein deterministisches
+Transform-Skript, das die privaten Werte gegen eine aus den Registries abgeleitete
+Namens-Karte ersetzt, mit einem dreifachen Verifikations-Gate als harter
+Push-Vorbedingung. Die Runde war sorgfältig und ihre Härtungen waren real
+(Ein-Wege-Tür erkannt, Scan-Gates vor jedem Push, Slug-Kollisionen gefunden).
+
+**Dieser Weg ist nicht mehr gültig.** Er wird hier als Fußnote geführt und **nicht**
+als eigener Record, weil ein öffentlich als gültig geführter Beschluss zu einem
+verworfenen Weg irreführend wäre.
+
+Die Ablösung lief in zwei Stufen:
+
+1. **Teil-Ablösung 2026-07-31 durch Weg C** (das Amendment oben). Der Baustein
+   „Transform-Skript mit Klarnamen-Karte" schrumpfte auf einen dünnen
+   Slug-Rename, weil Weg C die Klarnamen ohnehin per Config aus dem getrackten Code
+   zieht. Damit war die Hauptrechtfertigung des Transform-Skripts weg.
+2. **Vollständige Ablösung 2026-08-01 durch die In-place-Setzung.** Nic setzte, dass
+   der Weg nach „public" **kein Mirror und kein Snapshot** ist, sondern der Umbau
+   **des bestehenden Repos zur Vorlage**: alles Private wandert in git-ignorierte
+   Config, der getrackte Code *ist* die generische Vorlage. Eine zweite Familie
+   editiert Config und forkt keinen Code.
+
+**Beleg im Repo:** `tools/mirror/build_public_mirror.sh` und der Namens-Karten-
+Generator wurden am 2026-08-01 gelöscht — im selben Commit, der den In-place-Scrub
+auf die Demo-Familie durchführte (`e25a4ca9`, Closes #1719). Der Mirror-Weg hat also
+nicht nur keinen Rückhalt mehr, er hat auch kein Artefakt mehr.
+
+**Was aus der Runde überlebt hat**, gehört zur Ehrlichkeit: das Verständnis, dass
+History, getrackter Baum, Branches und Issue-Text vier getrennte Kanäle sind und
+jeder einzeln geprüft werden muss. Der spätere In-place-Weg hat genau diese
+Kanal-Trennung gebraucht.
+
+**Evidenz:** `brainstorm/berater-runde/20260730-1500-RATIFIZIERT-public-mirror.md`
+(trägt selbst den TEIL-SUPERSEDED-Vermerk vom 2026-07-31). Tickets #1170
+(re-gescopet weg vom Mirror), #1719, Part of #1309.

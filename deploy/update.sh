@@ -8,10 +8,10 @@
 #       ~/.claude/hooks/restart_pending_log.py:services_for_paths PLUS
 #       Shared-Pfad-Fan-out (eine Änderung unter tools/ oder conventions/
 #       trifft ALLE Services — geteilter Code / geteilte Konvention, SVC-6)
-#     → deploy/version schreiben (die Datei, die /version jedes Service liest)
 #     → nur die betroffenen Services `systemctl restart`
 #     → verifizieren: is-active == active  UND  Start-TS > Merge-TS  UND
-#       /healthz == 200 (Falsch-grün-Schutz, SVC-6)
+#       /healthz == 200  UND  /version == ausgerollter SHA
+#       (Falsch-grün-Schutz, SVC-6)
 #     → restart_done:true in restart_pending.jsonl zurückschreiben.
 #
 # NICHT Teil von Stufe 1 (ausdrücklich): Release-Worktree (RAT-14-b2),
@@ -21,7 +21,6 @@
 #
 # Test-Nähte ohne sudo/git/systemctl (deploy/tests/):
 #   update.sh --derive PATH...     → druckt die abgeleiteten Service-Namen
-#   update.sh --write-version SHA  → schreibt nur die deploy/version-Datei
 #   update.sh --mark-done RANGE    → markiert restart_pending.jsonl-Eintrag
 #   update.sh --sync-deps          → installiert pyproject-Deps in den Service-venv
 # Der Live-Restart läuft im Orchestrator-Deploy (sudo/systemctl nötig).
@@ -34,7 +33,7 @@
 #
 # Konfigurierbar über ENV (Test + Instanz):
 #   XBUDDY_REPO           Repo-Wurzel (Default: das Elternverzeichnis von deploy/)
-#   XBUDDY_DATA_DIR       Datenwurzel für deploy/version (Default /home/buddy/xbuddy-data)
+#   XBUDDY_DATA_DIR       Datenwurzel (Default /home/buddy/xbuddy-data)
 #   RESTART_PENDING_LOG   JSONL des restart_pending-Hooks
 #                         (Default /home/buddy/.claude/logs/restart_pending.jsonl)
 #   XBUDDY_VENV           Service-venv für den Dep-Sync (Default /home/buddy/apps/venv).
@@ -88,18 +87,6 @@ if shared_touched:
 for n in sorted(services):
     print(n)
 PY
-}
-
-# deploy/version schreiben (SVC-6). Jeder Service liest diese Datei für /version.
-write_version_file() {
-    local sha="$1"
-    local dir="$DATA_DIR/deploy"
-    if ! mkdir -p "$dir"; then
-        echo "update: konnte $dir nicht anlegen" >&2
-        return 1
-    fi
-    printf '%s\n' "$sha" >"$dir/version"
-    echo "update: deploy/version = $sha"
 }
 
 # Dependency-Sync in den Service-venv aus pyproject.toml (RAT-33 Option A,
@@ -185,7 +172,7 @@ healthz_code() {
 # Falsch-grün-Schutz (SVC-6): is-active UND Start-TS>Merge-TS UND /healthz==200.
 # Rückgabe 0 = ok, 1 = Verifikation fehlgeschlagen.
 verify_service() {
-    local svc="$1" merge_ts="$2" start_ts port code
+    local svc="$1" merge_ts="$2" erwartete_sha="${3:-}" start_ts port code
 
     if [ "$(systemctl is-active "$svc" 2>/dev/null || true)" != "active" ]; then
         echo "    ✗ $svc: is-active != active"
@@ -207,8 +194,13 @@ verify_service() {
             case "$code" in
                 200) ;;
                 404)
-                    # Prozess erreichbar, aber SVC-6-/healthz noch nicht ausgerollt.
-                    echo "    ⚠ $svc: /healthz fehlt (HTTP 404, SVC-6-Rollout offen) — Prozess erreichbar"
+                    # Bis #1623 war das eine Warnung ("SVC-6-Rollout offen") —
+                    # genau der Falsch-grün-Fall: plan und photo hatten keine
+                    # Route, wurden deshalb nicht überwacht, und der Deploy
+                    # winkte es durch. Der Rollout ist seit #1623 vollständig,
+                    # die Nachsicht damit gegenstandslos.
+                    echo "    ✗ $svc: /healthz fehlt (HTTP 404) — SVC-6 verlangt die Route auf jedem HTTP-Service"
+                    return 1
                     ;;
                 000 | "")
                     echo "    ✗ $svc: /healthz nicht erreichbar (Prozess tot / bindet nicht?)"
@@ -219,6 +211,25 @@ verify_service() {
                     return 1
                     ;;
             esac
+
+            # /version gegen den ausgerollten Stand (#1788). Erst seit SVC-6
+            # (geändert 2026-08-13) trägt diese Prüfung: vorher meldeten alle
+            # Dienste denselben Wert aus einer gemeinsamen Datei, ein einzelner
+            # auf altem Code wäre unsichtbar geblieben. Jetzt beschreibt der
+            # Wert den laufenden Prozess — die Drift fällt hier auf, ohne dass
+            # jemand von Hand vergleicht.
+            if [ -n "$erwartete_sha" ]; then
+                local gemeldet
+                gemeldet="$(curl -fsS --max-time 3 "http://127.0.0.1:${port}/version" 2>/dev/null \
+                    | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+                if [ -z "$gemeldet" ]; then
+                    echo "    ✗ $svc: /version liefert keinen Wert — läuft der Dienst aus einem Checkout?"
+                    return 1
+                elif [ "${erwartete_sha#"$gemeldet"}" = "$erwartete_sha" ]; then
+                    echo "    ✗ $svc: /version meldet $gemeldet, ausgerollt ist ${erwartete_sha:0:12} — läuft auf altem Code"
+                    return 1
+                fi
+            fi
             ;;
         PORTLESS)
             # eltern-chat u. Ä.: kein HTTP-Port (PORT-2) — /healthz zu Recht übersprungen.
@@ -421,9 +432,10 @@ run_full() {
     echo "geänderte Pfade:"
     printf '  %s\n' "${changed_arr[@]}"
 
-    # deploy/version VOR den Restarts schreiben, damit die neu gestarteten
-    # Services beim Boot direkt den neuen SHA über /version melden.
-    write_version_file "$post"
+    # Kein deploy/version-Schreiben mehr (#1788): jeder Service ermittelt seine
+    # Commit-SHA seit SVC-6 (geändert 2026-08-13) selbst beim Start. Eine
+    # gemeinsame Datei konnte nicht ausdrücken, dass ein EINZELNER Dienst auf
+    # altem Code hängt — sie zeigte immer den Stand des zuletzt gestarteten.
 
     # FEHLT-Slot-Vorwarnung VOR den Restarts (T1578): meldet, wenn ein neuer
     # tools.llm-Slot im Code steht, aber noch nicht im ZD-Store provisioniert.
@@ -451,7 +463,7 @@ run_full() {
             rc=1
             continue
         fi
-        if verify_service "$svc" "$merge_ts"; then
+        if verify_service "$svc" "$merge_ts" "$post"; then
             echo "    ✓ $svc"
         else
             rc=1
@@ -474,10 +486,6 @@ main() {
             shift
             derive_services "$@"
             ;;
-        --write-version)
-            shift
-            write_version_file "${1:?SHA fehlt}"
-            ;;
         --mark-done)
             shift
             mark_restart_done "${1:?commit_range fehlt}"
@@ -499,7 +507,7 @@ main() {
             run_full
             ;;
         *)
-            echo "usage: update.sh [--derive PATH... | --write-version SHA | --mark-done RANGE | --port-class SVC | --sync-deps | --check-llm-slots [STORE_PATH]]" >&2
+            echo "usage: update.sh [--derive PATH... | --mark-done RANGE | --port-class SVC | --sync-deps | --check-llm-slots [STORE_PATH]]" >&2
             exit 2
             ;;
     esac

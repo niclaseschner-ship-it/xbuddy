@@ -1,6 +1,6 @@
 # Deploy-Bootstrap — Konvention (Substitution ≠ Generierung)
 
-Ratifiziert 2026-07-31 (`brainstorm/berater-runde/20260731-1130-RATIFIZIERT-pi-bootstrap.md`, Nic „a", Antiberater-geprüft). Zweck: ein frischer Pi soll reproduzierbar aus einem Host-Profil aufgesetzt werden (Multi-Familie-Adaptierbarkeit) — ohne die von RAT-17/INST-3 gezogenen Grenzen zu brechen. Die load-bearing Unterscheidung: **ein Bootstrap darf handverdrahtete SSoT-Werte in Vorlagen textsubstituieren; er darf keine Werte erzeugen.** Bau: `deploy/bootstrap.sh` (#1667, löst #178b).
+Ratifiziert 2026-07-31 ([RAT-38](../decisions/RAT-38-instanz-profil-bootstrap.md), Nic „a", Antiberater-geprüft). Zweck: ein frischer Pi soll reproduzierbar aus einem Host-Profil aufgesetzt werden (Multi-Familie-Adaptierbarkeit) — ohne die von RAT-17/INST-3 gezogenen Grenzen zu brechen. Die load-bearing Unterscheidung: **ein Bootstrap darf handverdrahtete SSoT-Werte in Vorlagen textsubstituieren; er darf keine Werte erzeugen.** Bau: `deploy/bootstrap.sh` (#1667, löst #178b).
 
 ## BOOT-1 — Was der Bootstrap tut: Host-Profil-Substitution
 

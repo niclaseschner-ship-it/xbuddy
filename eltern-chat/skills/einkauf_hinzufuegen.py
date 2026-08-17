@@ -244,9 +244,20 @@ def _baue_antwort(hinzugefuegt, uebersprungen, grenze_halt, offen_n):
     if prefix:
         zeilen.append(prefix)
 
-    # EC-10 A2-Quittungs-Wort-Pflicht: Undo-Hinweis mit Wort `falsch` (EC-10 A2, #938)
+    # EC-10 A2-Quittungs-Wort-Pflicht: Undo-Hinweis mit Wort `falsch` (EC-10 A2, #938).
+    # #1843: Die Zeile muss den Effekt NENNEN, nicht nur das Wort — sonst raten
+    # Eltern, was `falsch` bewirkt. Der Wortlaut ist frei (EC-10 A2 laesst dem
+    # Skill die Stimme), verbindlich ist der Inhalt. Hier konkret: die Items
+    # gehen wieder von der Liste runter.
+    #
+    # Diese Zeile geht WOERTLICH raus: die Modell-Anweisung reicht jede Zeile mit
+    # `falsch` unveraendert an die Familie durch, es glaettet sie also niemand.
     if hinzugefuegt:
-        zeilen.append("Wenn das ein Missverständnis war, sag einfach `falsch`.")
+        zeilen.append(
+            "Wenn das ein Missverständnis war, sag einfach `falsch` — "
+            "dann nehme ich %s wieder von der Liste."
+            % ("das" if len(hinzugefuegt) == 1 else "sie")
+        )
 
     # Skip-Zeile
     if uebersprungen:
