@@ -663,6 +663,24 @@ jede AUTH-3-Route) oder der Aufruf entfällt mit dem Proxy selbst. Bis dahin
 sind sie hier geführt, nicht in AUTH-11s Ausnahme-Tabelle — eine Ausnahme
 wäre eine Entscheidung, dies ist eine offene Frage mit Verfallsdatum.
 
+> **[GEÄNDERT 2026-08-17 — Nic-Verdikt zu #1854, HTML-Karte Wahl `b`/`a`]**
+> Der Absatz darüber ist **überholt**. Nic hat am 2026-08-17 die Gegenrichtung
+> gewählt: der Proxy-Hop **bleibt** und weist sich als **er selbst** aus
+> (benannte Dienst-Naht), statt abgeschafft zu werden. Damit ist der Trigger
+> nicht mehr „Proxy-Abschaffung", sondern **AUTH-12** (unten). Die am
+> 2026-08-12 zur Absicherung der Abschaffung verlangte Berater-Runde entfällt
+> mit der Abschaffung selbst; sie hat nie stattgefunden.
+>
+> **Der Umfang ist kleiner als die Liste oben suggeriert.** Live über die echte
+> Origin ohne Cookie gemessen (2026-08-17): `config.json` und `tiles.json`
+> antworten **`200` mit echtem Body**, die drei `bearbeiten*`-Routen
+> **`401`** — nginx routet erstere direkt an `panel:5041` vorbei am Proxy
+> (`deploy/nginx/xbuddy-origin.conf:382`), letztere über den gegateten
+> `seiten`-Block (`:519`). Am Dienst selbst (`127.0.0.1:5041`) sind weiterhin
+> **alle fünf** ungegatet: die Schuld besteht formal für fünf, extern dringend
+> für zwei. Dazu ein Existenz-Orakel (unbekannte `panel_id` → `404`, bekannte
+> → `200`).
+
 **familie-Datenrouten sind KEIN AUTH-6-Migrations-Backlog (RAT-32-Amendment, #1638).**
 `/api/v1/familie/personen*` und `/api/v1/familie/foto/*` tragen keinen Defer-Trigger
 mehr: `familie` ist ein RAT-31-Abriss-Ziel — es kommt keine extern erreichbare
@@ -989,6 +1007,52 @@ Die Test-Implementierung ist Aufgabe des Bau-PRs; die Klausel ist
 Verhaltens-Spec.
 
 *Tickets:* #1805
+
+### AUTH-12 — Benannte Dienst-Naht: der vermittelnde Dienst weist sich als er selbst aus
+
+> **Nic-Verdikt 2026-08-17 (#1854, HTML-Karte).** Wörtlich: „Der vermittelnde
+> Dienst weist sich als er selbst aus, nicht als der Nutzer." Ersetzt den
+> AUTH-6-Trigger „Proxy-Abschaffung" für die fünf `panel`-Routen.
+
+Ruft ein xbuddy-Dienst im Auftrag eines angemeldeten Elternteils einen anderen
+xbuddy-Dienst, trägt der Aufruf eine **Dienst-Identität** — nicht die
+weitergereichte Nutzer-Anmeldung. Die aufgerufene Route akzeptiert damit zwei
+Zugangs-Klassen: die Nutzer-Anmeldung (AUTH-3) **oder** eine gültige
+Dienst-Identität. Begrifflich ist das dieselbe Trennung, die AUTH-5 schon
+benennt („Backend-Prozess-Identität … nicht User-Identität") — AUTH-12 macht
+sie **transportierbar**, statt sie aus der Quell-Adresse zu erraten.
+
+**Die Quell-Adresse ist als Nachweis untauglich, und das ist der Kern dieser
+Klausel.** nginx reicht `/api/v1/panels/` **direkt** an `panel:5041` weiter
+(`deploy/nginx/xbuddy-origin.conf:382`), ohne Herkunfts-Kennzeichnung. Der
+Dienst sieht externen Verkehr dort mit einer Loopback-Quelle — **ununterscheidbar
+von einem echten Backend-Aufruf**. Wer diese Routen mit einem
+AUTH-5-Loopback-Bypass „absichert", öffnet sie damit für jeden von außen. Das
+ist derselbe Fehler wie „`curl` auf `127.0.0.1` ist grün, also ist die Route
+sicher": der Weg Browser → nginx → Dienst ist **nie** Loopback im Sinne von
+AUTH-5, auch wenn er so aussieht.
+
+Daraus folgen drei Anforderungen an den Nachweis:
+
+1. **Er wird im Aufruf mitgeführt**, nicht aus der Verbindung abgeleitet.
+2. **Er ist von außen nicht setzbar** — ein Aufruf, der ihn mitbringt, ohne aus
+   einem xbuddy-Dienst zu stammen, wird abgewiesen. Ein Nachweis, den ein
+   Browser selbst anhängen kann, ist keiner.
+3. **Er benennt den aufrufenden Dienst**, damit im Protokoll steht, *wer*
+   gerufen hat. Ein anonymer „ist intern"-Schalter erfüllt AUTH-12 nicht.
+
+**Nicht Teil dieser Klausel** ist die konkrete Bauform (geteiltes Geheimnis,
+signierter Kurzzeit-Nachweis, eigener Loopback-Kanal, den nginx nicht erreicht).
+Sie wird im Bau entschieden und dort begründet; AUTH-12 legt nur fest, was der
+Nachweis leisten muss.
+
+**Verhältnis zu RAT-32.** RAT-32 („alles, was Inhalt hat, hinter dem Cookie")
+bleibt unberührt: AUTH-12 macht keine Route öffentlich, sondern ergänzt eine
+zweite, ebenfalls geprüfte Zugangs-Klasse für Dienst-zu-Dienst-Verkehr. RAT-32
+nimmt AUTH-5-Loopback ausdrücklich aus — AUTH-12 ist dessen fälschungssichere
+Fassung für Wege, die über nginx erreichbar sind.
+
+*Tickets:* #1854
 
 ## 6. Reihenfolge der Phasen
 
