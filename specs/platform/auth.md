@@ -479,7 +479,7 @@ hier Backend-Prozess-Identität via Heim-Pi-Loopback, nicht User-Identität.
 **Mechanik:** Der Loopback-Bypass lebte historisch **je Buddy-Decorator**
 kopiert (`essen/main.py`, `routine/main.py`, …). Der n=3-Verbrauch ist
 **erreicht und die Lib-Auslagerung ratifiziert** (Berater-Runde 2026-07-30,
-`brainstorm/berater-runde/20260730-1900-RATIFIZIERT-auth-decorator-lib.md`,
+[RAT-40](../../decisions/RAT-40-auth-decorator-lib.md),
 Antiberater-geprüft): Heimat ist **`tools/initdata/auth_gate.py`** als Factory
 (nicht `eltern-chat/init_data.py`, der frühere Kandidat) — siehe Abschnitt
 *AUTH-Decorator-Lib* unten. AUTH-9 prüft weiterhin, dass jede AUTH-3-Route den

@@ -182,3 +182,24 @@ Lauf an einem Pfad, den es nicht mehr gibt.
 **Der Halbsatz in `conventions/services.md`,** den das Verdikt mitstreichen
 wollte, existiert dort nicht (mehr): ein `grep` auf „runner" über die Datei ist
 leer. Nichts zu tun.
+
+---
+
+## Fußnote 2026-08-17 — was „35/35" gemessen hat, und was nicht
+
+Die zurückgenommene Fehlmessung oben („neun fehlende Ledger-Zeilen") wurde mit
+**35 Records / 35 Index-Zeilen** widerlegt. Das war korrekt und bleibt stehen —
+aber es misst die **innere** Konsistenz des Ledgers: hat jeder Record eine Zeile.
+
+Es misst **nicht** die Frage, die daneben liegt: hat jede ratifizierte Runde einen
+Record. Die Antwort darauf war *nein*. Elf Runden aus dem Fenster 2026-07-30 bis
+08-01 lagen zum Zeitpunkt dieses Passes ausschließlich im nicht-öffentlichen
+Notizverzeichnis; zwei öffentliche Dateien verlinkten dorthin. Für den
+vorgeschriebenen Re-Litigations-Grep über `decisions/` waren sie unsichtbar —
+mit einem belegten Folgefall (ein Ticket schlug einen Weg vor, den ein
+ratifizierter Beschluss verworfen hatte). Nachgeholt mit #1782 (RAT-38..RAT-44 +
+Nachträge an RAT-17).
+
+**Die Lehre ist dieselbe wie im Nachtrag darüber, eine Ebene höher:** ein
+konsistenter Ledger ist nicht dasselbe wie ein vollständiger. „35/35" beantwortet
+„stimmt die Liste mit sich selbst überein", nicht „steht alles drin".
