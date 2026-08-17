@@ -479,6 +479,18 @@ app = Flask(__name__, static_url_path="/display/plan/static")
 app.view_functions["static"] = require_dual_gate()(app.view_functions["static"])
 
 
+# ── Health-Check (SVC-1) ─────────────────────────────────────────────────
+# Unauthentifiziert (auth.md:227: „/healthz (SVC-6) bleibt unauthentifiziert",
+# AUTH-11-Sammelzeile). Fehlte bis #1623 — der Alerting-Poller bekam hier 404
+# und konnte den Plan-Buddy deshalb gar nicht ueberwachen.
+
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """SVC-1: Health-Endpoint — liefert immer 200 + OK."""
+    return jsonify({"ok": True}), 200
+
+
 # ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
 register_version(app)
 

@@ -253,3 +253,124 @@ def test_format_alert_text_detail_enthalten():
     red = (_state("xbuddy-essen", DEAD, "Connection refused [Errno 111]"),)
     text = shp.format_alert_text(red)
     assert "Connection refused" in text
+
+
+# ---------------------------------------------------------------------------
+# #1623: Der Waechter sieht alle Dienste — und merkt, wenn er selbst nicht kann
+# ---------------------------------------------------------------------------
+
+def test_jeder_http_dienst_aus_der_port_konvention_wird_ueberwacht():
+    """Kein Dienst faellt still aus der Ueberwachung (#1623).
+
+    Bis #1623 fehlten `xbuddy-plan` (5020) und `xbuddy-photo` (5051) in der
+    Liste — beide antworteten auf `/healthz` mit 404, weil ihnen die Route
+    fehlte. Der Waechter meldete trotzdem „alles gruen", weil er sie gar nicht
+    erst fragte. Genau die Auslassungs-Klasse, die von aussen wie Erfolg
+    aussieht.
+
+    Die Soll-Liste ist `conventions/ports.md` (PORT-2), nicht ein Literal hier:
+    ein neuer Dienst mit Port taucht dort auf und macht diesen Test rot,
+    solange ihn niemand in die Ueberwachung nimmt.
+
+    Zwei Sorten Zeilen zaehlen bewusst nicht mit, beide aus der Tabelle selbst
+    ableitbar statt aus einer gepflegten Ausnahme-Liste:
+
+    * **`ENTFALLEN`** — abgerissene Dienste (RAT-31: router, geraete). Sie
+      stehen als Geschichte in der Tabelle und laufen nirgends.
+    * **Hoerspiel-Instanzen** — die leitet der Poller zur Laufzeit aus
+      `instanzen.json` ab (`_hoerspiel_instanz_services`). Die Datei existiert im
+      Repo bewusst nicht (INST-6, normaler Default vor dem Onboarding), also
+      sind sie hier leer und auf dem Pi vorhanden. Statisch pruefbar ist nur,
+      dass die Ableitung ueberhaupt verdrahtet ist — siehe Test darunter.
+    """
+    import re
+
+    ports_md = Path(__file__).resolve().parents[3] / "conventions" / "ports.md"
+    konvention = {}
+    for m in re.finditer(
+        r"^\|\s*(\d{4})\s*\|([^|]*)\|\s*(xbuddy-[a-z0-9-]+)\s*\|",
+        ports_md.read_text(encoding="utf-8"),
+        re.M,
+    ):
+        port, beschreibung, name = int(m.group(1)), m.group(2), m.group(3).strip()
+        if "ENTFALLEN" in beschreibung.upper():
+            continue
+        if name.startswith("xbuddy-hoerspiel-"):
+            continue
+        konvention[port] = name
+
+    assert konvention, "PORT-2-Tabelle nicht lesbar — Soll-Liste fehlt"
+
+    # Bot-Dienste ohne HTTP-Stack werden per Heartbeat geprueft (SVC-8), nicht
+    # per Port — die tauchen in der Port-Tabelle nicht auf und sind hier auch
+    # nicht gemeint.
+    ueberwacht = {port for port, _ in shp._HTTP_SERVICES}
+    fehlend = sorted(
+        "%s (%d)" % (name, port)
+        for port, name in konvention.items()
+        if port not in ueberwacht
+    )
+    assert not fehlend, (
+        "Diese Dienste stehen in conventions/ports.md, werden aber nicht "
+        "ueberwacht — sie koennen ausfallen, ohne dass der Waechter etwas "
+        "meldet:\n  " + "\n  ".join(fehlend)
+    )
+
+
+def test_hoerspiel_instanzen_werden_dynamisch_mitueberwacht():
+    """Die Instanz-Ableitung ist verdrahtet, nicht nur vorhanden (#1623 Falle 1).
+
+    Das Ticket nennt als gemessene Falle: als Skript gestartet findet der Poller
+    das Instanzen-Modul nicht, ein breiter Fehler-Fang macht daraus **stumm**
+    eine leere Liste — und der Waechter ueberwacht 9 statt 11 Dienste, ohne dass
+    irgendwo etwas rot wird.
+
+    Statisch pruefbar ist die Verdrahtung: `_HTTP_SERVICES` muss die Ableitung
+    aufrufen. Ob sie auf dem Pi etwas liefert, haengt an `instanzen.json` und am
+    Modulpfad der Unit — das ist Laufzeit und gehoert in die Abnahme, nicht
+    hierher.
+    """
+    quelle = (Path(__file__).resolve().parent.parent / "service_health_poller.py").read_text(
+        encoding="utf-8"
+    )
+    assert "*_hoerspiel_instanz_services()" in quelle, (
+        "_HTTP_SERVICES ruft die Instanz-Ableitung nicht mehr auf — die "
+        "Hoerspiel-Instanzen fielen damit still aus der Ueberwachung."
+    )
+
+
+def test_fehlendes_bot_token_macht_den_lauf_rot_auch_wenn_alles_gruen_ist(monkeypatch, tmp_path):
+    """Eine Fehlkonfiguration faellt beim ERSTEN Lauf auf, nicht erst im Alarmfall (#1623).
+
+    Das ist der Kern des Tickets: vorher standen Token- und Empfaenger-Pruefung
+    INNERHALB des Alarm-Zweigs. Solange alles gruen war, wurde nie geprueft, ob
+    der Waechter ueberhaupt senden koennte — die Luecke zeigte sich erst, wenn
+    alarmiert werden musste, also zu spaet.
+
+    Von aussen war ein fehlkonfigurierter Waechter damit ununterscheidbar von
+    „alles gruen": beide Male Rueckgabewert 0.
+    """
+    monkeypatch.setattr(shp, "gather_http_states", lambda **_: [_state("xbuddy-plan", OK)])
+    monkeypatch.setattr(shp, "gather_heartbeat_states", lambda **_: [])
+    monkeypatch.delenv(shp.ENV_ALERTING_BOT_TOKEN, raising=False)
+
+    rc = shp.main(["--data-dir", str(tmp_path)])
+
+    assert rc == 1, (
+        "Ohne Bot-Token muss der Lauf rot enden, auch wenn kein Dienst rot ist "
+        "— sonst sieht ein Waechter, der nichts senden kann, aus wie ein "
+        "Waechter, der nichts zu melden hat."
+    )
+
+
+def test_dry_run_laeuft_ohne_zugangsdaten(monkeypatch, tmp_path):
+    """Der Probelauf bleibt ohne Zugangsdaten benutzbar (#1623).
+
+    Sonst waere das Werkzeug wertlos, mit dem man den Waechter ueberhaupt
+    ausprobiert — und die Haerte aus dem Test darueber wuerde ihn miterschlagen.
+    """
+    monkeypatch.setattr(shp, "gather_http_states", lambda **_: [_state("xbuddy-plan", OK)])
+    monkeypatch.setattr(shp, "gather_heartbeat_states", lambda **_: [])
+    monkeypatch.delenv(shp.ENV_ALERTING_BOT_TOKEN, raising=False)
+
+    assert shp.main(["--dry-run", "--data-dir", str(tmp_path)]) == 0
