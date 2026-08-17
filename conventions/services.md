@@ -56,10 +56,9 @@ SVC-3 Satz 3 in die Komponenten-Spec ein, nicht in eine `/etc`-Datei.
 Ergänzend gehört zu einem Dienst, der unbeaufsichtigt neu startet, eine
 **Speicher-Obergrenze**, damit ein Restart-Zyklus nicht den Host mitnimmt: die
 gemessene Herleitung und der Ausroll-Weg dieser Grenzwerte stehen in
-`deploy/systemd/README.md` („Drop-Ins im Repo"). Bewusst **keine** eigene
-Convention-ID — bei n=2 Diensten wäre das eine Vorrats-Konvention (CLAUDE.md §6);
-sobald ein dritter Dienst dieselbe Bremse braucht, ist der Moment für eine
-SVC-Regel gekommen.
+`deploy/systemd/README.md` („Drop-Ins im Repo"). Die Speicher-Obergrenze bleibt
+per-Instanz und damit Drop-In-Sache; für die **Neustart-Bremse** gilt seit
+#1883 die eigene Regel SVC-9.
 
 ### SVC-4 — Logs gehen an stdout/stderr, nicht in Dateien
 Service-Code loggt nach stdout/stderr. `journalctl -u <service>` ist die
@@ -217,3 +216,46 @@ SVC-6 bleibt HTTP-only, SVC-8 ist der Nicht-HTTP-Zwilling, keine Ausnahme.
 
 Präzedenz/Anlass: #1641 (eltern-chat kein /healthz), Nic-Wahl b 2026-07-31
 (Signal statt Ausnahme). Bau #1666.
+
+### SVC-9 — Die Neustart-Bremse steht in der Basis-Unit, nicht in Drop-Ins
+Jede Basis-Unit im Repo trägt `StartLimitIntervalSec` und `StartLimitBurst` so,
+dass die Rate-Begrenzung bei `Restart=on-failure` (SVC-3) **tatsächlich greift**:
+das Fenster muss größer sein als `RestartSec`. Ist es kleiner oder gleich, läuft
+der Zähler in jedem Fenster auf 1 zurück und die Bremse feuert nie — genau der
+Fall, der am 2026-08-10 zwei Dienste 14× im Kreis laufen ließ, ohne dass es
+jemandem auffiel (SVC-3, Live-Beleg).
+
+**Warum Basis-Unit und nicht Drop-In.** Die Werte sind **Konstanten**: sie hängen
+weder von der Instanz noch vom Host noch von der Familie ab. Der Drop-In-Kanal
+ist für das Gegenteil da — instanz-abhängige Werte, die nicht in eine andere
+Familie gehören (SVC-2, `deploy/systemd/README.md`). Eine Konstante über elf
+Drop-Ins zu verteilen erzeugt elf Stellen, die auseinanderlaufen können, und
+lässt jede **neu aufgesetzte** Familie ungebremst starten, bis jemand die
+Drop-Ins nachzieht. In der Basis-Unit reist die Bremse mit dem Dienst.
+
+**Der Zweit-Grund ist mechanisch:** ein Drop-In muss den Unit-Namen treffen, den
+die Maschine wirklich benutzt. Bei den Hörspiel-Instanzen weichen Repo-Name und
+Live-Name ab (#1889: beide bleiben, eine Zuordnung wird gebaut) — ein Drop-In
+unter dem Repo-Namen landet dort an einer Unit, die es nicht gibt. Die Basis-Unit
+hat dieses Problem nicht.
+
+**Warum jetzt und nicht früher.** Die Vorgänger-Fassung dieses Absatzes verzichtete
+bei n=2 bewusst auf eine eigene ID („bei n=2 wäre das eine Vorrats-Konvention",
+CLAUDE.md §6) und benannte den Auslöser: *sobald ein dritter Dienst dieselbe
+Bremse braucht.* #1883 misst n=13 — elf offene plus die zwei bereits gebremsten.
+Der selbst gesetzte Trigger ist damit eingelöst, nicht übersprungen.
+
+**Migration (Pflicht, sonst wird der Baum rot).** Die zwei bestehenden
+`restart-window.conf`-Drop-Ins (`xbuddy-plan`, `xbuddy-familie`) wandern in ihre
+Basis-Units und **verlassen die Soll-Liste** in `deploy/systemd/README.md`.
+`deploy/tests/test_dropins_vollstaendig.py` prüft die Liste in **beide**
+Richtungen — eine Datei ohne Zeile ist genauso rot wie eine Zeile ohne Datei.
+Wer die Bremse hochzieht, ohne die Liste und die Dateien mitzunehmen, bricht
+den Test.
+
+**Nicht betroffen:** die Speicher-Obergrenze (`MemoryHigh`, `OOMScoreAdjust`)
+bleibt per-Instanz und damit Drop-In-Sache. SVC-9 gilt ausschließlich für die
+zwei Neustart-Werte.
+
+Anlass: #1801 (erste zwei Dienste), #1883 (Schuldstand n=13, Nic-Wahl a
+2026-08-17: feste Regel in die Grundvorlagen statt elf Einzeldateien).
