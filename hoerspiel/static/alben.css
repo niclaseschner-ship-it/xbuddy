@@ -1,4 +1,34 @@
-/* HSP-2/3/4/4a/4b/19-23 · E-HSP-8/9/10/11 — Werft-Iter-3 (Gate-B). */
+/* HSP-2/3/4/4a/4b/19-23 · E-HSP-8/9/10/11 — Werft-Iter-3 (Gate-B).
+
+   T1823 (zweite Scheibe nach #1619/kibuddy): Container-Queries statt fester
+   px-Werte. Vorbild: routine/static/routine.css:134-299 +
+   controller/app-panel/style.css:94.
+
+   ZWEI Container-Anker, weil die Ansicht zwei getrennte Maßstäbe hat:
+     .shell   container-type: size   — Kopfzeile, Fußzeile, Raster-Abstände
+                                       (Höhe definit via height:100dvh)
+     .player  container-type: size   — alles in der Player-Säule (Höhe definit
+                                       via 1fr-Grid-Zeile/-Spalte der Shell)
+     .tile    container-type: inline-size — Kachel-Innenleben skaliert mit der
+                                       KACHEL-Breite, nicht mit dem Viewport
+   .tile bekommt bewusst NUR inline-size: die Kachel-Zeile ist
+   `grid-auto-rows: auto` (HSP-4b Tile-Grid-Disziplin), also inhalts-bestimmt —
+   `container-type: size` würde die Größen-Containment-Regel anwenden und die
+   Kachel auf 0 kollabieren lassen. Dasselbe gilt für .topbar (auto-Zeile);
+   die bleibt deshalb Kind von .shell statt eigener Container.
+
+   Grenzwert-Regel: `clamp(Boden, Kappe/10 in cqh, Kappe)` gegen .shell
+   (Kappe greift ab 1000px Container-Höhe), `Kappe/8 in cqh` gegen .player,
+   `Kappe/1.93 in cqw` gegen .tile (cq-Einheiten messen die INHALTS-Box des
+   Containers — bei .tile 202px statt 228px). Die Kappe ist IMMER der Wert —
+   bei 1920×1080 rendert die Ansicht damit pixelgleich wie vorher, darunter
+   wächst sie mit.
+
+   UNANGETASTET: die sieben höhenbasierten `clamp(min, vh, max)`-Schriftgrößen
+   für Titel und Tracks. Die schreibt HSP-4b („Skalierende Schriftgrößen")
+   bindend vor — sie zu ändern wäre eine Spec-Änderung, nicht dieses Ticket.
+   Ebenfalls unangetastet: die globale Skalierungs-Notlösung (SHELL-12), die
+   in der Heim-Oberfläche sitzt und hier gar nicht vorkommt. */
 
 html, body {
   margin: 0; padding: 0;
@@ -15,7 +45,8 @@ body.xb[data-stage="toddler"] {
 /* ── SHELL: topbar / main player / footer (E-HSP-8) ─────────────────── */
 .shell {
   width: 100%;
-  height: 100vh;
+  /* T1823: 100dvh statt 100vh — mobiles Browser-Chrome (analog #1619). */
+  height: 100dvh;
   max-width: 1920px;
   max-height: 1080px;
   margin: 0 auto;
@@ -26,9 +57,20 @@ body.xb[data-stage="toddler"] {
     "topbar topbar"
     "main   player"
     "footer footer";
-  padding: var(--space-5) var(--space-6);
-  gap: var(--space-4);
+  padding: clamp(8px, 1.9cqh, var(--space-5)) clamp(10px, 1.3cqw, var(--space-6));
+  gap: clamp(8px, 1.5cqh, var(--space-4)) clamp(8px, 0.85cqw, var(--space-4));
   box-sizing: border-box;
+  /* T1823: Haupt-Container. Höhe ist definit (height:100dvh, gekappt bei
+     1080px) — Voraussetzung für container-type:size. Für die KINDER sind
+     cqw/cqh dadurch NICHT dasselbe wie vw/vh: auf einem Display > 1920×1080
+     greifen max-width/max-height, und cq folgt der Kappung.
+     Merke: die cq-Einheiten in DIESER Regel (padding/gap) gehören noch nicht
+     zu .shell — ein Element fragt nie sich selbst ab; .shell hat keinen
+     Vorfahr-Container, also fällt cqw/cqh hier auf das kleine Viewport
+     zurück. Die clamp-Kappe (= die bisherigen Token-Werte) hält das oberhalb
+     von 1920×1080 trotzdem stabil. */
+  container-type: size;
+  container-name: shell;
 }
 
 /* ── TOPBAR ─────────────────────────────────────────────────────────── */
@@ -56,7 +98,11 @@ body.xb[data-stage="toddler"] {
 }
 .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-.face.size-54 { width: 54px; height: 54px; }
+/* T1823: war hart 54×54px — jetzt shell-höhen-relativ (Kappe = 54px). */
+.face.size-54 {
+  width: clamp(36px, 5.4cqh, 54px);
+  height: clamp(36px, 5.4cqh, 54px);
+}
 
 .face.ring-blue   { border: 4px solid var(--kids-ring-blue); }
 .face.ring-orange { border: 4px solid var(--kids-ring-orange); }
@@ -100,27 +146,31 @@ body.xb[data-stage="toddler"] {
   opacity: 0.7;
 }
 
+/* T1823: font-size war hart var(--fs-18) — Kappe bleibt der Token. */
 .face-pille-name {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: var(--fs-18, 18px);
+  font-size: clamp(13px, 1.8cqh, var(--fs-18, 18px));
   color: var(--kids-ink);
   line-height: 1;
   white-space: nowrap;
 }
 
 /* Cycle-Wechsel-Hinweis (HSP-3a Nic-Setzung 2026-07-08). */
+/* T1823: font-size war hart var(--fs-12) — Kappe bleibt der Token. */
 .face-pille-swap {
   font-family: var(--font-display);
-  font-size: var(--fs-12, 12px);
+  font-size: clamp(9px, 1.2cqh, var(--fs-12, 12px));
   color: var(--kids-ink);
   opacity: 0.55;
   white-space: nowrap;
   line-height: 1;
 }
 
+/* T1823: war hart 88×88px / Bild 72×72px — Kappen bleiben die alten Werte. */
 .topbar-icon {
-  width: 88px; height: 88px;
+  width: clamp(56px, 8.8cqh, 88px);
+  height: clamp(56px, 8.8cqh, 88px);
   background: var(--kids-paper);
   border-radius: var(--radius-2xl);
   border: 2px solid var(--kids-border-soft);
@@ -129,21 +179,28 @@ body.xb[data-stage="toddler"] {
   flex-shrink: 0;
 }
 
-.topbar-icon img { width: 72px; height: 72px; object-fit: contain; }
+.topbar-icon img {
+  width: clamp(46px, 7.2cqh, 72px);
+  height: clamp(46px, 7.2cqh, 72px);
+  object-fit: contain;
+}
 
 .topbar-text { display: flex; flex-direction: column; gap: 2px; }
 
+/* T1823: font-size war hart var(--fs-64) — Kappe bleibt der Token, Boden 34px
+   hält den Serien-Titel auf einem 1024er-Tablet noch als Überschrift lesbar. */
 .topbar-title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: var(--fs-64);
+  font-size: clamp(34px, 6.4cqh, var(--fs-64));
   line-height: 1;
   color: var(--kids-ink);
 }
 
+/* T1823: font-size war hart var(--fs-24). */
 .topbar-sub {
   font-family: var(--font-hand);
-  font-size: var(--fs-24);
+  font-size: clamp(15px, 2.4cqh, var(--fs-24));
   color: var(--kids-ink-soft);
 }
 
@@ -154,7 +211,8 @@ body.xb[data-stage="toddler"] {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-auto-rows: auto;
-  gap: var(--space-4);
+  /* T1823: Raster-Abstand shell-relativ statt fixem Token (Kappe = --space-4). */
+  gap: clamp(8px, 1.5cqh, var(--space-4)) clamp(8px, 0.87cqw, var(--space-4));
   min-width: 0;
   align-content: start;
 }
@@ -167,8 +225,11 @@ body.xb[data-stage="toddler"] {
   box-shadow: var(--shadow-hand);
   display: grid;
   grid-template-rows: auto auto auto;
-  padding: 10px;
-  gap: 6px;
+  /* T1823: war hart 10px/6px. Diese Regel liegt noch AUSSERHALB des
+     .tile-Containers (ein Element fragt nie sich selbst ab), cqw bezieht sich
+     hier also auf .shell — Kappen = die alten Werte. */
+  padding: clamp(6px, 0.55cqw, 10px);
+  gap: clamp(4px, 0.33cqw, 6px);
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -178,6 +239,14 @@ body.xb[data-stage="toddler"] {
     box-shadow var(--dur-base) var(--ease-out),
     border-color var(--dur-base) var(--ease-out);
   outline: none;
+  /* T1823: Kachel-Container. BEWUSST nur inline-size — die Kachel-Zeile ist
+     `grid-auto-rows: auto` (HSP-4b), also inhalts-bestimmt; `container-type:
+     size` würde Größen-Containment anwenden und die Kachel auf 0 kollabieren
+     lassen (anders als controller/app-panel, wo die Kachel-Zeile 1fr ist).
+     Mit inline-size gilt cqw = Kachelbreite; cqh/cqmin sind hier NICHT
+     verfügbar und werden deshalb nirgends unter .tile benutzt. */
+  container-type: inline-size;
+  container-name: tile;
 }
 
 .tile:focus-visible { box-shadow: var(--focus-ring), var(--shadow-hand-lg); }
@@ -202,9 +271,12 @@ body.xb[data-stage="toddler"] {
   display: block;
 }
 
+/* T1823: font-size war hart 13px — jetzt kachelbreiten-relativ (Kappe 13px).
+   cqw ist die INHALTS-Breite der Kachel (202px bei 1920×1080), nicht die
+   Randbreite — der Faktor ist danach bemessen. */
 .tile-nr {
   font-family: var(--font-hand);
-  font-size: 13px;
+  font-size: clamp(9px, 6.75cqw, 13px);
   line-height: 1;
   color: var(--kids-ink-soft);
   text-transform: uppercase;
@@ -230,14 +302,15 @@ body.xb[data-stage="toddler"] {
 }
 
 /* Resume-Badge */
+/* T1823: font-size/padding waren hart — jetzt kachelbreiten-relativ. */
 .tile-badge {
   position: absolute;
   top: var(--space-2); right: var(--space-2);
   color: #FFFFFF;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 14px;
-  padding: 4px 12px;
+  font-size: clamp(10px, 7.3cqw, 14px);
+  padding: clamp(2px, 2.08cqw, 4px) clamp(7px, 6.24cqw, 12px);
   border-radius: var(--radius-full);
   box-shadow: var(--shadow-hand-sm);
   background: #E08545;
@@ -280,9 +353,10 @@ body.xb[data-stage="toddler"] {
   white-space: nowrap;
 }
 
+/* T1823: font-size war hart 13px — jetzt kachelbreiten-relativ (Kappe 13px). */
 .tile.is-more .more-sub {
   font-family: var(--font-hand);
-  font-size: 13px;
+  font-size: clamp(9px, 6.75cqw, 13px);
   line-height: 1;
   color: var(--kids-ink-soft);
   text-align: center;
@@ -318,19 +392,31 @@ body.xb[data-stage="toddler"] {
   border: 3px solid var(--kids-border-soft);
   border-radius: var(--radius-3xl);
   box-shadow: var(--shadow-hand-lg);
-  padding: var(--space-4) var(--space-5);
+  /* T1823: Padding/Gap shell-relativ (diese Regel liegt noch AUSSERHALB des
+     .player-Containers, cq bezieht sich also auf .shell). */
+  padding: clamp(8px, 1.5cqh, var(--space-4)) clamp(10px, 1.1cqw, var(--space-5));
   box-sizing: border-box;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
-  gap: var(--space-3);
+  gap: clamp(6px, 1.15cqh, var(--space-3));
   min-height: 0; min-width: 0;
   overflow: hidden;
+  /* T1823: eigener Container für die Player-Säule. Höhe ist definit — die
+     Säule sitzt in der 1fr-Zeile und der 1fr-Spalte des Shell-Grids. Der
+     eigene Maßstab ist hier wichtig: die Säule schrumpft von 869px (1920×1080)
+     auf 589px (1280×800), also deutlich stärker als die Shell selbst. Genau
+     hier brach die Ansicht vorher — die Track-Liste wurde auf 4px Zeilenhöhe
+     gequetscht und war unsichtbar. */
+  container-type: size;
+  container-name: player;
 }
 
 /* Player-Cover: 1:1 (E-HSP-10), max-width statt max-height. */
 .player-cover {
   width: 100%;
-  max-width: 280px;
+  /* T1823: war hart 280px. Der Deckel ist der grösste Hebel gegen den
+     Höhen-Engpass der Säule — säulen-höhen-relativ (Kappe = 280px). */
+  max-width: clamp(120px, 34cqh, 280px);
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-2xl);
   border: 2px solid var(--kids-border-soft);
@@ -354,9 +440,10 @@ body.xb[data-stage="toddler"] {
   text-align: center;
 }
 
+/* T1823: font-size war hart 14px — jetzt säulen-höhen-relativ (Kappe 14px). */
 .player-album-nr {
   font-family: var(--font-hand);
-  font-size: 14px;
+  font-size: clamp(10px, 1.75cqh, 14px);
   color: var(--kids-ink-soft);
   text-transform: uppercase;
   letter-spacing: var(--ls-wide);
@@ -383,9 +470,10 @@ body.xb[data-stage="toddler"] {
   overflow: hidden;
 }
 
+/* T1823: font-size war hart 12px — jetzt säulen-höhen-relativ (Kappe 12px). */
 .player-tracks-title {
   font-family: var(--font-hand);
-  font-size: 12px;
+  font-size: clamp(9px, 1.5cqh, 12px);
   color: var(--kids-ink-soft);
   text-transform: uppercase;
   letter-spacing: var(--ls-wide);
@@ -414,8 +502,9 @@ body.xb[data-stage="toddler"] {
   overflow: hidden;
 }
 
+/* T1823: Positions-Spalte war hart 18px breit — säulen-höhen-relativ. */
 .player-track .pos {
-  width: 18px;
+  width: clamp(12px, 2.2cqh, 18px);
   text-align: right;
   font-family: var(--font-display);
   font-size: clamp(13px, 1.6vh, 18px);
@@ -435,7 +524,11 @@ body.xb[data-stage="toddler"] {
   flex-shrink: 0;
 }
 
-.player-track .word-pikto img { width: 18px; height: 18px; }
+/* T1823: war hart 18×18px — säulen-höhen-relativ (Kappe 18px). */
+.player-track .word-pikto img {
+  width: clamp(12px, 2.2cqh, 18px);
+  height: clamp(12px, 2.2cqh, 18px);
+}
 
 .player-track.is-active {
   background: var(--kids-tint-mint);
@@ -457,9 +550,10 @@ body.xb[data-stage="toddler"] {
   text-align: center;
 }
 
+/* T1823: font-size war hart 13px — jetzt säulen-höhen-relativ (Kappe 13px). */
 .player-now-label {
   font-family: var(--font-hand);
-  font-size: 13px;
+  font-size: clamp(10px, 1.6cqh, 13px);
   color: var(--kids-ink-soft);
 }
 
@@ -471,9 +565,10 @@ body.xb[data-stage="toddler"] {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
 }
 
+/* T1823: Balkenhöhe war hart 12px — säulen-höhen-relativ (Kappe 12px). */
 .progress {
   width: 100%;
-  height: 12px;
+  height: clamp(7px, 1.5cqh, 12px);
   background: var(--kids-tint-sky);
   border: 2px solid var(--kids-border-soft);
   border-radius: var(--radius-full);
@@ -485,11 +580,15 @@ body.xb[data-stage="toddler"] {
 /* Controls am Boden (HSP-3/21) */
 .player-ctrl {
   display: flex; align-items: center; justify-content: center;
-  gap: var(--space-3);
+  /* T1823: Knopf-Abstand säulen-relativ (Kappe = --space-3). */
+  gap: clamp(6px, 1.5cqh, var(--space-3));
 }
 
+/* T1823: waren hart 72×72px / SVG 32px — säulen-höhen-relativ.
+   Boden 40px: die Knöpfe bleiben auch auf 1024×600 noch Tipp-tauglich. */
 .btn-circle {
-  width: 72px; height: 72px;
+  width: clamp(40px, 8.8cqh, 72px);
+  height: clamp(40px, 8.8cqh, 72px);
   border-radius: 9999px;
   border: 3px solid var(--kids-ink);
   background: var(--kids-paper);
@@ -500,16 +599,26 @@ body.xb[data-stage="toddler"] {
 }
 
 .btn-circle:focus-visible { box-shadow: var(--focus-ring), var(--shadow-hand); }
-.btn-circle svg { width: 32px; height: 32px; fill: var(--kids-ink); }
+.btn-circle svg {
+  width: clamp(18px, 3.9cqh, 32px);
+  height: clamp(18px, 3.9cqh, 32px);
+  fill: var(--kids-ink);
+}
 
+/* T1823: war hart 110×110px / SVG 50px — säulen-höhen-relativ. */
 .btn-play {
-  width: 110px; height: 110px;
+  width: clamp(60px, 13.5cqh, 110px);
+  height: clamp(60px, 13.5cqh, 110px);
   background: #7BAE57;
   border-color: var(--kids-ink);
   box-shadow: var(--shadow-hand-lg);
 }
 
-.btn-play svg { width: 50px; height: 50px; fill: #FFFFFF; }
+.btn-play svg {
+  width: clamp(28px, 6.1cqh, 50px);
+  height: clamp(28px, 6.1cqh, 50px);
+  fill: #FFFFFF;
+}
 
 /* "Weiter hören"-Knopf-Variante (HSP-23 Default-Stand) */
 .btn-play.is-resume { background: #E08545; }
@@ -521,7 +630,8 @@ body.xb[data-stage="toddler"] {
   justify-content: space-between;
   align-items: center;
   font-family: var(--font-hand);
-  font-size: 12px;
+  /* T1823: font-size war hart 12px — jetzt shell-höhen-relativ (Kappe 12px). */
+  font-size: clamp(9px, 1.2cqh, 12px);
   color: var(--kids-ink-soft);
   opacity: 0.85;
 }
