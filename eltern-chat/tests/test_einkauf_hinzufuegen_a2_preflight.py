@@ -289,3 +289,53 @@ def test_folge_anfrage_versiegelt_vorherige_receipts(tmp_path):
     assert rows[1][5] is not None, "Zweiter Receipt muss versiegelt sein"
     # Dritter (Joghurt) unversiegelt
     assert rows[2][5] is None, "Dritter Receipt darf noch nicht versiegelt sein"
+
+
+# ---------------------------------------------------------------------------
+# #1843: Die Quittung nennt den Effekt, nicht nur das Undo-Wort
+# ---------------------------------------------------------------------------
+
+# Begriffe, an denen erkennbar ist, dass die Zeile den EFFEKT benennt. EC-10 A2
+# laesst dem Skill ausdruecklich die eigene Stimme („Die konkrete Formulierung
+# der Anleitung darf der Skill waehlen"), verbindlich ist der Inhalt. Deshalb
+# wird hier KEIN Wortlaut festgenagelt, sondern nur, dass ueberhaupt gesagt wird,
+# was passiert.
+_EFFEKT_BEGRIFFE = ("liste", "runter", "rückgängig", "ruecknahme", "entferne", "nehme")
+
+
+def _undo_zeile(text):
+    """Die Zeile der Quittung, die das Undo-Wort traegt."""
+    for zeile in text.splitlines():
+        if "falsch" in zeile.lower():
+            return zeile
+    return ""
+
+
+def test_quittung_nennt_den_effekt_nicht_nur_das_wort():
+    """#1843: „sag einfach `falsch`." allein laesst Eltern raten, was dann passiert.
+
+    Der Schmerz war der Vergleich mit der Foto-Quittung, die den Effekt nennt
+    („ich mach es dann rueckgaengig") — die Einkaufs-Quittung tat es nicht.
+
+    Wichtig fuer die Reichweite: diese Zeile geht **woertlich** an die Familie.
+    Die Modell-Anweisung reicht jede Zeile mit `falsch` unveraendert durch, es
+    glaettet sie also niemand nachtraeglich.
+    """
+    from skills.einkauf_hinzufuegen import _baue_antwort
+
+    for anzahl in (1, 3):
+        text = _baue_antwort(
+            hinzugefuegt=["Milch"] * anzahl,
+            uebersprungen=[],
+            grenze_halt=None,
+            offen_n=anzahl,
+        )
+        zeile = _undo_zeile(text)
+        assert zeile, "Quittung enthaelt keine Undo-Zeile: %r" % text
+
+        assert any(b in zeile.lower() for b in _EFFEKT_BEGRIFFE), (
+            "Die Undo-Zeile nennt das Wort, aber nicht den Effekt (#1843, EC-10 A2).\n"
+            "Zeile: %r\n"
+            "Erwartet: irgendeine Formulierung, die sagt WAS passiert. Der "
+            "Wortlaut ist frei — erkannt wird an einem von %r." % (zeile, _EFFEKT_BEGRIFFE)
+        )
