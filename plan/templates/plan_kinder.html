@@ -12,6 +12,53 @@
 <link rel="stylesheet" href="/display/_shared/design/tokens.css?v={{ anchor }}">
 
 <style>
+  /* ══════════════════════════════════════════════════════════════════════
+     T1907 (dritte Scheibe nach #1619/kibuddy und #1823/hoerspiel, RAT-39):
+     Container-Queries statt fester px-Schriftgrößen. Konvention:
+     conventions/responsive-views.md (RESP-1..5) — dort steht das Warum,
+     hier nur das Wie dieser Ansicht.
+
+     ZWEI Container-Anker, beide `container-type: inline-size`:
+       .frame            (1872px bei 1920×1080)  — die ganze Wochenplan-Fläche
+       .picker-backdrop  (1920px bei 1920×1080)  — die Overlay-Schicht des
+                                                    Event-Pickers
+
+     WARUM inline-size und nicht size (RESP-3): `.frame` ist zwar in beiden
+     Achsen definit (height:100%, max-height:1020px), aber die tragende
+     Dimension dieser Ansicht ist die BREITE — die Zeilenhöhen sind ein festes
+     Raster (repeat(--slot-count, 80px)), das render.py spiegelt. `cqh` kommt
+     in dieser Datei deshalb nirgends vor. Für `.picker-backdrop` ist
+     inline-size erst recht richtig: die Höhe kommt aus `inset: 0`.
+
+     WARUM der Picker einen EIGENEN Anker hat (RESP-4): `.picker-backdrop`
+     liegt im Template AUSSERHALB von `.page`/`.frame` (direktes body-Kind) —
+     ohne eigenen Anker hätte es gar keinen Vorfahr-Container und `cqi` fiele
+     auf das Viewport zurück. Umgekehrt gilt: `.picker-backdrop` ist
+     `position: fixed`, und `container-type` bringt `contain: layout` mit —
+     ein Container ÜBER einem fixierten Element würde dessen umschließenden
+     Block verschieben. Genau deshalb sitzt der Anker AUF dem fixierten
+     Element (das ändert seine eigene Positionierung nicht, nur die seiner
+     Kinder) und NICHT auf `.page` oder `body`. `.frame` trägt keine
+     fixierten Nachfahren — geprüft, `.picker-backdrop` ist der einzige
+     `position: fixed` der Datei und steht daneben, nicht darin.
+
+     Grenzwert-Regel (RESP-2): `clamp(Boden, Kappe/18.72 in cqi, Kappe)` gegen
+     .frame, `Kappe/19.20 in cqi` gegen .picker-backdrop. Die Nenner sind die
+     GEMESSENEN Inhalts-Breiten bei 1920×1080 (CDP-Messung 2026-08-17), nicht
+     geschätzt. Die Kappe ist IMMER der bisherige px-Wert — bei 1920 rendert
+     die Ansicht damit pixelgleich wie vorher, darunter wächst sie mit. Die
+     Böden liegen bei ~63 % der Kappe und greifen erst unterhalb ~1180px
+     Container-Breite (schmale Heim-Shell-Panes), nicht schon bei 1280.
+
+     NUR SCHRIFT, KEINE GEOMETRIE: `.frame`-Zeilenraster (80px/116px),
+     `grid-auto-rows: 37px` der Termin-Spalten und die `.pill`-Maße bleiben
+     hart. Sie sind in `plan/render.py` (GEOMETRIE_*) gespiegelt — eine Quelle
+     der Geometrie. Sie hier fluid zu machen, ohne render.py mitzuziehen,
+     würde die Termin-Packung desynchronisieren.
+
+     UNANGETASTET: die globale Skalierungs-Notlösung (SHELL-12) — die sitzt in
+     der Heim-Oberfläche und kommt in dieser Datei nicht vor.
+     ══════════════════════════════════════════════════════════════════════ */
   *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
@@ -44,6 +91,11 @@
   /* T1574: max-width: 1920px statt 1500px — Frame füllt Heim-Shell-Pane
      fluid aus (analog #1541 photo/wetter); Pi-Vollbild-Kiosk (1920px) bleibt
      unverändert, da max-width dann nicht greift. */
+  /* T1907: Haupt-Container der Ansicht. Alle `cqi` unterhalb messen die
+     INHALTS-Breite von .frame — die ist bei 1920×1080 nicht 1920, sondern
+     1872px (.page trägt 24px Padding links und rechts). Merke: die
+     cq-Einheiten in DIESER Regel gehören noch nicht zu .frame — ein Element
+     fragt nie sich selbst ab. In .frame steht deshalb kein cqi. */
   .frame {
     width: 100%;
     max-width: 1920px;
@@ -52,6 +104,8 @@
     background: #fdfaf2;
     display: grid;
     grid-template-rows: auto auto repeat(var(--slot-count, 7), 80px) 1fr;
+    container-type: inline-size;
+    container-name: plan-frame;
   }
 
   /* ─── Header ───────────────────────────────────────────────── */
@@ -63,8 +117,9 @@
     padding: 3px 32px;
     border-bottom: 2px dashed var(--kids-border-soft);
   }
+  /* T1907: font-size war hart 16px — Kappe bleibt 16px. */
   .week-label {
-    font-size: 16px; color: var(--kids-ink-soft);
+    font-size: clamp(10px, 0.8548cqi, 16px); color: var(--kids-ink-soft);
   }
 
   /* ─── Day-Chips ────────────────────────────────────────────── */
@@ -109,18 +164,22 @@
   .day-chip.today[data-wd="4"] { background: var(--kids-wd-fr-strong); }
   .day-chip.today[data-wd="5"] { background: var(--kids-wd-sa-strong); }
   .day-chip.today[data-wd="6"] { background: var(--kids-wd-so-strong); }
-  .day-chip-label { font-size: 30px; font-weight: 700; line-height: 1; }
+  /* T1907: font-size war hart 30px / 14px — Kappen bleiben. */
+  .day-chip-label { font-size: clamp(19px, 1.6026cqi, 30px); font-weight: 700; line-height: 1; }
   .day-chip-date {
     font-family: var(--kids-font-body);
-    font-size: 14px;
+    font-size: clamp(9px, 0.7479cqi, 14px);
     color: var(--kids-ink-soft);
     margin-top: 2px;
   }
   /* Kleine Über-Label für heute/morgen ("Sprungbrett zum Datum") */
   .day-chip-wrap { flex-direction: column; gap: 4px; align-items: center; }
+  /* T1907: font-size war hart 18px — Kappe bleibt. Die reservierte HÖHE
+     bleibt bewusst fix: sie hält die Chip-Ausrichtung, egal wie groß die
+     Schrift darin gerade ist. */
   .day-overlabel {
     font-family: var(--kids-font-display);
-    font-size: 18px; font-weight: 700;
+    font-size: clamp(11px, 0.9616cqi, 18px); font-weight: 700;
     color: var(--kids-ink); line-height: 1;
     height: 18px;  /* Höhe reservieren, damit Chips ausgerichtet bleiben */
   }
@@ -225,10 +284,11 @@
     cursor: pointer;
     transition: border-color 0.15s, color 0.15s;
   }
+  /* T1907: font-size war hart 38px — Kappe bleibt. */
   .empty-face::before {
     content: "+";
     font-family: var(--kids-font-display);
-    font-size: 38px; font-weight: 700; line-height: 1;
+    font-size: clamp(24px, 2.0300cqi, 38px); font-weight: 700; line-height: 1;
     margin-top: -4px;
   }
   .empty-face:hover {
@@ -252,7 +312,9 @@
     transform: rotate(-1deg);
     box-shadow: 2px 2px 0 var(--kids-ink);
     font-family: var(--kids-font-display);
-    font-size: 22px; font-weight: 700;
+    /* T1907: font-size war hart 22px — Kappe bleibt. Das ist die Stelle, die
+       bei 1280 real über ihre Zelle lief (gemessen 11.9px Überstand). */
+    font-size: clamp(14px, 1.1753cqi, 22px); font-weight: 700;
     color: var(--kids-ink);
   }
   .activity-chip img { display: block; }
@@ -348,13 +410,16 @@
     opacity: 0.75;
   }
   .pill-body { min-width: 0; flex: 1; }
+  /* T1907: font-size war hart 10px / 17px — Kappen bleiben. Die .pill-GEOMETRIE
+     (Padding, Border, 37px-Rasterzeile) bleibt hart: render.py spiegelt sie
+     als GEOMETRIE_PILLE_HOEHE. */
   .pill-time {
-    font-weight: 700; font-size: 10px;
+    font-weight: 700; font-size: clamp(8px, 0.5342cqi, 10px);
     color: var(--kids-ink-soft); line-height: 1;
   }
   .pill-label {
     font-family: var(--kids-font-display);
-    font-size: 17px; font-weight: 700;
+    font-size: clamp(11px, 0.9082cqi, 17px); font-weight: 700;
     line-height: 1; margin-top: 1px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -362,9 +427,10 @@
   /* PLAN-13 V1.3 (Termin-Überschuss): gedimmter Counter unter den sichtbaren
      Pillen einer Tagesspalte — reine Sichtbarkeits-Mechanik OHNE Klick-Pfad
      (Tages-Overlay ist Folge-Ticket QW4). */
+  /* T1907: font-size war hart 14px — Kappe bleibt. */
   .appts-more {
     font-family: var(--kids-font-display);
-    font-size: 14px; font-weight: 700;
+    font-size: clamp(9px, 0.7479cqi, 14px); font-weight: 700;
     color: var(--kids-ink-soft);
     opacity: 0.6;
     padding: 1px 8px;
@@ -377,12 +443,15 @@
   /* ═══ Toddler-Variante (A2) ════════════════════════════════════
      Größere Maße aus dem Design-Handoff. Aktiv durch .frame--toddler.
      Overrides hier am Ende — schlagen frühere generelle Regeln. */
-  .frame--toddler .day-overlabel { font-size: 38px; height: 38px; }
+  /* T1907: font-size war hart 38px / 44px / 18px — Kappen bleiben; dieselbe
+     Regel wie in der Lese-Stufe, nur mit den größeren Kleinkind-Kappen. Die
+     reservierte Überlabel-HÖHE (38px) bleibt fix (Chip-Ausrichtung). */
+  .frame--toddler .day-overlabel { font-size: clamp(24px, 2.0300cqi, 38px); height: 38px; }
   .frame--toddler .day-chip {
     width: 160px; height: 88px; border-width: 3px;
   }
-  .frame--toddler .day-chip-label { font-size: 44px; }
-  .frame--toddler .day-chip-date  { font-size: 18px; }
+  .frame--toddler .day-chip-label { font-size: clamp(28px, 2.3505cqi, 44px); }
+  .frame--toddler .day-chip-date  { font-size: clamp(11px, 0.9616cqi, 18px); }
 
   /* Row-Höhen: 80px ist das Design-Raster der Slot-Zeilen (PLAN-6 V1.3).
      Passt in max-height:1020px (7 Slots × 80px = 560px + Header + Day-Row +
@@ -413,7 +482,8 @@
   .frame--toddler .empty-face {
     width: 86px; height: 86px; border-width: 3px;
   }
-  .frame--toddler .empty-face::before { font-size: 52px; }
+  /* T1907: font-size war hart 52px — Kappe bleibt. */
+  .frame--toddler .empty-face::before { font-size: clamp(33px, 2.7778cqi, 52px); }
 
   /* Aktivitäts-Chip wird zum runden "Stempel" — kein Label, nur Icon. */
   .frame--toddler .activity-chip {
@@ -442,10 +512,18 @@
   .frame--toddler { max-height: none; }
 
   /* ─── Event-Picker Popup ─── */
+  /* T1907: zweiter Container-Anker. Er sitzt AUF dem fixierten Element, nicht
+     darüber — `container-type` bringt `contain: layout` mit; ein Container
+     über einem `position: fixed`-Element würde dessen umschließenden Block
+     verschieben. Ein Element zum Container zu machen ändert seine EIGENE
+     Positionierung nicht, nur die seiner Kinder. `cqi` ist hier die
+     Viewport-Breite (inset: 0), bei 1920×1080 also 1920px. */
   .picker-backdrop {
     position: fixed; inset: 0; z-index: 100;
     background: rgba(43, 42, 38, 0.18);
     display: none;
+    container-type: inline-size;
+    container-name: plan-picker;
   }
   .picker-backdrop.open { display: block; }
   .picker {
@@ -464,7 +542,11 @@
     padding: 6px 10px 10px; margin: 0 auto 12px;
     cursor: pointer;
     font-family: var(--kids-font-display); font-weight: 700;
-    font-size: 22px; color: var(--kids-ink);
+    /* T1907: font-size war hart 22px — Kappe bleibt. Bezug ist die
+       Picker-Overlay-Schicht (Viewport-Breite), nicht .frame: der Picker
+       liegt im Template außerhalb von .page. Die Popup-BREITE (340px) bleibt
+       fix — sie ist in openPicker() als `pw` gespiegelt. */
+    font-size: clamp(14px, 1.1459cqi, 22px); color: var(--kids-ink);
     border-bottom: 2px dashed var(--kids-border-soft);
   }
   .picker-grid {
@@ -482,9 +564,10 @@
     min-height: 90px;
     background: var(--kids-paper);
   }
+  /* T1907: font-size war hart 18px — Kappe bleibt (Bezug: .picker-backdrop). */
   .picker-tile-label {
     font-family: var(--kids-font-display); font-weight: 700;
-    font-size: 18px; color: var(--kids-ink); line-height: 1;
+    font-size: clamp(12px, 0.9376cqi, 18px); color: var(--kids-ink); line-height: 1;
     margin-top: 3px;
   }
 </style>
