@@ -130,3 +130,55 @@ Zweiter Pass, disjunkte Dateimenge: #96 räumt Skill-**Prosa**, RAT-36 räumt
 der Mechanik streichen, die es löscht; diese Zeilen zählen auf #96s −25 % ein.
 Der #96-Pilot `arbeitstag-prep.md` ist kollisionsfrei, weil der Stempel-Guard auf
 *verdrahten* landet.
+
+---
+
+## Nachtrag 2026-08-17 — zwei Verdikte nachgezogen (#1885)
+
+Die Verdikt-Tabelle oben stand vier Tage unausgeführt. Beide offenen Zeilen sind
+jetzt erledigt, eine davon **gegen** ihr ursprüngliches Verdikt.
+
+### `deploy/restart_pending_log.py:39,42` — „reparieren" ist widerlegt
+
+Das Verdikt lautete *reparieren* (Scrub-Platzhalter im Regex). Es beruhte auf
+einer Fundstelle ohne Aufrufkette. Bei der Arbeit an #1839 unabhängig
+nachgemessen:
+
+- Die **verdrahtete** Fassung ist `~/.claude/hooks/restart_pending_log.py` — dort
+  steht kein Platzhalter, sie ist über `LOTSE_PROJECT_REPO` parametrisiert.
+- Der einzige Konsument `deploy/update.sh:64` importiert ausschließlich
+  `load_mapping` und `services_for_paths` — **nie** `XBUDDY_REMOTE_RE`, also nie
+  den beanstandeten Regex.
+- `conventions/services.md:154` benennt bereits die lebende Kopie.
+
+Die Repo-Datei ist ein Duplikat aus der Framework-Migration, das niemand als Hook
+lädt. Es gibt nichts zu reparieren; der Regex kann nie matchen, weil er nie
+aufgerufen wird. Die Zeile bleibt als Geschichte stehen — mit dieser Korrektur
+daneben.
+
+**Die Lehre gehört zum Eintrag:** eine Datei zu lesen belegt nicht, dass sie läuft.
+Zu jeder Behauptung „Mechanik X ist tot" gehört die Aufrufkette, nicht nur der
+Fundort. Genau dieser Fehler steckte im ursprünglichen Verdikt.
+
+### `runner_health.py` + Unit — „weg" ist ausgeführt
+
+Entfernt wurde das **ganze** Verzeichnis `deploy/runner/` (5 versionierte
+Dateien), nicht nur Skript und Unit: README, Test und Unit-Vorlagen existierten
+ausschließlich, um diese eine Mechanik zu bedienen. Skript und Unit zu löschen
+und die README stehenzulassen wäre exakt der Zustand, den dieser Entscheid
+verbietet.
+
+Zwei Befunde, die beim Ausführen dazukamen und das Verdikt stützen:
+
+- Die README zielt auf den Läufer `pi5-buddy`. Den gibt es nicht mehr — der
+  einzige registrierte Läufer ist inzwischen `win-wsl-buddy`. Die Mechanik hätte
+  also selbst dann nichts bewirkt, wenn sie verdrahtet gewesen wäre.
+- Sie trägt zusätzlich Scrub-Platzhalter (`<your-org>`), gehört also in dieselbe
+  Klasse wie die Funde aus #1839.
+
+`pytest.ini` verlor die Zeile `deploy/runner/tests` mit — ohne sie bricht der
+Lauf an einem Pfad, den es nicht mehr gibt.
+
+**Der Halbsatz in `conventions/services.md`,** den das Verdikt mitstreichen
+wollte, existiert dort nicht (mehr): ein `grep` auf „runner" über die Datei ist
+leer. Nichts zu tun.
