@@ -2,7 +2,6 @@
 
 Deckt die im Worktree testbaren Nähte ab (ohne sudo/git/systemctl):
   --derive              Service-Ableitung (geteilter Mapper + Shared-Pfad-Fan-out)
-  --write-version       deploy/version-Datei schreiben
   --mark-done           restart_done:true in restart_pending.jsonl
   --check-llm-slots     FEHLT-Slot-Vorwarnung (T1578, #1578)
 
@@ -93,13 +92,25 @@ def test_derive_shared_plus_service_ist_union_alle():
     assert _derive("conventions/ports.md", "essen/main.py") == ALL_SERVICES
 
 
-# ── --write-version (SVC-6) ────────────────────────────────────────────────
+# ── --write-version ist mit #1788 entfallen ────────────────────────────────
+#
+# Der Schalter schrieb die gemeinsame deploy/version-Datei, die jeder Service
+# las. SVC-6 (geaendert 2026-08-13) hat das abgeloest: jeder Service ermittelt
+# seine Commit-SHA beim Start selbst. Der Test darunter haelt fest, dass der
+# Schalter nicht zurueckkehrt, ohne dass die Regel wieder umgestellt wird.
 
-def test_write_version_schreibt_datei(tmp_path):
+
+def test_write_version_schalter_existiert_nicht_mehr(tmp_path):
+    """#1788: die gemeinsame Deploy-Datei ist ueberholt, der Schalter mit ihr."""
     res = _run("--write-version", "deadbeef42", env={"XBUDDY_DATA_DIR": str(tmp_path)})
-    assert res.returncode == 0, res.stderr
-    version_file = tmp_path / "deploy" / "version"
-    assert version_file.read_text().strip() == "deadbeef42"
+    assert res.returncode != 0, (
+        "--write-version laeuft wieder durch. Die gemeinsame deploy/version-Datei "
+        "zeigt den Stand des ZULETZT GESTARTETEN Dienstes, nicht den des "
+        "gefragten — genau das hat SVC-6 abgeschafft."
+    )
+    assert not (tmp_path / "deploy" / "version").exists(), (
+        "Es wurde wieder eine gemeinsame Versionsdatei geschrieben."
+    )
 
 
 # ── --mark-done ────────────────────────────────────────────────────────────
