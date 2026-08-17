@@ -389,6 +389,69 @@ Sichtbarkeit über alle Spalten (Bug #1146).
 
 *Tickets:* #40, #1146
 
+### PLAN-38 — Termin-Detailansicht als Pop-up (V1.5)
+**Wenn** in der Wochenansicht (`/display/plan/woche`) auf eine Termin-Pille
+getippt wird — Tages-Termin (PLAN-13) **oder** Mehrtages-Spanne (PLAN-14) —,
+**dann** öffnet sich ein modales Pop-up über der Ansicht mit den Details genau
+dieses Termins.
+
+**Inhalt**, in dieser Reihenfolge:
+1. **Titel ungekürzt** — der volle Kalender-Titel. Die Kachel streicht den
+   Personen-Namen heraus, weil der Ring die Person schon zeigt (PLAN-19); das
+   Pop-up tut das **nicht**.
+2. **Zeit** — bei zeitgebundenen Terminen `von–bis` (das Ende liegt im Modell und
+   wird sonst nirgends angezeigt), bei ganztägigen die Datums-Spanne, bei
+   eintägig-ganztägigen nur das Datum. Wochentage werden **deutsch** ausgegeben.
+3. **Ort** (PLAN-17) — entfällt ersatzlos, wenn leer.
+4. **Notiz** (PLAN-17) — entfällt ersatzlos, wenn leer.
+5. **Personen** — die zugeordneten Personen als Foto-im-Ring (PLAN-19, FAM-4)
+   mit Namen, in größerer Stufe als auf der Kachel.
+
+Trägt ein Termin weder Ort noch Notiz, sagt das Pop-up das **ausdrücklich**
+(statt eine leere Fläche zu zeigen). Das ist der Regelfall: die Live-Probe vom
+17.08. fand 4 Orte und 1 Notiz auf 13 Termine.
+
+**Form (Gate B, Nic 2026-08-17 — Variante C):** Das Pop-up trägt einen
+abgesetzten Kopf mit dem **Piktogramm der angetippten Kachel**, darunter Titel
+und Zeit; im Rumpf folgen Ort, Notiz und Personen. Das Symbol stellt den Bezug
+zur Kachel her, aus der das Pop-up kam. Wird das Pop-up über den Counter
+geöffnet (siehe unten), zeigt der Kopf das generische Termin-Icon.
+
+**Schließen.** Oben rechts sitzt ein Schließen-Knopf als deutlich sichtbares X
+(dieselbe Form wie im Aktivitäts-Picker, PLAN-11) mit großzügiger Tippfläche.
+Er ist das gesetzte Schließ-Element. Tippen auf den Hintergrund und `Escape`
+schließen ebenfalls — Konsistenz mit dem Picker im selben View.
+
+**Das Pop-up schließt sich nicht von selbst.** Es gibt keinen Zeitablauf und
+keinen automatischen Rückfall: die gewohnte Übersicht kommt erst zurück, wenn
+jemand aktiv schließt (Nic-Setzung 2026-08-17). Die Wochenansicht lädt sich
+nicht periodisch neu, ein offenes Pop-up wird also nicht weggerissen.
+
+**Überschuss-Counter (löst QW4 ein).** Ein Tipp auf `+M weitere` (PLAN-13)
+öffnet dasselbe Pop-up für die an diesem Tag verdeckten Termine. Sind es
+mehrere, zeigt es sie als Tages-Liste; ein Tipp auf einen Eintrag führt zu
+dessen Detail. Ohne diesen Pfad bliebe der einzige Termin der Probe-Woche mit
+echtem Detail-Inhalt unerreichbar (Begründung bei PLAN-13).
+
+**Datenquelle.** Die Detail-Daten kommen aus demselben Server-Render wie die
+Kacheln; das Pop-up lädt **nicht** nach. So funktioniert es auch, wenn der
+Kalender gerade nicht erreichbar ist (PLAN-20) — es zeigt denselben Stand wie
+die Kacheln darunter.
+
+**Sichtbarkeit.** Ort und Notiz sind freier Kalender-Text von Erwachsenen und
+werden damit auf der Kinder-Fläche sichtbar — belegt an der Live-Probe: die
+einzige Notiz der Woche war eine Flugbuchung mit Buchungsnummer und Link. Das
+ist eine bewusste Setzung (Nic 2026-08-17): der Familien-Kalender ist der
+gemeinsame Kalender. Wer einzelne Termine nicht am Display sehen will, hält sie
+aus dem Familien-Kalender heraus — die Anzeige filtert nicht.
+
+**Bedienbarkeit dieser Fläche.** `/display/plan/woche` ist bereits bedienbar
+(PLAN-7 Klick-Cycle, PLAN-11 Aktivitäts-Picker mit Overlay). PLAN-38 fügt keine
+neue Interaktions-Klasse hinzu. Die PLAN-13-Verwerfung „Display-Modus ohne
+Touch-Fokus" betraf **vertikales Scrollen**, nicht Bedienbarkeit.
+
+*Tickets:* #1875
+
 ## 6. Kalender-Anbindung (App-eigene Funktion)
 
 > Die Anbindung an den Google-Familien-Kalender ist eine Funktion **dieser
@@ -1234,69 +1297,6 @@ vorgang fallen, was ein view-internes Einzelfeld-Save nicht leistet).
 **Auth:** PUBLIC / Netz-Trust (auth.md AUTH-6, `/api/v1/plan/*`), wie PLAN-36.
 
 *Tickets:* #1126 (Refs #259)
-
-### PLAN-38 — Termin-Detailansicht als Pop-up (V1.5)
-**Wenn** in der Wochenansicht (`/display/plan/woche`) auf eine Termin-Pille
-getippt wird — Tages-Termin (PLAN-13) **oder** Mehrtages-Spanne (PLAN-14) —,
-**dann** öffnet sich ein modales Pop-up über der Ansicht mit den Details genau
-dieses Termins.
-
-**Inhalt**, in dieser Reihenfolge:
-1. **Titel ungekürzt** — der volle Kalender-Titel. Die Kachel streicht den
-   Personen-Namen heraus, weil der Ring die Person schon zeigt (PLAN-19); das
-   Pop-up tut das **nicht**.
-2. **Zeit** — bei zeitgebundenen Terminen `von–bis` (das Ende liegt im Modell und
-   wird sonst nirgends angezeigt), bei ganztägigen die Datums-Spanne, bei
-   eintägig-ganztägigen nur das Datum. Wochentage werden **deutsch** ausgegeben.
-3. **Ort** (PLAN-17) — entfällt ersatzlos, wenn leer.
-4. **Notiz** (PLAN-17) — entfällt ersatzlos, wenn leer.
-5. **Personen** — die zugeordneten Personen als Foto-im-Ring (PLAN-19, FAM-4)
-   mit Namen, in größerer Stufe als auf der Kachel.
-
-Trägt ein Termin weder Ort noch Notiz, sagt das Pop-up das **ausdrücklich**
-(statt eine leere Fläche zu zeigen). Das ist der Regelfall: die Live-Probe vom
-17.08. fand 4 Orte und 1 Notiz auf 13 Termine.
-
-**Form (Gate B, Nic 2026-08-17 — Variante C):** Das Pop-up trägt einen
-abgesetzten Kopf mit dem **Piktogramm der angetippten Kachel**, darunter Titel
-und Zeit; im Rumpf folgen Ort, Notiz und Personen. Das Symbol stellt den Bezug
-zur Kachel her, aus der das Pop-up kam. Wird das Pop-up über den Counter
-geöffnet (siehe unten), zeigt der Kopf das generische Termin-Icon.
-
-**Schließen.** Oben rechts sitzt ein Schließen-Knopf als deutlich sichtbares X
-(dieselbe Form wie im Aktivitäts-Picker, PLAN-11) mit großzügiger Tippfläche.
-Er ist das gesetzte Schließ-Element. Tippen auf den Hintergrund und `Escape`
-schließen ebenfalls — Konsistenz mit dem Picker im selben View.
-
-**Das Pop-up schließt sich nicht von selbst.** Es gibt keinen Zeitablauf und
-keinen automatischen Rückfall: die gewohnte Übersicht kommt erst zurück, wenn
-jemand aktiv schließt (Nic-Setzung 2026-08-17). Die Wochenansicht lädt sich
-nicht periodisch neu, ein offenes Pop-up wird also nicht weggerissen.
-
-**Überschuss-Counter (löst QW4 ein).** Ein Tipp auf `+M weitere` (PLAN-13)
-öffnet dasselbe Pop-up für die an diesem Tag verdeckten Termine. Sind es
-mehrere, zeigt es sie als Tages-Liste; ein Tipp auf einen Eintrag führt zu
-dessen Detail. Ohne diesen Pfad bliebe der einzige Termin der Probe-Woche mit
-echtem Detail-Inhalt unerreichbar (Begründung bei PLAN-13).
-
-**Datenquelle.** Die Detail-Daten kommen aus demselben Server-Render wie die
-Kacheln; das Pop-up lädt **nicht** nach. So funktioniert es auch, wenn der
-Kalender gerade nicht erreichbar ist (PLAN-20) — es zeigt denselben Stand wie
-die Kacheln darunter.
-
-**Sichtbarkeit.** Ort und Notiz sind freier Kalender-Text von Erwachsenen und
-werden damit auf der Kinder-Fläche sichtbar — belegt an der Live-Probe: die
-einzige Notiz der Woche war eine Flugbuchung mit Buchungsnummer und Link. Das
-ist eine bewusste Setzung (Nic 2026-08-17): der Familien-Kalender ist der
-gemeinsame Kalender. Wer einzelne Termine nicht am Display sehen will, hält sie
-aus dem Familien-Kalender heraus — die Anzeige filtert nicht.
-
-**Bedienbarkeit dieser Fläche.** `/display/plan/woche` ist bereits bedienbar
-(PLAN-7 Klick-Cycle, PLAN-11 Aktivitäts-Picker mit Overlay). PLAN-38 fügt keine
-neue Interaktions-Klasse hinzu. Die PLAN-13-Verwerfung „Display-Modus ohne
-Touch-Fokus" betraf **vertikales Scrollen**, nicht Bedienbarkeit.
-
-*Tickets:* #1875
 
 ## 10. Tests
 
