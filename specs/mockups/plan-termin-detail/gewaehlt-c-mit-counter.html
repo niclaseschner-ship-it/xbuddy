@@ -1,0 +1,2508 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlanBuddy · mein Plan</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="./assets/design/tokens.css">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--kids-bg);
+    color: var(--kids-ink);
+    font-family: var(--kids-font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* Outer page — füllt die Pane fluid (kein 1920er-Kiosk-Fix) */
+  /* T1574: width/height 100%/100vh — die View passt sich der Pane-Breite
+     der Heim-Shell an (analog #1541 photo/wetter DC-15-Muster). */
+  .page {
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+
+  /* Inneres Frame — fluid, Design-Raster bleibt über max-height gesichert.
+     BG neutral cream, damit die Pastell-Wochentagsspalten klar sichtbar
+     gegen die Page (--kids-bg, gelblich) abgesetzt sind. */
+  /* PLAN-6 V1.3 (RAT-4-Auflösung 2026-06-22) — Display-Robustheit:
+     Frame ist ein CSS-Grid. Zeilen-Form: Header (auto), Day-Row (auto),
+     je Slot eine FIXE 80px-Zeile (repeat(var(--slot-count), 80px)) und die
+     Termin-Leiste (PLAN-13) bekommt den verbleibenden Platz (1fr). So drückt
+     ein wachsender Schedule die Termin-Leiste nicht mehr aus dem Frame
+     (verworfene flex-Form, Befund 2026-06-22). --slot-count wird inline aus
+     der Slot-Anzahl gesetzt — keine Hardcode-Annahme. */
+  /* T1574: max-width: 1920px statt 1500px — Frame füllt Heim-Shell-Pane
+     fluid aus (analog #1541 photo/wetter); Pi-Vollbild-Kiosk (1920px) bleibt
+     unverändert, da max-width dann nicht greift. */
+  .frame {
+    width: 100%;
+    max-width: 1920px;
+    height: 100%;
+    max-height: 1020px;
+    background: #fdfaf2;
+    display: grid;
+    grid-template-rows: auto auto repeat(var(--slot-count, 7), 80px) 1fr;
+  }
+
+  /* ─── Header ───────────────────────────────────────────────── */
+  /* #1092 Defekt 3: Die sichtbare Headline ist entfernt. Der Kopf trägt nur
+     noch den Datumsbereich oben rechts und schrumpft auf minimale Höhe — der
+     gewonnene vertikale Platz fließt in den 1fr-Termin-Bereich (PLAN-13). */
+  .header {
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 3px 32px;
+    border-bottom: 2px dashed var(--kids-border-soft);
+  }
+  .week-label {
+    font-size: 16px; color: var(--kids-ink-soft);
+  }
+
+  /* ─── Day-Chips ────────────────────────────────────────────── */
+  .day-row {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    padding: 10px 24px 6px;
+  }
+  .day-cells {
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    gap: 10px;
+  }
+  .day-chip-wrap {
+    display: flex; justify-content: center;
+  }
+  .day-chip {
+    width: 120px; height: 64px;
+    border-radius: 14px;
+    border: 2.5px solid var(--kids-ink);
+    background: var(--kids-paper);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: var(--kids-font-display);
+    color: var(--kids-ink);
+    flex-shrink: 0;
+  }
+  /* Jeder Day-Chip bekommt seine Pastellfarbe (soft); Heute kräftiger (strong)
+     plus Rotation + Schatten als zusätzliches Hervorhebungs-Pattern. */
+  .day-chip[data-wd="0"]       { background: var(--kids-wd-mo-soft); }
+  .day-chip[data-wd="1"]       { background: var(--kids-wd-di-soft); }
+  .day-chip[data-wd="2"]       { background: var(--kids-wd-mi-soft); }
+  .day-chip[data-wd="3"]       { background: var(--kids-wd-do-soft); }
+  .day-chip[data-wd="4"]       { background: var(--kids-wd-fr-soft); }
+  .day-chip[data-wd="5"]       { background: var(--kids-wd-sa-soft); }
+  .day-chip[data-wd="6"]       { background: var(--kids-wd-so-soft); }
+  .day-chip.today              { transform: rotate(-1.5deg); box-shadow: 3px 4px 0 var(--kids-ink); }
+  .day-chip.today[data-wd="0"] { background: var(--kids-wd-mo-strong); }
+  .day-chip.today[data-wd="1"] { background: var(--kids-wd-di-strong); }
+  .day-chip.today[data-wd="2"] { background: var(--kids-wd-mi-strong); }
+  .day-chip.today[data-wd="3"] { background: var(--kids-wd-do-strong); }
+  .day-chip.today[data-wd="4"] { background: var(--kids-wd-fr-strong); }
+  .day-chip.today[data-wd="5"] { background: var(--kids-wd-sa-strong); }
+  .day-chip.today[data-wd="6"] { background: var(--kids-wd-so-strong); }
+  .day-chip-label { font-size: 30px; font-weight: 700; line-height: 1; }
+  .day-chip-date {
+    font-family: var(--kids-font-body);
+    font-size: 14px;
+    color: var(--kids-ink-soft);
+    margin-top: 2px;
+  }
+  /* Kleine Über-Label für heute/morgen ("Sprungbrett zum Datum") */
+  .day-chip-wrap { flex-direction: column; gap: 4px; align-items: center; }
+  .day-overlabel {
+    font-family: var(--kids-font-display);
+    font-size: 18px; font-weight: 700;
+    color: var(--kids-ink); line-height: 1;
+    height: 18px;  /* Höhe reservieren, damit Chips ausgerichtet bleiben */
+  }
+  .day-overlabel:empty { visibility: hidden; }
+
+  /* ─── Schedule Rail ────────────────────────────────────────── */
+  /* PLAN-6 V1.3: display:contents — die Slot-Zeilen (.row) werden direkte
+     Grid-Items des .frame-Grids und belegen so je eine 80px-Zeile. Der
+     .schedule-Wrapper selbst erzeugt keine Box mehr; Horizontal-Padding und
+     Zeilen-Trenner liegen darum an .row. */
+  .schedule { display: contents; }
+  .row {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    align-items: stretch;
+    border-top: 2px solid var(--kids-border-soft);
+    padding: 0 24px;
+  }
+  .rail-cell {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; padding: 0 8px;
+  }
+  .row-cells {
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    gap: 0;
+  }
+  .cell {
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    border-right: 1px dashed var(--kids-border-soft);
+  }
+  .cell:last-child { border-right: none; }
+  /* Pastell-Spaltenfarbe pro Wochentag (data-wd 0=Mo … 6=So). */
+  .cell[data-wd="0"]       { background: var(--kids-wd-mo-soft); }
+  .cell[data-wd="1"]       { background: var(--kids-wd-di-soft); }
+  .cell[data-wd="2"]       { background: var(--kids-wd-mi-soft); }
+  .cell[data-wd="3"]       { background: var(--kids-wd-do-soft); }
+  .cell[data-wd="4"]       { background: var(--kids-wd-fr-soft); }
+  .cell[data-wd="5"]       { background: var(--kids-wd-sa-soft); }
+  .cell[data-wd="6"]       { background: var(--kids-wd-so-soft); }
+  /* Heute = kräftige Variante derselben Tagesfarbe. */
+  .cell.today[data-wd="0"] { background: var(--kids-wd-mo-strong); }
+  .cell.today[data-wd="1"] { background: var(--kids-wd-di-strong); }
+  .cell.today[data-wd="2"] { background: var(--kids-wd-mi-strong); }
+  .cell.today[data-wd="3"] { background: var(--kids-wd-do-strong); }
+  .cell.today[data-wd="4"] { background: var(--kids-wd-fr-strong); }
+  .cell.today[data-wd="5"] { background: var(--kids-wd-sa-strong); }
+  .cell.today[data-wd="6"] { background: var(--kids-wd-so-strong); }
+  .cell.today-first::before {
+    content: "";
+    position: absolute;
+    top: -6px; left: 6px; right: 6px; height: 3px;
+    background: var(--kids-ink);
+    border-radius: 3px;
+    opacity: 0.4;
+  }
+
+  /* ─── Face / Ring-Foto ─────────────────────────────────────── */
+  .face {
+    border-radius: 50%;
+    background: var(--kids-paper);
+    display: inline-flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+  }
+  .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .face.size-76  { width: 76px; height: 76px; }
+  .face.size-54  { width: 54px; height: 54px; }
+  .face.size-24  { width: 24px; height: 24px; }
+
+  .face.ring-blue   { border: 4px solid var(--kids-ring-blue); }
+  .face.ring-orange { border: 4px solid var(--kids-ring-orange); }
+  .face.ring-green  { border: 4px solid var(--kids-ring-green); }
+  .face.ring-red    { border: 4px solid var(--kids-ring-red); }
+  .face.ring-purple { border: 4px solid var(--kids-ring-purple); }
+  .face.ring-teal   { border: 4px solid var(--kids-ring-teal); }
+  .face.ring-gray   { border: 4px solid var(--kids-ring-gray); }
+
+  .face.size-54.ring-blue,
+  .face.size-54.ring-orange,
+  .face.size-54.ring-green,
+  .face.size-54.ring-red,
+  .face.size-54.ring-purple,
+  .face.size-54.ring-teal,
+  .face.size-54.ring-gray { border-width: 3px; }
+
+  .face.size-24.ring-blue,
+  .face.size-24.ring-orange,
+  .face.size-24.ring-green,
+  .face.size-24.ring-red,
+  .face.size-24.ring-purple,
+  .face.size-24.ring-teal,
+  .face.size-24.ring-gray { border-width: 2px; }
+
+  .empty-face {
+    width: 60px; height: 60px; border-radius: 50%;
+    border: 2px dashed #cdc7bd;
+    display: flex; align-items: center; justify-content: center;
+    color: #cdc7bd;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .empty-face::before {
+    content: "+";
+    font-family: var(--kids-font-display);
+    font-size: 38px; font-weight: 700; line-height: 1;
+    margin-top: -4px;
+  }
+  .empty-face:hover {
+    border-color: var(--kids-ink-soft);
+    color: var(--kids-ink-soft);
+  }
+
+  /* Adult-Face in den Schedule-Cells (bring/pickup/dinner/bed1/bed2) ist
+     clickable und cycled durch die Personen. Activity-Cells und Termin-Faces
+     sollen NICHT als Adult-Cycle behandelt werden. */
+  .cell .face.size-76 { cursor: pointer; transition: transform 0.1s; }
+  .cell .face.size-76:hover { transform: scale(1.04); }
+
+  /* ─── Activity-Chip (act1/act2) ────────────────────────────── */
+  .activity-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    background: var(--kids-paper);
+    border: 2.5px solid var(--kids-ink);
+    border-radius: 999px;
+    transform: rotate(-1deg);
+    box-shadow: 2px 2px 0 var(--kids-ink);
+    font-family: var(--kids-font-display);
+    font-size: 22px; font-weight: 700;
+    color: var(--kids-ink);
+  }
+  .activity-chip img { display: block; }
+
+  /* ─── Appointments-Bar ─────────────────────────────────────── */
+  /* PLAN-6/PLAN-13 V1.3: letztes Grid-Item des .frame-Grids → belegt die
+     1fr-Restzeile. min-height:0, damit die Zeile schrumpfen statt überlaufen
+     kann; der Termin-Überschuss (+M weitere, PLAN-13) kappt die Pillen-Zahl. */
+  .appts {
+    padding: 8px 24px 12px;
+    border-top: 2px dashed var(--kids-border-soft);
+    background: var(--kids-paper);
+    min-height: 0;
+    overflow: hidden;
+  }
+  .appts-grid {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    align-items: flex-start;
+  }
+  .appts-rail {
+    display: flex; align-items: center; justify-content: center;
+    padding-top: 8px;
+  }
+  /* PLAN-14 V1.3: Ein gemeinsames Spalten-Grid für Tagestermine UND
+     Span-Balken. Die Span-Balken liegen als ABSOLUT positionierte Overlay-
+     Schicht über dem oberen Band — sie reservieren KEINE durchgehende Zeile
+     über das ganze Fenster (verworfene Voll-Breite-Band-Form, Befund
+     2026-06-22). Ein Balken läuft nur über seine berührten Spalten; in
+     span-losen Spalten beginnen die Tagestermine ganz oben (Nachrutschen). */
+  .appts-board {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    gap: 10px;
+    align-items: start;
+  }
+  /* PLAN-14-PACKING (#1146): Overlay-Schicht der durchgehenden Span-Balken —
+     gleiches Spalten-Grid, absolut über dem Board. Gepackte, nicht-überlappende
+     Spans teilen sich eine Lane (#1092 S5). Jeder Balken sitzt per grid-row in
+     seiner Lane und per grid-column über seine berührten Spalten.
+     KRITISCHE KOPPLUNG (Loch-Füllung fluchtet): Zeilenhöhe (grid-auto-rows: 37px
+     = H = GEOMETRIE_PILLE_HOEHE) UND Zeilen-Gap (row-gap: 0) sind EXAKT gleich
+     mit .appts-col. Nur so sitzt Zelle (r, d) in beiden Grids auf derselben
+     y-Höhe — ein Tages-Termin in einer freien Lane-Zelle (über einem Balken der
+     Nachbarspalte) fluchtet mit dem Balken. Column-Gap (10px) = Board-Column-Gap. */
+  .appts-spans {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    grid-auto-rows: 37px;
+    gap: 0 10px;
+    pointer-events: none;
+  }
+  .appts-spans:empty { display: none; }
+  .pill.span {
+    /* Spalten-Span + Lane werden inline gesetzt (grid-column start/end+1,
+       grid-row lane) → durchgehender Balken über die berührten Spalten in
+       seiner Lane (PLAN-14, Lane-Packing). */
+    pointer-events: auto;
+  }
+  /* PLAN-14-PACKING (#1146): Tages-Termine als 2D-Grid statt flex-Stack. Jede
+     .pill sitzt per inline `grid-row` in ihrer gepackten Zeile (row+1) — freie
+     Lane-Löcher werden explizit gefüllt (auch über einem Balken). Zeilenhöhe
+     37px (= H) und row-gap 0 sind DIESELBEN wie im .appts-spans-Overlay (s.o.),
+     damit Loch-Termin und Nachbar-Balken fluchten. align-items: start → die
+     Pille sitzt oben in ihrer Zeile (Zeilen-Pitch bleibt exakt 37px, kein
+     kumulativer Drift). Das frühere Span-Band-Reservierungs-Konstrukt (Vorlauf-
+     Padding je Spalte) ist entfallen — die Band-Reservierung folgt jetzt aus der
+     expliziten grid-row jeder Pille. */
+  .appts-col {
+    display: grid;
+    grid-auto-rows: 37px;
+    row-gap: 0;
+    align-items: start;
+    min-height: 80px;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 7px;
+    background: var(--kids-paper);
+    border: 2px solid var(--kids-ink);
+    border-radius: 9px;
+    color: var(--kids-ink);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .pill.muted {
+    background: var(--kids-weekend-bg);
+    border-color: var(--kids-muted);
+    opacity: 0.75;
+  }
+  .pill-body { min-width: 0; flex: 1; }
+  .pill-time {
+    font-weight: 700; font-size: 10px;
+    color: var(--kids-ink-soft); line-height: 1;
+  }
+  .pill-label {
+    font-family: var(--kids-font-display);
+    font-size: 17px; font-weight: 700;
+    line-height: 1; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* PLAN-13 V1.3 (Termin-Überschuss): gedimmter Counter unter den sichtbaren
+     Pillen einer Tagesspalte — reine Sichtbarkeits-Mechanik OHNE Klick-Pfad
+     (Tages-Overlay ist Folge-Ticket QW4). */
+  .appts-more {
+    font-family: var(--kids-font-display);
+    font-size: 14px; font-weight: 700;
+    color: var(--kids-ink-soft);
+    opacity: 0.6;
+    padding: 1px 8px;
+    line-height: 1;
+  }
+
+  /* Löschen-Icon (UI-Control, kein ARASAAC) */
+  svg.icon { display: block; }
+
+  /* ═══ Toddler-Variante (A2) ════════════════════════════════════
+     Größere Maße aus dem Design-Handoff. Aktiv durch .frame--toddler.
+     Overrides hier am Ende — schlagen frühere generelle Regeln. */
+  .frame--toddler .day-overlabel { font-size: 38px; height: 38px; }
+  .frame--toddler .day-chip {
+    width: 160px; height: 88px; border-width: 3px;
+  }
+  .frame--toddler .day-chip-label { font-size: 44px; }
+  .frame--toddler .day-chip-date  { font-size: 18px; }
+
+  /* Row-Höhen: 80px ist das Design-Raster der Slot-Zeilen (PLAN-6 V1.3).
+     Passt in max-height:1020px (7 Slots × 80px = 560px + Header + Day-Row +
+     1fr-Termin-Rest). Wenn das Display kleiner ist, scrollt die page
+     (siehe body-Override). */
+  /* Toddler: höhere Slot-Zeilen — die fixe Frame-Grid-Zeile wird auf 116px
+     gesetzt (PLAN-6 V1.3 Grid bleibt erhalten, nur die Slot-Höhe wächst). */
+  .frame--toddler {
+    grid-template-rows: auto auto repeat(var(--slot-count, 7), 116px) 1fr;
+  }
+  .frame--toddler .row {
+    grid-template-columns: 220px 1fr;
+    padding: 0 40px;
+  }
+  .frame--toddler .rail-cell { gap: 16px; padding: 0 12px; }
+  .frame--toddler .rail-cell > img { width: 68px !important; height: 68px !important; }
+
+  /* Adult-Face in der Cell: ~96×96 statt 76×76, dickerer Ring. */
+  .frame--toddler .cell .face.size-76 {
+    width: 96px; height: 96px; border-width: 5px;
+  }
+  /* Kid-Face im Rail: 68×68 statt 54×54. */
+  .frame--toddler .rail-cell .face.size-54 {
+    width: 68px; height: 68px; border-width: 4px;
+  }
+
+  /* Empty-Slot größer, Plus prominenter. */
+  .frame--toddler .empty-face {
+    width: 86px; height: 86px; border-width: 3px;
+  }
+  .frame--toddler .empty-face::before { font-size: 52px; }
+
+  /* Aktivitäts-Chip wird zum runden "Stempel" — kein Label, nur Icon. */
+  .frame--toddler .activity-chip {
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    padding: 0;
+    border-width: 4px;
+    box-shadow: 4px 4px 0 var(--kids-ink);
+    transform: rotate(-2deg);
+    justify-content: center;
+  }
+  .frame--toddler .activity-chip > img {
+    width: 56px !important; height: 56px !important;
+  }
+  .frame--toddler .activity-chip > span { display: none; }
+
+  /* Größerer Header-Bereich und Gap zwischen Day-Chips. */
+  .frame--toddler .day-cells { gap: 36px; }
+  .frame--toddler .row-cells { gap: 36px; }
+  .frame--toddler .day-row   { padding: 18px 40px 10px; }
+
+  /* Falls auf einem kleineren Display nicht alles reinpasst: erlaube Scroll
+     statt etwas wegzuklippen. body global hat overflow:hidden für A1. */
+  body:has(.frame--toddler) { overflow: auto; }
+  .page:has(.frame--toddler) { align-items: flex-start; padding-top: 12px; padding-bottom: 12px; }
+  .frame--toddler { max-height: none; }
+
+  /* ─── Event-Picker Popup ─── */
+  .picker-backdrop {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(43, 42, 38, 0.18);
+    display: none;
+  }
+  .picker-backdrop.open { display: block; }
+  .picker {
+    position: absolute;
+    width: 340px;
+    background: var(--kids-bg);
+    border: 3px solid var(--kids-ink);
+    border-radius: 18px;
+    box-shadow: 6px 8px 0 var(--kids-ink);
+    padding: 16px;
+    font-family: var(--kids-font-body);
+  }
+  .picker-delete {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; background: transparent; border: none;
+    padding: 6px 10px 10px; margin: 0 auto 12px;
+    cursor: pointer;
+    font-family: var(--kids-font-display); font-weight: 700;
+    font-size: 22px; color: var(--kids-ink);
+    border-bottom: 2px dashed var(--kids-border-soft);
+  }
+  .picker-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  }
+  .picker-tile {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px;
+    padding: 12px 6px 10px;
+    border: 2.5px solid var(--kids-ink);
+    border-radius: 14px;
+    box-shadow: 2px 3px 0 var(--kids-ink);
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 90px;
+    background: var(--kids-paper);
+  }
+  .picker-tile-label {
+    font-family: var(--kids-font-display); font-weight: 700;
+    font-size: 18px; color: var(--kids-ink); line-height: 1;
+    margin-top: 3px;
+  }
+</style>
+<style>
+
+  /* ---- Termin-Detailansicht (PLAN-38-Entwurf, #1875) ---- */
+  .detail-backdrop {
+    position: fixed; inset: 0; background: rgba(20,16,10,.55);
+    display: none; z-index: 90; backdrop-filter: blur(2px);
+  }
+  .detail-backdrop.open { display: block; }
+  .pill { cursor: pointer; }
+  .detail-close {
+    position: absolute; top: 14px; right: 14px;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 3px solid var(--kids-ink, #3b2f22); background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0; line-height: 0;
+    box-shadow: 0 3px 0 rgba(0,0,0,.15);
+  }
+  .detail-close svg { width: 30px; height: 30px; }
+  .detail-close::after {
+    content: ""; position: absolute; inset: -10px;   /* grosszuegige Tippflaeche */
+  }
+  .d-titel {
+    font-family: var(--kids-font-display, inherit); font-weight: 700;
+    font-size: 40px; line-height: 1.15; color: var(--kids-ink, #3b2f22);
+    margin: 0 70px 6px 0;
+  }
+  .d-zeit {
+    font-size: 26px; font-weight: 700; color: var(--kids-ink, #3b2f22);
+    opacity: .8; margin-bottom: 18px;
+  }
+  .d-zeile { display: flex; gap: 12px; align-items: flex-start; margin-top: 14px; }
+  .d-zeile img { width: 34px; height: 34px; flex: none; margin-top: 2px; }
+  .d-wert { font-size: 24px; line-height: 1.35; color: var(--kids-ink, #3b2f22); }
+  .d-notiz {
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 190px; overflow-y: auto;
+  }
+  .d-personen { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+  .d-person { display: flex; gap: 8px; align-items: center; font-size: 22px; font-weight: 700; }
+  .d-person img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+  .d-leer { font-size: 21px; opacity: .5; font-style: italic; margin-top: 12px; }
+
+  .detail-card {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: min(660px, 82vw); max-height: 78vh; overflow-y: auto;
+    background: var(--kids-surface, #fffdf7);
+    border: 4px solid var(--kids-ink, #3b2f22); border-radius: 26px;
+    padding: 0 0 32px; z-index: 91;
+    box-shadow: 0 14px 0 rgba(0,0,0,.16);
+  }
+  .detail-kopf {
+    display: flex; gap: 18px; align-items: center;
+    padding: 26px 34px 22px; border-bottom: 3px dashed var(--kids-border-soft, #d9cdb8);
+    background: var(--kids-accent-soft, #fdf3dd); border-radius: 22px 22px 0 0;
+  }
+  .detail-kopf img.d-ikon { width: 62px; height: 62px; flex: none; }
+  .detail-rumpf { padding: 22px 34px 0; }
+  .c-zoom .d-titel { margin-right: 60px; font-size: 36px; }
+
+</style>
+</head>
+<body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+
+
+
+
+
+
+<div class="page">
+  <div class="frame " style="--col-count: 7; --slot-count: 7;">
+
+    
+    <div class="header">
+      <div class="week-label">17.08. – 23.08.</div>
+    </div>
+
+    
+    <div class="day-row">
+      <div></div>
+      <div class="day-cells">
+        
+        <div class="day-chip-wrap">
+          <div class="day-overlabel">heute</div>
+          <div class="day-chip today" data-wd="0">
+            <div class="day-chip-label">Mo</div>
+            <div class="day-chip-date">17.08.</div>
+          </div>
+        </div>
+        
+        <div class="day-chip-wrap">
+          <div class="day-overlabel">morgen</div>
+          <div class="day-chip " data-wd="1">
+            <div class="day-chip-label">Di</div>
+            <div class="day-chip-date">18.08.</div>
+          </div>
+        </div>
+        
+        <div class="day-chip-wrap">
+          <div class="day-overlabel"></div>
+          <div class="day-chip " data-wd="2">
+            <div class="day-chip-label">Mi</div>
+            <div class="day-chip-date">19.08.</div>
+          </div>
+        </div>
+        
+        <div class="day-chip-wrap">
+          <div class="day-overlabel"></div>
+          <div class="day-chip " data-wd="3">
+            <div class="day-chip-label">Do</div>
+            <div class="day-chip-date">20.08.</div>
+          </div>
+        </div>
+        
+        <div class="day-chip-wrap">
+          <div class="day-overlabel"></div>
+          <div class="day-chip " data-wd="4">
+            <div class="day-chip-label">Fr</div>
+            <div class="day-chip-date">21.08.</div>
+          </div>
+        </div>
+        
+        <div class="day-chip-wrap">
+          <div class="day-overlabel"></div>
+          <div class="day-chip " data-wd="5">
+            <div class="day-chip-label">Sa</div>
+            <div class="day-chip-date">22.08.</div>
+          </div>
+        </div>
+        
+        <div class="day-chip-wrap">
+          <div class="day-overlabel"></div>
+          <div class="day-chip " data-wd="6">
+            <div class="day-chip-label">So</div>
+            <div class="day-chip-date">23.08.</div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+
+    
+    <div class="schedule">
+      
+        
+        <div class="row">
+          <div class="rail-cell">
+            
+            <img src="./assets/arasaac/37807.png" width="52" height="52" alt="" style="display:block;object-fit:contain;">
+            
+          </div>
+          <div class="row-cells">
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell today today-first"
+                   data-slot="bring"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-17"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="0"
+                   data-wd="0"
+                   style="background: var(--kids-wd-mo-strong);"
+                   
+                   data-person-id="emil"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bring"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-18"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="1"
+                   data-wd="1"
+                   style="background: var(--kids-wd-di-soft);"
+                   
+                   data-person-id="petra"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-orange">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bring"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-19"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="2"
+                   data-wd="2"
+                   style="background: var(--kids-wd-mi-soft);"
+                   
+                   data-person-id="lena"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bring"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-20"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="3"
+                   data-wd="3"
+                   style="background: var(--kids-wd-do-soft);"
+                   
+                   data-person-id="jonas"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bring"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-21"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="4"
+                   data-wd="4"
+                   style="background: var(--kids-wd-fr-soft);"
+                   
+                   data-person-id="petra"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-orange">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bring"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-22"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="5"
+                   data-wd="5"
+                   style="background: var(--kids-wd-sa-soft);"
+                   
+                   
+                   >
+                
+                  <div class="empty-face"></div>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bring"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-23"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="6"
+                   data-wd="6"
+                   style="background: var(--kids-wd-so-soft);"
+                   
+                   
+                   >
+                
+                  <div class="empty-face"></div>
+                
+              </div>
+            
+          </div>
+        </div>
+      
+        
+        <div class="row">
+          <div class="rail-cell">
+            
+            <img src="./assets/arasaac/39520.png" width="52" height="52" alt="" style="display:block;object-fit:contain;">
+            
+          </div>
+          <div class="row-cells">
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell today"
+                   data-slot="pick"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-17"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="0"
+                   data-wd="0"
+                   style="background: var(--kids-wd-mo-strong);"
+                   
+                   data-person-id="petra"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-orange">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="pick"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-18"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="1"
+                   data-wd="1"
+                   style="background: var(--kids-wd-di-soft);"
+                   
+                   data-person-id="lena"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="pick"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-19"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="2"
+                   data-wd="2"
+                   style="background: var(--kids-wd-mi-soft);"
+                   
+                   data-person-id="lena"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="pick"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-20"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="3"
+                   data-wd="3"
+                   style="background: var(--kids-wd-do-soft);"
+                   
+                   data-person-id="jonas"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="pick"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-21"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="4"
+                   data-wd="4"
+                   style="background: var(--kids-wd-fr-soft);"
+                   
+                   data-person-id="emil"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="pick"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-22"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="5"
+                   data-wd="5"
+                   style="background: var(--kids-wd-sa-soft);"
+                   
+                   
+                   >
+                
+                  <div class="empty-face"></div>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="pick"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-23"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="6"
+                   data-wd="6"
+                   style="background: var(--kids-wd-so-soft);"
+                   
+                   
+                   >
+                
+                  <div class="empty-face"></div>
+                
+              </div>
+            
+          </div>
+        </div>
+      
+        
+        <div class="row">
+          <div class="rail-cell">
+            
+            <img src="./assets/arasaac/3071.png" width="52" height="52" alt="" style="display:block;object-fit:contain;">
+            
+              
+              
+              
+<div class="face size-54 ring-purple">
+  <img src="./assets/fotos/demo-k1.jpg" alt="">
+</div>
+
+            
+          </div>
+          <div class="row-cells">
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell today"
+                   data-slot="act1"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-17"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="0"
+                   data-wd="0"
+                   style="background: var(--kids-wd-mo-strong);"
+                   data-child="mia"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act1"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-18"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="1"
+                   data-wd="1"
+                   style="background: var(--kids-wd-di-soft);"
+                   data-child="mia"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act1"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-19"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="2"
+                   data-wd="2"
+                   style="background: var(--kids-wd-mi-soft);"
+                   data-child="mia"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act1"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-20"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="3"
+                   data-wd="3"
+                   style="background: var(--kids-wd-do-soft);"
+                   data-child="mia"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act1"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-21"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="4"
+                   data-wd="4"
+                   style="background: var(--kids-wd-fr-soft);"
+                   data-child="mia"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act1"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-22"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="5"
+                   data-wd="5"
+                   style="background: var(--kids-wd-sa-soft);"
+                   data-child="mia"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act1"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-23"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="6"
+                   data-wd="6"
+                   style="background: var(--kids-wd-so-soft);"
+                   data-child="mia"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+          </div>
+        </div>
+      
+        
+        <div class="row">
+          <div class="rail-cell">
+            
+            <img src="./assets/arasaac/3071.png" width="52" height="52" alt="" style="display:block;object-fit:contain;">
+            
+              
+              
+              
+<div class="face size-54 ring-teal">
+  <img src="./assets/fotos/demo-k2.jpg" alt="">
+</div>
+
+            
+          </div>
+          <div class="row-cells">
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell today"
+                   data-slot="act2"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-17"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="0"
+                   data-wd="0"
+                   style="background: var(--kids-wd-mo-strong);"
+                   data-child="finn"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act2"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-18"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="1"
+                   data-wd="1"
+                   style="background: var(--kids-wd-di-soft);"
+                   data-child="finn"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act2"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-19"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="2"
+                   data-wd="2"
+                   style="background: var(--kids-wd-mi-soft);"
+                   data-child="finn"
+                   
+                   data-event-id="7d3aqqru3pidtrt3vima5ae0bc">
+                
+                  <div class="activity-chip">
+                    <img src="./assets/arasaac/3087.png" width="28" height="28" alt="" style="display:block;object-fit:contain;">
+                    <span>hat Geburtstag</span>
+                  </div>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act2"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-20"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="3"
+                   data-wd="3"
+                   style="background: var(--kids-wd-do-soft);"
+                   data-child="finn"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act2"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-21"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="4"
+                   data-wd="4"
+                   style="background: var(--kids-wd-fr-soft);"
+                   data-child="finn"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act2"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-22"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="5"
+                   data-wd="5"
+                   style="background: var(--kids-wd-sa-soft);"
+                   data-child="finn"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="act2"
+                   data-slot-art="kalender-read"
+                   data-date="2026-08-23"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="6"
+                   data-wd="6"
+                   style="background: var(--kids-wd-so-soft);"
+                   data-child="finn"
+                   
+                   >
+                
+                  
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
+                
+              </div>
+            
+          </div>
+        </div>
+      
+        
+        <div class="row">
+          <div class="rail-cell">
+            
+            <img src="./assets/arasaac/2342.png" width="52" height="52" alt="" style="display:block;object-fit:contain;">
+            
+          </div>
+          <div class="row-cells">
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell today"
+                   data-slot="cook"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-17"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="0"
+                   data-wd="0"
+                   style="background: var(--kids-wd-mo-strong);"
+                   
+                   data-person-id="jonas"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="cook"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-18"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="1"
+                   data-wd="1"
+                   style="background: var(--kids-wd-di-soft);"
+                   
+                   data-person-id="lena"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="cook"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-19"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="2"
+                   data-wd="2"
+                   style="background: var(--kids-wd-mi-soft);"
+                   
+                   data-person-id="petra"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-orange">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="cook"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-20"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="3"
+                   data-wd="3"
+                   style="background: var(--kids-wd-do-soft);"
+                   
+                   
+                   >
+                
+                  <div class="empty-face"></div>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="cook"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-21"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="4"
+                   data-wd="4"
+                   style="background: var(--kids-wd-fr-soft);"
+                   
+                   
+                   >
+                
+                  <div class="empty-face"></div>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="cook"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-22"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="5"
+                   data-wd="5"
+                   style="background: var(--kids-wd-sa-soft);"
+                   
+                   
+                   >
+                
+                  <div class="empty-face"></div>
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="cook"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-23"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="6"
+                   data-wd="6"
+                   style="background: var(--kids-wd-so-soft);"
+                   
+                   
+                   >
+                
+                  <div class="empty-face"></div>
+                
+              </div>
+            
+          </div>
+        </div>
+      
+        
+        <div class="row">
+          <div class="rail-cell">
+            
+            <img src="./assets/arasaac/6027.png" width="52" height="52" alt="" style="display:block;object-fit:contain;">
+            
+              
+              
+              
+<div class="face size-54 ring-purple">
+  <img src="./assets/fotos/demo-k1.jpg" alt="">
+</div>
+
+            
+          </div>
+          <div class="row-cells">
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell today"
+                   data-slot="bed1"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-17"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="0"
+                   data-wd="0"
+                   style="background: var(--kids-wd-mo-strong);"
+                   data-child="mia"
+                   data-person-id="lena"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed1"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-18"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="1"
+                   data-wd="1"
+                   style="background: var(--kids-wd-di-soft);"
+                   data-child="mia"
+                   data-person-id="emil"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed1"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-19"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="2"
+                   data-wd="2"
+                   style="background: var(--kids-wd-mi-soft);"
+                   data-child="mia"
+                   data-person-id="lena"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed1"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-20"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="3"
+                   data-wd="3"
+                   style="background: var(--kids-wd-do-soft);"
+                   data-child="mia"
+                   data-person-id="emil"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed1"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-21"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="4"
+                   data-wd="4"
+                   style="background: var(--kids-wd-fr-soft);"
+                   data-child="mia"
+                   data-person-id="lena"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed1"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-22"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="5"
+                   data-wd="5"
+                   style="background: var(--kids-wd-sa-soft);"
+                   data-child="mia"
+                   data-person-id="lena"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed1"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-23"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="6"
+                   data-wd="6"
+                   style="background: var(--kids-wd-so-soft);"
+                   data-child="mia"
+                   data-person-id="emil"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+          </div>
+        </div>
+      
+        
+        <div class="row">
+          <div class="rail-cell">
+            
+            <img src="./assets/arasaac/6027.png" width="52" height="52" alt="" style="display:block;object-fit:contain;">
+            
+              
+              
+              
+<div class="face size-54 ring-teal">
+  <img src="./assets/fotos/demo-k2.jpg" alt="">
+</div>
+
+            
+          </div>
+          <div class="row-cells">
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell today"
+                   data-slot="bed2"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-17"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="0"
+                   data-wd="0"
+                   style="background: var(--kids-wd-mo-strong);"
+                   data-child="finn"
+                   data-person-id="jonas"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed2"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-18"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="1"
+                   data-wd="1"
+                   style="background: var(--kids-wd-di-soft);"
+                   data-child="finn"
+                   data-person-id="jonas"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed2"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-19"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="2"
+                   data-wd="2"
+                   style="background: var(--kids-wd-mi-soft);"
+                   data-child="finn"
+                   data-person-id="petra"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-orange">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed2"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-20"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="3"
+                   data-wd="3"
+                   style="background: var(--kids-wd-do-soft);"
+                   data-child="finn"
+                   data-person-id="petra"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-orange">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed2"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-21"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="4"
+                   data-wd="4"
+                   style="background: var(--kids-wd-fr-soft);"
+                   data-child="finn"
+                   data-person-id="jonas"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed2"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-22"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="5"
+                   data-wd="5"
+                   style="background: var(--kids-wd-sa-soft);"
+                   data-child="finn"
+                   data-person-id="jonas"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+              
+              
+              
+              
+              
+              
+              <div class="cell "
+                   data-slot="bed2"
+                   data-slot-art="petrantwortlich"
+                   data-date="2026-08-23"
+                   data-week-start="2026-08-17"
+                   data-day-in-week="6"
+                   data-wd="6"
+                   style="background: var(--kids-wd-so-soft);"
+                   data-child="finn"
+                   data-person-id="petra"
+                   >
+                
+                  
+                  
+<div class="face size-76 ring-orange">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                
+              </div>
+            
+          </div>
+        </div>
+      
+    </div>
+
+    
+    
+    <div class="appts">
+      <div class="appts-grid">
+        <div class="appts-rail"><img src="./assets/arasaac/3071.png" width="42" height="42" alt="" style="display:block;object-fit:contain;"></div>
+        
+        <div class="appts-board">
+          
+          
+            <div class="appts-col">
+              
+              
+              
+              
+            </div>
+          
+            <div class="appts-col">
+              
+                
+                <div data-key="nachbarhatgeburtstag" class="pill" style="grid-row: 3;">
+                  <img src="./assets/arasaac/3087.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                  <div class="pill-body">
+                    
+                    <div class="pill-label">Nachbar hat Geburtstag</div>
+                  </div>
+                  
+                  
+                    
+                      
+                      
+<div class="face size-24 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                    
+                  
+                </div>
+              
+                
+                <div data-key="biotonne" class="pill" style="grid-row: 4;">
+                  <img src="./assets/arasaac/3071.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                  <div class="pill-body">
+                    
+                    <div class="pill-label">Biotonne</div>
+                  </div>
+                  
+                  
+                    
+                      
+                      
+<div class="face size-24 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                    
+                  
+                </div>
+              
+                
+                <div data-key="gelbetonne" class="pill" style="grid-row: 5;">
+                  <img src="./assets/arasaac/3071.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                  <div class="pill-body">
+                    
+                    <div class="pill-label">Gelbe Tonne</div>
+                  </div>
+                  
+                  
+                    
+                      
+                      
+<div class="face size-24 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                    
+                  
+                </div>
+              
+              
+              
+              
+                
+                <div class="appts-more" style="grid-row: 6;">+1 weitere</div>
+              
+            </div>
+          
+            <div class="appts-col">
+              
+              
+              
+              
+            </div>
+          
+            <div class="appts-col">
+              
+                
+                <div data-key="werkstattbesichtigen" class="pill" style="grid-row: 1;">
+                  <img src="./assets/arasaac/3071.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                  <div class="pill-body">
+                    <div class="pill-time">16:30</div>
+                    <div class="pill-label">Werkstatt besichtigen</div>
+                  </div>
+                  
+                  
+                    
+                      
+                      
+<div class="face size-24 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                    
+                  
+                </div>
+              
+                
+                <div data-key="fahrradmitfreund" class="pill" style="grid-row: 3;">
+                  <img src="./assets/arasaac/2277.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                  <div class="pill-body">
+                    <div class="pill-time">18:00</div>
+                    <div class="pill-label">Fahrrad mit Freund</div>
+                  </div>
+                  
+                  
+                    
+                      
+                      
+<div class="face size-24 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                    
+                  
+                </div>
+              
+                
+                <div data-key="Sportkurs" class="pill" style="grid-row: 4;">
+                  <img src="./assets/arasaac/3071.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                  <div class="pill-body">
+                    <div class="pill-time">19:00</div>
+                    <div class="pill-label">Sportkurs!</div>
+                  </div>
+                  
+                  
+                    
+                      
+                      
+<div class="face size-24 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                    
+                  
+                </div>
+              
+              
+              
+              
+            </div>
+          
+            <div class="appts-col">
+              
+              
+              
+              
+            </div>
+          
+            <div class="appts-col">
+              
+              
+              
+              
+            </div>
+          
+            <div class="appts-col">
+              
+              
+              
+              
+            </div>
+          
+          
+          <div class="appts-spans">
+            
+              
+              <div data-key="sommerreise" class="pill span"
+                   style="grid-column: 1 / 3; grid-row: 1;">
+                <img src="./assets/arasaac/3071.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                <div class="pill-body">
+                  <div class="pill-label">Sommerreise</div>
+                </div>
+                
+                
+                  
+                    
+                    
+<div class="face size-24 ring-green">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                  
+                
+              </div>
+            
+              
+              <div data-key="kindergartenferien" class="pill span"
+                   style="grid-column: 1 / 8; grid-row: 2;">
+                <img src="./assets/arasaac/3166.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                <div class="pill-body">
+                  <div class="pill-label">Kindergarten Ferien</div>
+                </div>
+                
+                
+                  
+                    
+                    
+<div class="face size-24 ring-red">
+  <img src="./assets/fotos/demo-a2.jpg" alt="">
+</div>
+
+                  
+                
+              </div>
+            
+              
+              <div data-key="treffennachbarort" class="pill span"
+                   style="grid-column: 6 / 8; grid-row: 1;">
+                <img src="./assets/arasaac/3071.png" width="22" height="22" alt="" style="display:block;object-fit:contain;">
+                <div class="pill-body">
+                  <div class="pill-label">Treffen Nachbarort???</div>
+                </div>
+                
+                
+                  
+                    
+                    
+<div class="face size-24 ring-blue">
+  <img src="./assets/fotos/demo-a1.jpg" alt="">
+</div>
+
+                  
+                
+              </div>
+            
+          </div>
+        </div>
+      </div>
+    </div>
+    
+
+  </div>
+</div>
+
+
+<div class="picker-backdrop" id="pickerBackdrop">
+  <div class="picker" id="picker">
+    <button class="picker-delete" type="button" data-action="delete">
+      
+<svg class="icon" viewBox="0 0 64 64" width="22" height="22" fill="none" stroke="var(--kids-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M14 14 L50 50 M50 14 L14 50"/>
+</svg>
+
+      <span>Event löschen</span>
+    </button>
+    <div class="picker-grid">
+      
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="klettern"
+                style="background: #d6ecc7;">
+          <img src="./assets/arasaac/8226.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Klettern</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="kreativ"
+                style="background: #dcd0f0;">
+          <img src="./assets/arasaac/11690.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Kreativ</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="schwimmen"
+                style="background: #cfe6f5;">
+          <img src="./assets/arasaac/6568.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Schwimmen</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="spielplatz"
+                style="background: #d6ecc7;">
+          <img src="./assets/arasaac/2859.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Spielplatz</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="musik"
+                style="background: #dcd0f0;">
+          <img src="./assets/arasaac/2746.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Musik</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="ausflug"
+                style="background: #ffe1c2;">
+          <img src="./assets/arasaac/4670.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Ausflug</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="geburtstag"
+                style="background: #ffe1c2;">
+          <img src="./assets/arasaac/3087.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Geburtstag</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="petrabredung"
+                style="background: #f9c8c8;">
+          <img src="./assets/arasaac/2255.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Petrabredung</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="waldgang"
+                style="background: #cfe6f5;">
+          <img src="./assets/arasaac/2666.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Waldgang</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="zahn"
+                style="background: #eeeeee;">
+          <img src="./assets/arasaac/11229.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Zahnarzt</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="ferien"
+                style="background: #eeeeee;">
+          <img src="./assets/arasaac/3166.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Ferien</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="treff"
+                style="background: #eeeeee;">
+          <img src="./assets/arasaac/6487.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Treffen</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="garten"
+                style="background: #eeeeee;">
+          <img src="./assets/arasaac/2434.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Garten</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="schule"
+                style="background: #eeeeee;">
+          <img src="./assets/arasaac/3082.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Schule</div>
+        </button>
+      
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="fahrrad"
+                style="background: #eeeeee;">
+          <img src="./assets/arasaac/2277.png" width="38" height="38" alt="" style="display:block;object-fit:contain;">
+          <div class="picker-tile-label">Fahrrad fahren</div>
+        </button>
+      
+    </div>
+  </div>
+</div>
+
+
+
+
+<div class="detail-backdrop" id="dBackdrop"></div>
+<div class="detail-card c-zoom" id="dCard" style="display:none">
+  <button class="detail-close" id="dClose" type="button" aria-label="Schließen">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#3b2f22" stroke-width="4" stroke-linecap="round">
+      <path d="M5 5 L19 19 M19 5 L5 19"/></svg>
+  </button>
+  <div class="detail-kopf">
+    <img class="d-ikon" id="dIkon" src="" alt="">
+    <div>
+      <div class="d-titel" id="dTitel"></div>
+      <div class="d-zeit" id="dZeit" style="margin:0"></div>
+    </div>
+  </div>
+  <div class="detail-rumpf">
+    <div id="dFelder"></div>
+    <div class="d-personen" id="dPersonen"></div>
+  </div>
+</div>
+
+<script>
+const DETAILS = {"sommerreise": {"titel": "Sommerreise", "zeit": "Sa, 01.08. – Di, 18.08. · ganztägig", "ort": "", "notiz": ""}, "kindergartenferien": {"titel": "Kindergarten Ferien", "zeit": "Mo, 17.08. – Fr, 28.08. · ganztägig", "ort": "", "notiz": ""}, "nachbarhatgeburtstag": {"titel": "Nachbar hat Geburtstag", "zeit": "Di, 18.08. · ganztägig", "ort": "", "notiz": ""}, "biotonne": {"titel": "Biotonne", "zeit": "Di, 18.08. · ganztägig", "ort": "Musterstadt", "notiz": ""}, "gelbetonne": {"titel": "Gelbe Tonne", "zeit": "Di, 18.08. · ganztägig", "ort": "Musterstadt", "notiz": ""}, "ihrflugvonsuedstadtskgnachnordstadtbsl": {"titel": "Flug von Suedstadt (SUE) nach Nordstadt (NOR)", "zeit": "Di, 18.08. · 15:50 – 18:25 Uhr", "ort": "Flughafen Suedstadt (SUE)", "notiz": "Ihre Buchungsnummer: XX_DEMO123\n\nIhr Kundenbereich:\nhttps://example.com/buchung/XX_DEMO123/Beispiel\n\nRueckflug 18.08.2026\n\nab: 16:50 Uhr* Suedstadt (SUE)\nan: 18:25 Uhr* Nordstadt (NOR)\nFlugdauer: 02h 35min\nFluggesellschaft: XX | Beispiel-Air\n\n*Die angegebenen Zeiten sind Ortszeiten.\n\nSuedstadt "}, "finnhatgeburtstag": {"titel": "Finn hat Geburtstag", "zeit": "Mi, 19.08. · ganztägig", "ort": "", "notiz": ""}, "werkstattbesichtigen": {"titel": "Werkstatt besichtigen", "zeit": "Do, 20.08. · 16:30 – 17:30 Uhr", "ort": "", "notiz": ""}, "fahrradmitfreund": {"titel": "Fahrrad mit Freund", "zeit": "Do, 20.08. · 18:00 – 19:00 Uhr", "ort": "", "notiz": ""}, "Sportkurs": {"titel": "Sportkurs!", "zeit": "Do, 20.08. · 19:00 – 20:00 Uhr", "ort": "", "notiz": ""}, "treffennachbarort": {"titel": "Treffen Nachbarort???", "zeit": "Sa, 22.08. – So, 23.08. · ganztägig", "ort": "", "notiz": ""}, "maggysekiza": {"titel": "Kurs&Sé Tanzschule", "zeit": "Mo, 24.08. – Fr, 28.08. · ganztägig", "ort": "", "notiz": ""}, "restmulltonne": {"titel": "Restmülltonne", "zeit": "Mo, 24.08. · ganztägig", "ort": "Musterstadt", "notiz": ""}, "__verdeckt__": {"titel": "Flug von Suedstadt (SUE) nach Nordstadt (NOR)", "zeit": "Di, 18.08. · 15:50 – 18:25 Uhr", "ort": "Flughafen Suedstadt (SUE)", "notiz": "Ihre Buchungsnummer: XX_DEMO123\n\nIhr Kundenbereich:\nhttps://example.com/buchung/XX_DEMO123/Beispiel\n\nRueckflug 18.08.2026\n\nab: 16:50 Uhr* Suedstadt (SUE)\nan: 18:25 Uhr* Nordstadt (NOR)\nFlugdauer: 02h 35min\nFluggesellschaft: XX | Beispiel-Air\n\n*Die angegebenen Zeiten sind Ortszeiten.\n\nSuedstadt "}};
+const RINGE   = {"ring-blue": "Emil", "ring-red": "Lena", "ring-green": "Jonas", "ring-orange": "Petra", "ring-purple": "Mia", "ring-teal": "Finn", "ring-gray": "Rio"};   // ring-Farbe -> Name, aus der echten familie.json
+const IKON_ORT   = './assets/arasaac/24161.png';
+const IKON_NOTIZ = './assets/arasaac/10312.png';
+
+const bd = document.getElementById('dBackdrop');
+const card = document.getElementById('dCard');
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function oeffne(key, pillEl){
+  const d = DETAILS[key];
+  if(!d) return;
+  document.getElementById('dTitel').textContent = d.titel;
+  document.getElementById('dZeit').textContent  = d.zeit;
+
+  const ikon = document.getElementById('dIkon');
+  if(ikon){
+    const img = pillEl && pillEl.querySelector('img');
+    ikon.src = img ? img.getAttribute('src') : './assets/arasaac/3071.png';
+  }
+
+  // Leere Felder werden weggelassen, nicht als leere Zeile gezeigt (PLAN-38).
+  let h = '';
+  if(d.ort)   h += '<div class="d-zeile"><img src="'+IKON_ORT+'" alt=""><div class="d-wert">'+esc(d.ort)+'</div></div>';
+  if(d.notiz) h += '<div class="d-zeile"><img src="'+IKON_NOTIZ+'" alt=""><div class="d-wert d-notiz">'+esc(d.notiz)+'</div></div>';
+  if(!d.ort && !d.notiz) h += '<div class="d-leer">Kein Ort, keine Notiz hinterlegt.</div>';
+  document.getElementById('dFelder').innerHTML = h;
+
+  // Personen aus der angetippten Kachel uebernehmen (PLAN-19-Ringe).
+  // Die Kachel traegt size-24; im Detail wird auf size-54 hochgestuft.
+  const ziel = document.getElementById('dPersonen');
+  ziel.innerHTML = '';
+  if(pillEl){
+    pillEl.querySelectorAll('.face').forEach(f => {
+      const c = f.cloneNode(true);
+      c.classList.remove('size-24', 'size-76'); c.classList.add('size-54');
+      const ring = [...c.classList].find(x => x.startsWith('ring-'));
+      const name = RINGE[ring] || '';
+      const w = document.createElement('div');
+      w.className = 'd-person';
+      w.appendChild(c);
+      if(name){ const s = document.createElement('span'); s.textContent = name; w.appendChild(s); }
+      ziel.appendChild(w);
+    });
+  }
+
+  bd.classList.add('open');
+  card.style.display = '';
+}
+
+function schliesse(){ bd.classList.remove('open'); card.style.display = 'none'; }
+
+document.addEventListener('click', (e) => {
+  const pill = e.target.closest('.pill');
+  if(pill && !card.contains(e.target)){
+    oeffne(pill.getAttribute('data-key'), pill);
+    return;
+  }
+  
+  const more = e.target.closest('.appts-more');
+  if(more){ oeffne('__verdeckt__', null); }
+
+});
+document.getElementById('dClose').addEventListener('click', schliesse);
+bd.addEventListener('click', schliesse);
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape') schliesse(); });
+</script>
+
+</body>
+</html>

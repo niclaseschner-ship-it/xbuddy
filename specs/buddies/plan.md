@@ -316,11 +316,18 @@ interner Key — eine Icon-Quelle, eine Form (PLAN-12 / PLAN-6).
 **Termin-Überschuss (V1.3 — RAT-4-Auflösung 2026-06-22):** Trägt eine
 Tagesspalte mehr Termine, als die Termin-Leiste vertikal ohne Druck
 darstellt, zeigt die Spalte die ersten N sichtbar und unten einen Counter
-`+M weitere` als gedimmten Text-Indikator. Der Counter ist V1.3 reine
-Sichtbarkeits-Mechanik **ohne Klick-Pfad** — eine Klick-Detail-View
-(Tages-Overlay) ist Folge-Ticket (QW4). **Verworfen:** vertikales Scrollen
-(Display-Modus ohne Touch-Fokus); dynamischer Schrift-Shrink (Pille wird
-unlesbar).
+`+M weitere` als gedimmten Text-Indikator. Der Counter war V1.3 reine
+Sichtbarkeits-Mechanik ohne Klick-Pfad; **QW4 ist mit V1.5 eingelöst** — der
+Counter öffnet die Tages-Liste der verdeckten Termine (PLAN-38). **Verworfen:**
+vertikales Scrollen (Display-Modus ohne Touch-Fokus); dynamischer
+Schrift-Shrink (Pille wird unlesbar).
+
+**Warum der Counter einen Klick-Pfad bekam (V1.5, Werft-Befund 2026-08-17):**
+Die Live-Probe der Woche vom 17.08. zeigte 13 Termine, von denen genau **einer**
+eine Notiz trug — und der lag hinter dem Counter, ohne eigene Kachel. Eine
+Detailansicht, die nur an Kacheln hängt, hätte den einzigen Termin mit echtem
+Detail-Inhalt nicht erreicht. Zusätzlich ist ein nicht-antippbarer Counter
+neben antippbaren Kacheln eine sichtbare Inkonsistenz.
 
 *Tickets:* #40, #308, #578
 
@@ -365,7 +372,8 @@ R ist **span-unabhängig** (der frühere globale Lane-Abzug war der Bug #1146).
    nach Beginn.
 5. **Überschuss pro Spalte:** Termine über die freien Zellen einer Spalte hinaus
    fasst ein gedimmter `+N weitere`-Counter zusammen (V1.3-Mechanik, kein
-   Klick-Pfad), bündig unter der letzten belegten Zeile.
+   Klick-Pfad bis V1.4; ab V1.5 öffnet er die Tages-Liste, PLAN-38), bündig
+   unter der letzten belegten Zeile.
 
 **Invariante:** Eine Spalte clippt einen Termin **nur**, wenn ihre eigenen freien
 Zellen voll sind — **nie**, weil ein Span in einer **anderen** Spalte Platz kostet.
@@ -408,10 +416,17 @@ Für einen Start-Tag und eine Tagesanzahl liefert die Anbindung die Termine des
 Kalenders, wiederkehrende Termine in Einzel-Vorkommen aufgelöst. Jedes Event
 wird in ein anbieter-neutrales Modell übersetzt — mindestens: stabile `id`
 (trägt die Multi-Day-Gruppierung, PLAN-14), Titel, Beginn, Ende, Ganztags-Flag,
-aufgelöste Person (PLAN-19). Google-Rohfelder, die V1 nicht braucht, werden
-nicht durchgereicht (CLAUDE.md §6).
+aufgelöste Person (PLAN-19), **Ort und Notiz** (V1.5). Weitere Google-Rohfelder,
+die V1 nicht braucht, werden nicht durchgereicht (CLAUDE.md §6).
 
-*Tickets:* #40
+**Ort und Notiz (V1.5 — #1875):** Ort und Notiz stammen aus den Google-Feldern
+`location` und `description`. Beide sind **optional** und leer, wenn der Termin
+sie nicht trägt. Sie kosten **keinen** zusätzlichen Netz-Zugriff: die
+Lese-Abfrage setzt keine Feld-Selektion, die Felder liegen bereits in der
+Antwort und wurden bisher nur in der Normalisierung verworfen. Konsument ist die
+Termin-Detailansicht (PLAN-38); die Schnittstelle reicht sie mit durch (PLAN-22).
+
+*Tickets:* #40, #1875
 
 ### PLAN-18 — Events anlegen, ändern, löschen
 Die Anbindung kann im konfigurierten Kalender ein Event anlegen, über seine
@@ -516,7 +531,10 @@ ohne selbst eine Kalender-Anbindung zu haben.
 Query-Parameter: `ab=<ISO-Datum>` (Start-Tag; Default: heute), `tage=<n>`
 (Anzahl Tage; Default: `7`). Antwort: JSON-Array der normalisierten Events
 im Zeitraum — je Event mindestens `id`, `titel`, `beginn`, `ende`,
-`ganztags`, `person_id` (oder `null`). Events werden nach PLAN-17 in ein
+`ganztags`, `person_id` (oder `null`), **`ort` und `notiz`** (V1.5, jeweils
+String; leerer String, wenn der Termin das Feld nicht trägt — nicht `null`,
+damit Konsumenten nicht zwei Leer-Formen unterscheiden müssen).
+Events werden nach PLAN-17 in ein
 anbieter-neutrales Modell übersetzt. Ungültige `ab`- oder `tage`-Werte
 antworten HTTP 400 mit JSON-Fehler. Fehlen Credentials oder ist Google
 nicht erreichbar, liefert die Schnittstelle ein leeres Array (PLAN-20).
@@ -1217,6 +1235,69 @@ vorgang fallen, was ein view-internes Einzelfeld-Save nicht leistet).
 
 *Tickets:* #1126 (Refs #259)
 
+### PLAN-38 — Termin-Detailansicht als Pop-up (V1.5)
+**Wenn** in der Wochenansicht (`/display/plan/woche`) auf eine Termin-Pille
+getippt wird — Tages-Termin (PLAN-13) **oder** Mehrtages-Spanne (PLAN-14) —,
+**dann** öffnet sich ein modales Pop-up über der Ansicht mit den Details genau
+dieses Termins.
+
+**Inhalt**, in dieser Reihenfolge:
+1. **Titel ungekürzt** — der volle Kalender-Titel. Die Kachel streicht den
+   Personen-Namen heraus, weil der Ring die Person schon zeigt (PLAN-19); das
+   Pop-up tut das **nicht**.
+2. **Zeit** — bei zeitgebundenen Terminen `von–bis` (das Ende liegt im Modell und
+   wird sonst nirgends angezeigt), bei ganztägigen die Datums-Spanne, bei
+   eintägig-ganztägigen nur das Datum. Wochentage werden **deutsch** ausgegeben.
+3. **Ort** (PLAN-17) — entfällt ersatzlos, wenn leer.
+4. **Notiz** (PLAN-17) — entfällt ersatzlos, wenn leer.
+5. **Personen** — die zugeordneten Personen als Foto-im-Ring (PLAN-19, FAM-4)
+   mit Namen, in größerer Stufe als auf der Kachel.
+
+Trägt ein Termin weder Ort noch Notiz, sagt das Pop-up das **ausdrücklich**
+(statt eine leere Fläche zu zeigen). Das ist der Regelfall: die Live-Probe vom
+17.08. fand 4 Orte und 1 Notiz auf 13 Termine.
+
+**Form (Gate B, Nic 2026-08-17 — Variante C):** Das Pop-up trägt einen
+abgesetzten Kopf mit dem **Piktogramm der angetippten Kachel**, darunter Titel
+und Zeit; im Rumpf folgen Ort, Notiz und Personen. Das Symbol stellt den Bezug
+zur Kachel her, aus der das Pop-up kam. Wird das Pop-up über den Counter
+geöffnet (siehe unten), zeigt der Kopf das generische Termin-Icon.
+
+**Schließen.** Oben rechts sitzt ein Schließen-Knopf als deutlich sichtbares X
+(dieselbe Form wie im Aktivitäts-Picker, PLAN-11) mit großzügiger Tippfläche.
+Er ist das gesetzte Schließ-Element. Tippen auf den Hintergrund und `Escape`
+schließen ebenfalls — Konsistenz mit dem Picker im selben View.
+
+**Das Pop-up schließt sich nicht von selbst.** Es gibt keinen Zeitablauf und
+keinen automatischen Rückfall: die gewohnte Übersicht kommt erst zurück, wenn
+jemand aktiv schließt (Nic-Setzung 2026-08-17). Die Wochenansicht lädt sich
+nicht periodisch neu, ein offenes Pop-up wird also nicht weggerissen.
+
+**Überschuss-Counter (löst QW4 ein).** Ein Tipp auf `+M weitere` (PLAN-13)
+öffnet dasselbe Pop-up für die an diesem Tag verdeckten Termine. Sind es
+mehrere, zeigt es sie als Tages-Liste; ein Tipp auf einen Eintrag führt zu
+dessen Detail. Ohne diesen Pfad bliebe der einzige Termin der Probe-Woche mit
+echtem Detail-Inhalt unerreichbar (Begründung bei PLAN-13).
+
+**Datenquelle.** Die Detail-Daten kommen aus demselben Server-Render wie die
+Kacheln; das Pop-up lädt **nicht** nach. So funktioniert es auch, wenn der
+Kalender gerade nicht erreichbar ist (PLAN-20) — es zeigt denselben Stand wie
+die Kacheln darunter.
+
+**Sichtbarkeit.** Ort und Notiz sind freier Kalender-Text von Erwachsenen und
+werden damit auf der Kinder-Fläche sichtbar — belegt an der Live-Probe: die
+einzige Notiz der Woche war eine Flugbuchung mit Buchungsnummer und Link. Das
+ist eine bewusste Setzung (Nic 2026-08-17): der Familien-Kalender ist der
+gemeinsame Kalender. Wer einzelne Termine nicht am Display sehen will, hält sie
+aus dem Familien-Kalender heraus — die Anzeige filtert nicht.
+
+**Bedienbarkeit dieser Fläche.** `/display/plan/woche` ist bereits bedienbar
+(PLAN-7 Klick-Cycle, PLAN-11 Aktivitäts-Picker mit Overlay). PLAN-38 fügt keine
+neue Interaktions-Klasse hinzu. Die PLAN-13-Verwerfung „Display-Modus ohne
+Touch-Fokus" betraf **vertikales Scrollen**, nicht Bedienbarkeit.
+
+*Tickets:* #1875
+
 ## 10. Tests
 
 ### PLAN-29 — Automatisierte Tests je Anforderung
@@ -1273,6 +1354,13 @@ POST mit doppelter `art` → 409, POST mit fehlendem/leerem Pflichtfeld
 Snapshot byte-gleich; ein Test belegt: ein neuer Eintrag (Keyword
 + ARASAAC-`id`) wird beim nächsten Render eines Kalender-Events mit
 diesem Keyword im Titel zum Aktivitäts-Slot mit ARASAAC-Piktogramm.
+· **PLAN-38** (Termin-Detailansicht): ein Roh-Event mit `location` und
+`description` wird zu einem Modell-Event mit gefülltem Ort und gefüllter
+Notiz, eines ohne beide Felder zu leeren Strings (nicht `null`) — und
+`GET /api/v1/plan/termine` gibt beide Formen so weiter; die Zeit-Ausgabe
+liefert deutsche Wochentage für zeitgebundene, eintägig-ganztägige und
+mehrtägig-ganztägige Termine (Google-Ende ist bei ganztägigen **exklusiv**,
+der angezeigte letzte Tag ist Ende minus ein Tag).
 
 Läufe gegen den **echten** Kalender sind opt-in und nicht Teil des
 Standard-Durchlaufs (analog `eltern-chat.md` EC-17).
