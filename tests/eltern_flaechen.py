@@ -434,10 +434,10 @@ def durchlauf(root: str = REPO_ROOT) -> Durchlauf:
     """Laeuft den Baum ab und liefert alle eltern-facing Ansichten.
 
     Discovery ist die des Betriebs (`aggregator.discover_manifests`) — sie
-    globbt `<root>/*/views.json` und `<root>/controller/*/views.json`. Damit
-    ist `tools/render-gate/views.json` gar nicht erfasst: es liegt eine Ebene
-    tiefer und traegt nicht die uebliche Dateiform. Es braucht deshalb keinen
-    Ausnahme-Eintrag (und wird mit RAT-37 ohnehin abgerissen, Bau #1882).
+    globbt `<root>/*/views.json` und `<root>/controller/*/views.json`. Ein
+    Verzeichnis, das tiefer liegt oder nicht die uebliche Dateiform traegt,
+    ist damit gar nicht erfasst und braucht folglich auch keinen
+    Ausnahme-Eintrag.
     """
     aggregator = importlib.import_module("seiten.aggregator")
     ansichten: list[ElternAnsicht] = []
