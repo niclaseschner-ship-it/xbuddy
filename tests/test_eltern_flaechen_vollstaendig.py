@@ -159,9 +159,9 @@ def test_keine_komponente_ohne_anschluss_und_ohne_begruendung():
     """Jede Komponente mit Ansichts-Verzeichnis ist entweder angeschlossen oder
     traegt einen begruendeten Ausnahme-Eintrag (#1822 AC2).
 
-    `tools/render-gate/views.json` taucht hier bewusst nicht auf: es liegt
-    ausserhalb der Betriebs-Discovery (`<root>/*/views.json`) und wird mit
-    RAT-37 abgerissen (Bau #1882) — kein Ausnahme-Eintrag noetig.
+    Gemeint sind ausschliesslich Verzeichnisse, welche die Betriebs-Discovery
+    (`<root>/*/views.json`) ueberhaupt findet. Was ausserhalb liegt, taucht
+    hier nicht auf und braucht keinen Ausnahme-Eintrag.
     """
     luecken = ef.anschluss_luecken()
     assert not luecken, (
