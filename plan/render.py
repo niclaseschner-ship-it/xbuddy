@@ -637,12 +637,11 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     # `data-detail` darauf. Eine Quelle der Zuordnung (kein Jinja-Recompute),
     # und `event_id` taugt nicht als Schlüssel: sie kann None sein und ein Kind-
     # Aktivitäts-Event trägt dieselbe id in Slot und Termin-Leiste.
-    _naechste_detail_id = 0
-    for eintrag in (span_appointments
-                    + [a for t in tage for a in appointments[t["iso"]]]
-                    + [a for t in tage for a in appointment_hidden[t["iso"]]]):
-        eintrag["detail_id"] = _naechste_detail_id
-        _naechste_detail_id += 1
+    for detail_id, eintrag in enumerate(
+            span_appointments
+            + [a for t in tage for a in appointments[t["iso"]]]
+            + [a for t in tage for a in appointment_hidden[t["iso"]]]):
+        eintrag["detail_id"] = detail_id
 
     return {
         "tage": tage,
