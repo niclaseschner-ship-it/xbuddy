@@ -1,0 +1,398 @@
+/* ══════════════════════════════════════════════════════════════════════
+   XBUDDY DESIGN TOKENS  ·  v2.0  ·  2026-05
+   ══════════════════════════════════════════════════════════════════════
+   Single source of truth. Built on the brief's tokens.css, evolved
+   along two leitmotifs: Montessori (concrete, calm, natural) and
+   Minimalism (reduction, room to breathe).
+
+   THE SPINE: Mitwachsen
+     Three "Stufen" share the same token NAMES but different values:
+       .stage-toddler   — 3 yrs — hand-drawn, XL, playful
+       .stage-reader    — 6–10  — default, calm, generous
+       .stage-parent    — adult — dense, sober, neutral
+
+     Surfaces opt in by setting `data-stage="toddler|reader|parent"`
+     on a root ancestor. Defaults below match the Reader stage.
+
+   THE TYPE: Stage-appropriate
+     Inter  — body & dense data (parent, reader)
+     Caveat — display/headings for toddler stage
+     Patrick Hand — body for toddler stage (legible handwritten)
+
+   THE COLOR: One palette, two temperatures
+     Earthy linen base (cream → ivory) ranges across stages.
+     A muted forest-green Primary, used sparingly.
+     Seven weekday pastels and seven person rings are the only
+     "saturated" colors in the system — used to identify, never to decorate.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Fonts via Google. If you need offline use, replace with local @font-face
+   pointing at the files in /fonts/. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Patrick+Hand&display=swap');
+
+:root {
+
+  /* ── 1. NEUTRALS — the prepared environment ────────────────────────
+     Warm linen tones. Sky → ivory → cream as you nest deeper into
+     children. Never pure white. Never pure black.                     */
+  --bg:            #F5F1E8;   /* page — warm linen */
+  --bg-soft:       #EFE8DC;   /* slightly deeper, nested */
+  --surface:       #FFFFFF;   /* card surface, parent stage */
+  --surface-2:     #F0EBE0;   /* hover, secondary surface */
+  --surface-soft:  #FAF7F2;   /* very light, subtle highlight */
+
+  --border:        #E3DCCF;
+  --border-soft:   #DED6C9;
+  --border-strong: #D5CDBF;
+
+  --text:          #2B2A28;   /* near-black, primary ink */
+  --text-2:        #6B6761;   /* secondary */
+  --text-soft:     #6A655D;   /* alias */
+  --text-3:        #9A938A;   /* placeholder/disabled */
+  --text-faint:    #938D84;   /* alias */
+
+
+  /* ── 2. PRIMARY — used sparingly, never decoratively ───────────────
+     TWO candidate primaries ship side-by-side. The team picks one
+     visually — swap by editing --primary to point at the chosen track,
+     OR scope by setting class="use-clay" on any subtree.
+
+       Forest Green : established, in all current apps. Migration cost.
+       Clay         : warmer, closer to Montessori material palette.
+
+     Components only ever read --primary / --primary-light / --primary-ink —
+     never the track-specific vars directly.                              */
+
+  /* Track A — Forest Green (current production default) */
+  --forest-primary:        #47503C;
+  --forest-primary-light:  #56624B;
+  --forest-primary-ink:    #2E3527;
+
+  /* Track B — Clay (warmer alternative) */
+  --clay-primary:          #B06B3C;
+  --clay-primary-light:    #C18154;
+  --clay-primary-ink:      #8A4F25;
+
+  /* The active primary — swap this single block to switch the system. */
+  --primary:        var(--forest-primary);
+  --primary-light:  var(--forest-primary-light);
+  --primary-ink:    var(--forest-primary-ink);
+
+  /* Legacy aliases retained for compatibility with shipped code. */
+  --moss:           #5D7458;
+  --forest:         #445245;
+
+
+  /* ── 3. SEMANTIC ACCENTS — natural pigments ────────────────────────
+     Earthy, dusty, never neon. Used to mean something, not to fill space. */
+  --clay:           #B06B3C;   /* activity, warm highlight */
+  --terracotta:     #C97A4A;
+  --sand:           #D6B98C;
+  --straw:          #E7C968;   /* joy, favourite */
+  --berry:          #B85F6B;   /* emotion, person, warning */
+  --lake:           #668EA8;   /* knowledge, water */
+  --sky:            #83AFC0;   /* weather, calm */
+  --lavender-earth: #8D829B;   /* sleep, routines */
+
+  /* States */
+  --success:        #5D8F4F;
+  --warning:        #C9913B;
+  --danger:         #B85544;
+  --info:           #668EA8;
+
+
+  /* ── 4. KIDS / TODDLER SUB-PALETTE ─────────────────────────────────
+     Hand-drawn / wireframe look. From the original PlanBuddy Kids handoff.
+     The toddler stage adopts these via data-stage="toddler".          */
+  --kids-bg:           #FBF2D4;    /* warm cream */
+  --kids-paper:        #FFFFFF;
+  --kids-ink:          #2B2A26;
+  --kids-ink-soft:     #6B6356;
+  --kids-muted:        #B8AF9E;
+  --kids-today:        #FF9B6B;    /* peach pop */
+  --kids-today-bg:     #FFE1C2;
+  --kids-weekend:      #ECE6D9;
+  --kids-weekend-bg:   #F3EDDF;
+  --kids-border-soft:  #CDC4AF;
+
+
+  /* ── 5. PERSON RING COLORS ─────────────────────────────────────────
+     The only way identity is shown in PlanBuddy. Seven distinct hues,
+     all muted enough to coexist on one screen.                        */
+  --ring-blue:    #4A90D9;
+  --ring-orange:  #E58E3F;
+  --ring-green:   #5FA971;
+  --ring-red:     #D96655;
+  --ring-purple:  #9B6DC7;
+  --ring-teal:    #3F9D9D;
+  --ring-gray:    #A0A0A0;
+
+  /* Kept as aliases for compatibility with existing planbuddy CSS */
+  --kids-ring-blue:    var(--ring-blue);
+  --kids-ring-orange:  var(--ring-orange);
+  --kids-ring-green:   var(--ring-green);
+  --kids-ring-red:     var(--ring-red);
+  --kids-ring-purple:  var(--ring-purple);
+  --kids-ring-teal:    var(--ring-teal);
+  --kids-ring-gray:    var(--ring-gray);
+
+
+  /* ── 6. ACTIVITY / CATEGORY TINTS ──────────────────────────────────
+     Soft, decorative-only chip tints. Pair with ink, never with each other. */
+  --kids-tint-mint:    #D6ECC7;
+  --kids-tint-lilac:   #DCD0F0;
+  --kids-tint-peach:   #FFE1C2;
+  --kids-tint-sky:     #CFE6F5;
+  --kids-tint-rose:    #F9C8C8;
+  --kids-tint-lemon:   #FFF2A8;
+
+
+  /* ── 7. WEEKDAY IDENTITY ───────────────────────────────────────────
+     Each weekday gets one hue. Soft = the grid (whisper of color).
+     Strong = the day-chip of "today" (clear pop against neighbours).  */
+  --kids-wd-mo-soft:   hsl(340, 28%, 87%);   --kids-wd-mo-strong: #D885A8;  /* rosé      */
+  --kids-wd-di-soft:   hsl( 18, 30%, 86%);   --kids-wd-di-strong: #FFB072;  /* apricot   */
+  --kids-wd-mi-soft:   hsl( 48, 32%, 87%);   --kids-wd-mi-strong: #FFD840;  /* lemon     */
+  --kids-wd-do-soft:   hsl(100, 22%, 87%);   --kids-wd-do-strong: #9ECB7F;  /* mint      */
+  --kids-wd-fr-soft:   hsl(200, 28%, 86%);   --kids-wd-fr-strong: #87BCE0;  /* sky       */
+  --kids-wd-sa-soft:   hsl(265, 25%, 87%);   --kids-wd-sa-strong: #A98DDB;  /* lilac     */
+  --kids-wd-so-soft:   hsl( 32, 22%, 82%);   --kids-wd-so-strong: #C9A85E;  /* sand-tan  */
+
+
+  /* ── 8. RADII ──────────────────────────────────────────────────────
+     Stage scales these up/down. Defaults sized for the reader stage. */
+  --radius-xs:    8px;    --radius-s:  8px;
+  --radius-sm:   12px;    --radius-m: 12px;
+  --radius-md:   16px;    --radius-l: 16px;
+  --radius-lg:   20px;
+  --radius-xl:   22px;
+  --radius-2xl:  28px;
+  --radius-3xl:  36px;
+  --radius-full: 9999px;
+
+
+  /* ── 9. ELEVATION ──────────────────────────────────────────────────
+     Two systems coexist:
+       --shadow-*       soft, photographic — for parent/reader stages
+       --shadow-hand-*  hard, offset, no blur — for the toddler stage  */
+  --shadow-soft:  0 6px 20px rgba(37,31,24,.04);
+  --shadow:       0 4px 16px rgba(44,42,39,.08);
+  --shadow-lg:    0 12px 40px rgba(44,42,39,.16);
+
+  --shadow-hand-sm: 2px 3px 0 rgba(43,42,38,.18);
+  --shadow-hand:    4px 6px 0 rgba(43,42,38,.22);
+  --shadow-hand-lg: 6px 9px 0 rgba(43,42,38,.26);
+
+  /* Focus ring — never an OS default */
+  --focus-ring:      0 0 0 3px rgba(71,80,60,.28);
+  --focus-ring-clay: 0 0 0 3px rgba(176,107,60,.32);
+
+
+  /* ── 10. SPACING — 4px grid ────────────────────────────────────────  */
+  --space-0:    0;
+  --space-1:    4px;
+  --space-2:    8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-7:   32px;
+  --space-8:   40px;
+  --space-9:   56px;
+  --space-10:  72px;
+  --space-11:  96px;
+  --space-12: 128px;
+
+
+  /* ── 11. TYPOGRAPHY ────────────────────────────────────────────────
+     Three families, one role per family.                              */
+  --font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-hand:    'Patrick Hand', 'Comic Sans MS', system-ui, sans-serif;
+  --font-display: 'Caveat', 'Patrick Hand', cursive;
+
+  /* Backward-compatible alias */
+  --font-family:  var(--font-sans);
+
+  /* Abwärts-Aliase für den Plan-Kids-Look (v1.0-Token-Namen, value-identisch). */
+  --kids-font-body:    var(--font-hand);
+  --kids-font-display: var(--font-display);
+
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* Type scale — generous defaults for 1920×1080 kiosk reading distance */
+  --fs-12: 12px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-18: 18px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-28: 28px;
+  --fs-32: 32px;
+  --fs-40: 40px;
+  --fs-48: 48px;
+  --fs-64: 64px;
+  --fs-80: 80px;
+  --fs-96: 96px;
+
+  --lh-tight: 1.15;
+  --lh-snug:  1.3;
+  --lh-body:  1.55;
+  --lh-loose: 1.75;
+
+  --ls-tight: -0.02em;
+  --ls-snug:  -0.01em;
+  --ls-wide:   0.06em;
+  --ls-cap:    0.12em;
+
+
+  /* ── 12. SEMANTIC TYPE ROLES ───────────────────────────────────────
+     Use these in components — not the raw scale tokens.               */
+  --type-display:   var(--font-weight-semibold) var(--fs-48)/var(--lh-tight) var(--font-sans);
+  --type-h1:        var(--font-weight-semibold) var(--fs-32)/var(--lh-snug)  var(--font-sans);
+  --type-h2:        var(--font-weight-semibold) var(--fs-24)/var(--lh-snug)  var(--font-sans);
+  --type-h3:        var(--font-weight-semibold) var(--fs-20)/var(--lh-snug)  var(--font-sans);
+  --type-body:      var(--font-weight-regular)  var(--fs-16)/var(--lh-body)  var(--font-sans);
+  --type-body-sm:   var(--font-weight-regular)  var(--fs-14)/var(--lh-body)  var(--font-sans);
+  --type-label:     var(--font-weight-bold)     var(--fs-12)/1.4              var(--font-sans);
+  --type-data:      var(--font-weight-medium)   var(--fs-14)/1.3              var(--font-sans);
+
+  /* Toddler-stage roles (hand-drawn) */
+  --type-kids-display: var(--font-weight-bold)  var(--fs-96)/.95  var(--font-display);
+  --type-kids-h1:      var(--font-weight-bold)  var(--fs-64)/1.0  var(--font-display);
+  --type-kids-h2:      var(--font-weight-bold)  var(--fs-40)/1.0  var(--font-display);
+  --type-kids-body:    400 var(--fs-28)/1.3 var(--font-hand);
+  --type-kids-label:   400 var(--fs-20)/1.2 var(--font-hand);
+
+
+  /* ── 13. ICON · two tiers ─────────────────────────────────────────
+     Tier 1 — Lucide stroke icons (UI affordances: chevrons, plus,
+     close, settings, wifi/-off, etc.). currentColor.                  */
+  --icon-stroke: 1.8px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --icon-xl: 32px;
+
+  /* Tier 2 — ARASAAC pictograms (content nouns: activities, feelings,
+     weekdays, times). Full-color PNG from CDN. Size matters more here
+     because the pictograms carry detail — too small and they become
+     visual noise.                                                     */
+  --pikto-sm:    28px;   /* chips, dense lists                         */
+  --pikto-md:    40px;   /* reader stamps, parent-chat actions         */
+  --pikto-lg:    64px;   /* smaller toddler stamps                     */
+  --pikto-xl:    96px;   /* toddler activity stamps (default)          */
+  --pikto-hero: 200px;   /* hero, empty-state, print                   */
+
+
+  /* ── 14. MOTION ────────────────────────────────────────────────────
+     Calm, not bouncy. Reduced motion respected by default.            */
+  --ease-out:   cubic-bezier(.2, .8, .2, 1);
+  --ease-in:    cubic-bezier(.4, 0, 1, 1);
+  --ease-soft:  cubic-bezier(.4, 0, .2, 1);
+  --dur-fast:   120ms;
+  --dur-base:   220ms;
+  --dur-slow:   400ms;
+
+
+  /* ── 15. LAYOUT ────────────────────────────────────────────────────  */
+  --kiosk-h: 1080px;
+  --content-max: 1280px;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   MITWACHSEN STAGES
+   ══════════════════════════════════════════════════════════════════════
+   The stage attribute re-binds semantic tokens. Components don't change;
+   their context does. */
+
+/* Scope-level switch to Clay primary on any subtree. */
+.use-clay {
+  --primary:        var(--clay-primary);
+  --primary-light:  var(--clay-primary-light);
+  --primary-ink:    var(--clay-primary-ink);
+  --focus-ring:     var(--focus-ring-clay);
+}
+
+/* READER — calm, generous, legible (DEFAULT) */
+[data-stage="reader"], :root {
+  --stage-bg:        var(--bg);
+  --stage-surface:   var(--surface);
+  --stage-ink:       var(--text);
+  --stage-ink-soft:  var(--text-2);
+  --stage-border:    var(--border);
+  --stage-shadow:    var(--shadow);
+  --stage-radius:    var(--radius-lg);
+  --stage-radius-lg: var(--radius-xl);
+  --stage-pad:       var(--space-5);
+  --stage-gap:       var(--space-4);
+  --stage-font:      var(--font-sans);
+  --stage-fs-body:   var(--fs-18);
+  --stage-fs-h:      var(--fs-28);
+  --stage-rotate:    0deg;
+}
+
+/* TODDLER — hand-drawn, XL, gentle rotation */
+[data-stage="toddler"] {
+  --stage-bg:        var(--kids-bg);
+  --stage-surface:   var(--kids-paper);
+  --stage-ink:       var(--kids-ink);
+  --stage-ink-soft:  var(--kids-ink-soft);
+  --stage-border:    var(--kids-border-soft);
+  --stage-shadow:    var(--shadow-hand);
+  --stage-radius:    var(--radius-2xl);
+  --stage-radius-lg: var(--radius-3xl);
+  --stage-pad:       var(--space-7);
+  --stage-gap:       var(--space-6);
+  --stage-font:      var(--font-hand);
+  --stage-fs-body:   var(--fs-28);
+  --stage-fs-h:      var(--fs-64);
+  --stage-rotate:    -1.2deg;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   BASE STYLES — opt-in via `body.xb` so importing into other contexts
+   doesn't reset the world.
+   ══════════════════════════════════════════════════════════════════════ */
+html { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: inherit; }
+
+body.xb {
+  margin: 0;
+  font: var(--type-body);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body.xb h1 { font: var(--type-h1); letter-spacing: var(--ls-snug); margin: 0 0 var(--space-4); }
+body.xb h2 { font: var(--type-h2); letter-spacing: var(--ls-snug); margin: 0 0 var(--space-3); }
+body.xb h3 { font: var(--type-h3); margin: 0 0 var(--space-2); }
+body.xb p  { margin: 0 0 var(--space-3); }
+body.xb small { font: var(--type-body-sm); color: var(--text-2); }
+
+body.xb .label,
+body.xb .eyebrow {
+  font: var(--type-label);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-cap);
+  color: var(--text-2);
+}
+
+body.xb :focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
