@@ -122,10 +122,12 @@ def _hoerspiel_instanz_services() -> list[tuple[int, str]]:
 # Instanzen, Option C #1732).
 _HTTP_SERVICES: list[tuple[int, str]] = [
     (5010, "xbuddy-familie"),
+    (5020, "xbuddy-plan"),
     (5030, "xbuddy-wetter"),
     (5041, "xbuddy-panel"),
     (5042, "xbuddy-seiten"),
     (5050, "xbuddy-routine"),
+    (5051, "xbuddy-photo"),
     (5052, "xbuddy-essen"),
     (5053, "xbuddy-hoerspiel"),
     (5054, "xbuddy-kibuddy"),
@@ -455,19 +457,55 @@ def main(argv: list[str] | None = None) -> int:
         ],
     }
 
-    if decision.action == "alert" and not args.dry_run:
-        # Bot-Token aus ENV (SVC-7: fehlt er, lauter Fehler statt stillem Skip)
+    # ── Sendefaehigkeit bei JEDEM Lauf pruefen, nicht erst im Alarmfall (#1623)
+    #
+    # Vorher standen diese beiden Pruefungen INNERHALB des Alarm-Zweigs. Solange
+    # alles gruen war, hat der Poller also nie geprueft, ob er ueberhaupt senden
+    # KOENNTE — eine fehlende Kennung oder ein fehlendes Token fiel erst in dem
+    # Moment auf, in dem alarmiert werden musste. Also genau dann, wenn es zu
+    # spaet ist.
+    #
+    # Von aussen war ein fehlkonfigurierter Waechter damit ununterscheidbar von
+    # "alles gruen": beide Male Rueckgabewert 0 und eine zufriedene Logzeile.
+    #
+    # Jetzt schlaegt eine Fehlkonfiguration beim ERSTEN Lauf fehl. systemd
+    # markiert die Unit als `failed`, der Zustand ist damit abfragbar, ohne dass
+    # es dafuer einen zweiten Waechter braeuchte — was ohnehin zirkulaer waere:
+    # ein Alarmweg kann sich nicht selbst per Alarm melden, wenn er kaputt ist.
+    #
+    # `--dry-run` bleibt ausgenommen: ein Probelauf soll ohne Zugangsdaten
+    # laufen koennen, sonst ist er als Werkzeug wertlos.
+    bot_token = ""
+    owner_chat_id = ""
+    if not args.dry_run:
         bot_token = os.environ.get(ENV_ALERTING_BOT_TOKEN, "").strip()
         if not bot_token:
-            _log({**logged, "error": f"ENV {ENV_ALERTING_BOT_TOKEN} fehlt — Alert NICHT gesendet."})
+            _log({
+                **logged,
+                "error": (
+                    f"ENV {ENV_ALERTING_BOT_TOKEN} fehlt — dieser Waechter koennte "
+                    f"im Alarmfall nichts senden."
+                ),
+                "sendefaehig": False,
+            })
             return 1
 
         try:
             owner_chat_id = _load_owner_chat_id(args.zugangsdaten_file)
-        except (RuntimeError, Exception) as e:
-            _log({**logged, "error": f"Owner-Chat-ID nicht ladbar: {e}"})
+        except Exception as e:
+            _log({
+                **logged,
+                "error": (
+                    f"Owner-Chat-ID nicht ladbar: {e} — dieser Waechter koennte "
+                    f"im Alarmfall nichts senden."
+                ),
+                "sendefaehig": False,
+            })
             return 1
 
+        logged["sendefaehig"] = True
+
+    if decision.action == "alert" and not args.dry_run:
         alert_text = format_alert_text(decision.red_services)
         try:
             send_telegram_alert(bot_token, owner_chat_id, alert_text)
