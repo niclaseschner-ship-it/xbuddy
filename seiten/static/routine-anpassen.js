@@ -321,13 +321,12 @@ function rendereInhalt() {
     fragmente.push(rendereZeitCard(anker));
   }
 
-  // V2-Add-Button: deaktiviert, visuell sichtbar (ROUTINE-20 V2-Aufbohrpunkt)
-  fragmente.push(
-    '<button class="add-row" disabled type="button">' +
-      '＋ Zwischen-Anker hinzufügen — V2 (#726)' +
-    '</button>' +
-    '<p class="v2-hinweis">V1.1: Aufstehen und Losgehen sind fest · V2 macht das Dazwischen dynamisch</p>'
-  );
+  // Kein Add-Button in dieser Sektion (#1796, routine.md Abschnitt „Zeiten"):
+  // Der frueher hier stehende deaktivierte V2-Knopf ist ersatzlos entfallen.
+  // Er zeigte Eltern eine interne Ticket-Nummer, und sein Versprechen war
+  // laengst eingeloest — dynamische Zwischen-Anker sind ueber ROUTINE-24..28
+  // gebaut und sitzen im Hinzufuegen-Bottom-Sheet. Ein Knopf, der auf eine
+  // vorhandene Funktion vertroestet, ist schlechter als kein Knopf.
 
   // T728 Bug-12: Nur innerHTML-Reset hier — alle Listener-Bindungen sitzen einmalig im IIFE-Block.
   container.innerHTML = fragmente.join("");

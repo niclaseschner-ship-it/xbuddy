@@ -348,28 +348,10 @@ body {
 
 .add-row:active { background: #e8e4db; }
 
-/* Deaktivierter V2-Add-Button (ROUTINE-20) */
-.add-row:disabled,
-.add-row[disabled] {
-  cursor: not-allowed;
-  color: var(--ink-soft);
-  border-color: var(--rule);
-  opacity: 0.6;
-}
-
-.add-row:disabled:hover,
-.add-row[disabled]:hover {
-  background: transparent;
-  border-color: var(--rule);
-}
-
-/* V2-Hinweis-Zeile */
-.v2-hinweis {
-  font-size: 0.75rem;
-  color: var(--ink-soft);
-  text-align: center;
-  margin-top: 4px;
-}
+/* Die frueheren Regeln fuer den deaktivierten V2-Add-Button und seine
+   Hinweis-Zeile (.add-row:disabled, .v2-hinweis) sind mit #1796 entfallen —
+   der Knopf selbst gibt es nicht mehr. `.add-row` bleibt: der aktive
+   Hinzufuegen-Knopf der Items-Sektion nutzt dieselbe Klasse. */
 
 /* ── Bottom-Sheet (MAD-4) ─────────────────────────────────── */
 
