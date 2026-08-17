@@ -48,6 +48,14 @@ _PRICES_USD_PER_MILLION = {
 # durch T1368-as_of-Substrat (ENTSCHEID-1268).
 _PRICES_AS_OF: dict[str, str] = {
     "claude-opus-4-7":    "2026-05-31",  # Anthropic-Pricing-Quelle
+    "claude-opus-5":      "2026-08-17",  # T1807: kein eigener Preis-Eintrag hier
+                                          # (Hand-Tabelle bleibt tot, RAT-26 §5) —
+                                          # NUR das as_of-Substrat für
+                                          # telemetry_read.monthly_rollup
+                                          # (Staleness-Wächter). Preis gegen
+                                          # litellm==1.93.0 model_cost geprüft:
+                                          # identisch zu claude-opus-4-7 (5.00 /
+                                          # 25.00 USD/1M, unverändert seit 05-31).
     "claude-sonnet-4-6":  "2026-05-31",  # Anthropic-Pricing-Quelle
     "claude-haiku-4-5":   "2026-05-31",  # Anthropic-Pricing-Quelle
     "mistral-medium-2508": "2026-07-07",  # Mistral-Pricing, korrigiert 2026-07-07

@@ -13,7 +13,7 @@ def test_runtime_defaults_ohne_datei(tmp_path):
     assert cfg.listen_port == 5053
     assert cfg.log_level == "INFO"
     assert cfg.llm_provider == "claude"
-    assert cfg.llm_model == "claude-opus-4-7"
+    assert cfg.llm_model == "claude-opus-5"
     assert cfg.anthropic_key is None
     assert cfg.azure_endpoint is None
 

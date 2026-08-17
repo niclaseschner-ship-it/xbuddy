@@ -39,12 +39,13 @@ from tools.llm import ProviderError as LibProviderError
 logger = logging.getLogger(__name__)
 
 # Anbieter-Default-Modell pro Brand-Vendor (EC-15: Anbieter-Modell = Anbieter-
-# Default). Spiegelt die Alt-Adapter-Defaults (providers/claude.py:31
-# `claude-opus-4-7`, providers/mistral.py:38 `mistral-medium-2508`), damit der
-# Lib-Pfad EXAKT das Modell nutzt, das der alte Pfad nutzte (Orchestrator-
-# Entscheid T1085: Verhalten erhalten).
+# Default). Ursprünglich gespiegelt von den Alt-Adaptern providers/claude.py /
+# providers/mistral.py (T1085) — beide sind seit dem Hand-Vendor-Abriss #1510
+# gelöscht. Kein Spec-Pin dahinter: der konkrete Wert lebt seither allein hier.
+# `anthropic` auf `claude-opus-5` gehoben (T1807, gleicher Preis wie
+# `claude-opus-4-7`, s. Handoff für den Katalog-Beleg).
 _VENDOR_DEFAULT_MODEL = {
-    "anthropic": "claude-opus-4-7",
+    "anthropic": "claude-opus-5",
     "mistral": "mistral-medium-2508",
 }
 
@@ -73,9 +74,9 @@ class LibAgentAdapter:
         # Lokaler Import: bricht keinen Zyklus, hält den Modulkopf schlank und
         # spiegelt das Lazy-Muster der Alt-Adapter (anthropic/httpx lazy).
         # `vendor_slug_for_adapter` NUR für den Alt-Modell-Default-Lookup:
-        # `claude` → `anthropic` → `claude-opus-4-7`, `mistral` → `mistral` →
-        # `mistral-medium-2508` (EC-15, exakt der Alt-Pfad). Der Slug wird NICHT
-        # in den Slot-Namen gebaut — der Slot ist anbieter-benannt (LLMP-S13).
+        # `claude` → `anthropic` → `claude-opus-5`, `mistral` → `mistral` →
+        # `mistral-medium-2508` (EC-15, `_VENDOR_DEFAULT_MODEL`). Der Slug wird
+        # NICHT in den Slot-Namen gebaut — der Slot ist anbieter-benannt (LLMP-S13).
         from onboarding_store import vendor_slug_for_adapter
 
         vendor = vendor_slug_for_adapter(provider)
@@ -84,21 +85,39 @@ class LibAgentAdapter:
         # Konfig-Fehler (KeyError) — sichtbar am Boot, kein Silent-Fallback.
         slot = litellm_slot_for_provider(_CALLER, provider)
         # Effektives Modell: konfiguriertes Modell, sonst Anbieter-Default des
-        # Brand-Vendors (EC-15) — exakt der Alt-Pfad (claude.py:36 /
-        # mistral.py:DEFAULT_MODEL). BLANK (`mistral-medium-2508`); das
-        # `mistral/`-Präfix ergänzt `tools.llm` zentral (LLMP-S13).
+        # Brand-Vendors (`_VENDOR_DEFAULT_MODEL`, EC-15) — blanker Modellname
+        # (z. B. `mistral-medium-2508`); das `mistral/`-Präfix ergänzt
+        # `tools.llm` zentral (LLMP-S13).
         self._model = (provider_model or "").strip() or _VENDOR_DEFAULT_MODEL.get(vendor, "")
         self._provider = provider
         self._slot = slot
 
-        # Lib-Fassade EINMAL bauen (Slot + effektives Modell + alt-treuem
-        # max_tokens). Ein `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler
-        # (fehlender Key, Capability-Mismatch) — er propagiert klar (wie der alte
+        # Lib-Fassade EINMAL bauen (Slot + effektives Modell + max_tokens). Ein
+        # `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler (fehlender Key,
+        # Capability-Mismatch) — er propagiert klar (wie der alte
         # fehlender-Key-Pfad) und wird NICHT als ProviderError verschluckt.
-        # max_tokens=4096: Alt-Wert aus claude.py:32 MAX_TOKENS=4096 (T1129);
-        # ohne explizite Übergabe würde die Lib DEFAULT_MAX_TOKENS=2048 nutzen —
-        # stille Halbierung, die lange Antworten trunkieren kann (vgl. #1084-502).
-        self._agent = get_agent(slot=slot, model=self._model, max_tokens=4096)
+        #
+        # max_tokens=8192 (T1807, angehoben von 4096 — historischer Wert aus dem
+        # inzwischen gelöschten Hand-Vendor providers/claude.py MAX_TOKENS=4096,
+        # T1129/#1510-Abriss). Grund der Anhebung — GEMESSEN, nicht geraten:
+        # dieser Pfad (`agent_step`, `tool_choice` UNGESETZT = "auto") lässt bei
+        # claude-opus-5 automatisches Thinking zu, das denselben `max_tokens`-
+        # Topf wie der sichtbare Antworttext teilt (anders als der erzwungene
+        # `tool_choice`-Pfad in foto_analyse.py/hoerspiel — dort ist Thinking
+        # AUS, s. dortige Kommentare). Realer A/B-Lauf über die echte Route
+        # (SYSTEM_PROMPT + wetter-Tool, identischer Prompt, max_tokens=4096):
+        # claude-opus-4-7 kein Thinking, 1944 completion_tokens für eine
+        # vollständige Antwort — claude-opus-5 MIT Thinking, 3497 completion_
+        # tokens (≈+80 %) für eine vergleichbar lange sichtbare Antwort, macht
+        # 85 % des alten 4096er-Budgets voll (n=2 A/B-Paare, zweiter Lauf
+        # +1,6 % — die Schwankung ist die Fragen-Komplexität, nicht Rauschen).
+        # 8192 verdoppelt den alten (bereits 2x-Halbierungs-Puffer, #1084-502)
+        # Wert — genug Kopfraum, um das gemessene Worst-Case-Thinking-Delta
+        # nochmal ~1,7x aufzunehmen, ohne `thinking` selbst zu setzen (das wäre
+        # eine Verhaltensentscheidung über dieses Ticket hinaus, T1807-S4-
+        # Vorgabe: adaptives Denken ist die vorgesehene Betriebsart).
+        # `thinking` bleibt unangetastet (kein `thinking=`-Kwarg an get_agent).
+        self._agent = get_agent(slot=slot, model=self._model, max_tokens=8192)
 
     def generate(self, request):
         """Führt eine Anbieter-Anfrage über `tools.llm` aus und liefert eine

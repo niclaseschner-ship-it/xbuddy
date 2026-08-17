@@ -46,7 +46,7 @@ DEFAULTS = {
     "context_depth":  40,           # Gesprächskontext-Tiefe (EC-6, #312)
     # E-TAB-6 V2 / #508: Multimodal-Modell-Override. leer → Anbieter-Default.
     # #1262: weiterhin genutzt — reicht als `model` an FotoAnalyseProvider durch
-    # (leer → Foto-Default claude-opus-4-7).
+    # (leer → Foto-Default claude-opus-5, T1807).
     "multimodal_model": "",         # leer → Foto-Default des Adapters (#1262)
     # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat, das die CA-Verteilung
     # ausliefert. Per-Instanz-Wert; Default = Standard-Ausgabe des CA-Werkzeugs

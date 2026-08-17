@@ -434,7 +434,7 @@ def test_claude_available_models_konstante():
     """HSP-27b: Claude AVAILABLE_MODELS enthält die 3 V1-Modelle."""
     from hoerspiel.providers.claude import AVAILABLE_MODELS
     model_ids = [m[0] for m in AVAILABLE_MODELS]
-    assert "claude-opus-4-7" in model_ids
+    assert "claude-opus-5" in model_ids
     assert "claude-sonnet-4-6" in model_ids
     assert "claude-haiku-4-5" in model_ids
     assert len(AVAILABLE_MODELS) == 3
