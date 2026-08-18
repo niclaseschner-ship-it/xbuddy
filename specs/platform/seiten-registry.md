@@ -13,7 +13,7 @@
 >
 > Status: V1-Entwurf · Refs #347 #1339 · ratifiziert RAT-13 (berater-runde 2026-06-06), fortgeschrieben RAT-31
 > Pivot + SREG-12-Ratifizierung 2026-06-08 (Werft + Berater-Runde,
-> ENTSCHEID `brainstorm/berater-runde/20260608-RATIFIZIERT-seiten-uebersicht-platform-genre.md`)
+> ENTSCHEID `decisions/RAT-45`)
 > SREG-12 Gate B (Design-Wahl) 2026-06-08: Variante „gemeinsame Box pro
 > Geräte-Paar" gewählt; Reconcile in dieser Spec-Revision nachgezogen.
 
@@ -1032,7 +1032,7 @@ Unübersichtlichkeit.
 ### E-SREG-1.b — Verworfene URL-Genres für SREG-12 (Berater-Runde 2026-06-08)
 Die Frage „wo wohnt die Übersichtsseite" lief durch eine Berater-Runde mit
 Codex-Antiberater. ENTSCHEID:
-`brainstorm/berater-runde/20260608-RATIFIZIERT-seiten-uebersicht-platform-genre.md`.
+`decisions/RAT-45`.
 Verworfen:
 - **A — `/display/_shared/eltern/seiten/uebersicht`**: mischt Adressat (Eltern)
   mit Eigentümer (Platform-Service); URL-16 ist read-only Asset-Genre.

@@ -1,7 +1,7 @@
 # Panel-Registry — Spec     (ID-Präfix: PREG)
 
 > Status: V1-Entwurf · Refs #58 (App-Panel) · ratifiziert 2026-06-03
-> (`brainstorm/berater-runde/2026-06-03-RATIFIZIERT-panel-registry-api.md`)
+> (`decisions/RAT-1`)
 
 Die Panel-Registry ist die **zentrale** Liste der App-Panel-Instanzen einer
 Familie. Bisher lebte jede Panel-Instanz als Paar gitignorierter Dateien

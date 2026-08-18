@@ -1667,9 +1667,8 @@ sind — Telegram-API-Limit).
 **Werft-Trail** (interne Deliberations-Artefakte, nicht Teil des public
 Repos): F1-Rahmung in `brainstorm/idee-mvp/essen-einkauf/gate-a-
 vorbereitung.md`, Mockup V7 als Gate-B-Wahl `brainstorm/idee-mvp/essen-
-einkauf/mockups/telegram-mini-app-v7-chat-flow.html`, Berater-Runde
-2026-06-11 (Schärfungs-Ergebnis in `brainstorm/berater-runde/
-20260611-160500-RATIFIZIERT-mvp-678-plan-schaerfung.md`).
+einkauf/mockups/telegram-mini-app-v7-chat-flow.html`. Das Schärfungs-Ergebnis
+der Berater-Runde 2026-06-11 steht public in `decisions/RAT-16` (Nachtrag).
 
 ### E-ESSEN-12 — DB nach `klasse` aufbohren (zwei Files), nicht View-Filter
 

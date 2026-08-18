@@ -48,3 +48,24 @@ AUTH-3-Liste essen-einkauf) MUSS **vor** PWA-Phase-1 stehen.
 RAT-16 (Telegram-MVP) bleibt gültig — Telegram bleibt Bot-Plattform; die
 Mini-App-Distribution wird durch die Power-Flow-PWA **ergänzt, nicht ersetzt**.
 Vendor-Adapter-Disziplin (`platform.js`-Wrapper, MAD-5) bleibt bindend.
+
+---
+
+## Nachtrag 2026-07-01 — der Landeplatz ist reversiert (→ RAT-52)
+
+Dieser Record vertagte die **Konventions-Festschreibung** auf n=2 und legte
+dabei auch schon den Ort fest: `conventions/pwa.md` um einen
+Power-Flow-PWA-Typ erweitern.
+
+Der Trigger trat bei **n=4** ein (#1215). Die Runde dazu hat die
+Ortsfestlegung **bewusst und sichtbar reversiert**: der Mantel bekam eine
+**eigene** Datei `conventions/pwa-mantel.md` (PWAM-1..6), `conventions/pwa.md`
+bleibt die Kiosk-/Geräte-Sorte. Nic überstimmte dabei zusätzlich den
+Berater-Lean „zwei getrennte Sorten" zugunsten einer zentralen Bibliothek, die
+die Drift **entfernt** statt sie zu dokumentieren.
+
+Die strategische Setzung dieses Records (PWA als Default für Power-Flows,
+Auth-Phase vor PWA-Phase, schrittweiser Rollout) bleibt unberührt. Nur der
+Satz „landet als Typ in `conventions/pwa.md`" gilt nicht mehr.
+
+**Siehe:** [RAT-52](RAT-52-pwa-mantel-unify.md).

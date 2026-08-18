@@ -42,7 +42,7 @@ nach erfolgreichem Build.
 - **Persistierte Job-Wiederaufnahme nach Restart** — V1.1 (HFE-11/12,
   2026-06-19; ENTSCHEID-File Paket-Sektion „R2-Paket → B) Spec-Patch-
   Skizze" → Restart-Klausel;
-  `brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`)
+  `decisions/RAT-48`)
   führt `execute()` im Daemon-Thread im Task aus (Polling-Loop bleibt
   frei); ein Pi-Restart während des Baus verliert den Build, persistente
   Wiederaufnahme bleibt OPEN-HSP-L V2.
@@ -221,8 +221,8 @@ analog EC-10):
    Antworten wie „ja vertonen"/„los gehts", die durch `is_confirmation` fallen, im
    Agent-Loop landen und dort als Signal-Phrase (Sub-Case 3) einen erneuten
    `propose()` auslösen statt zu bestätigen — getextet-nie-vertont-Schleife.
-   (ENTSCHEID `brainstorm/berater-runde/20260624-152550-RATIFIZIERT-hfe-confirm-konflikt.md`,
-   Paket-Teil 1; #1118 / Refs #1050.)
+   (ENTSCHEID `decisions/RAT-44`, Fußnote zur
+   Vorgänger-Runde 2026-06-24, Paket-Teil 1; #1118 / Refs #1050.)
 
 **Voice-Default-Resolution** in `propose()` (#995, 2026-06-18):
 
@@ -260,7 +260,7 @@ Body: {"titel": "<titel>", "text": "<text>", "voice": "<voice>", "idee": "<idee>
 
 Der Aufruf blockiert bis zur Fertigstellung. **V1.1 (2026-06-19, HFE-11/12;
 ENTSCHEID-File Paket-Sektion „R2-Paket → A) Naht-Liste" → N2 Trampolin;
-`brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`)**
+`decisions/RAT-48`)**
 führt den Aufruf in einem Daemon-Thread im Task aus, sodass der
 Polling-Loop während der 1–5 min frei bleibt; persistente
 Job-Wiederaufnahme über Restart hinweg bleibt OPEN-HSP-L V2.
@@ -328,8 +328,8 @@ re-proposed das LLM statt zu vertonen (getextet-nie-vertont-Schleife). Diese
 Klausel ist Prompt-getragen (Agent-Compliance), keine deterministische Sperre —
 ein deterministisches Agent-Gate ist in `specs/platform/eltern-chat.md` (EC-10,
 „Verworfen: Agent-Gate") ausdrücklich verworfen und bliebe eine separate
-Spec-Frage. (ENTSCHEID `brainstorm/berater-runde/20260624-152550-RATIFIZIERT-hfe-confirm-konflikt.md`,
-Paket-Teil 2; #1118 / Refs #1050.)
+Spec-Frage. (ENTSCHEID `decisions/RAT-44`, Fußnote zur
+Vorgänger-Runde 2026-06-24, Paket-Teil 2; #1118 / Refs #1050.)
 
 **Abgrenzung zu Provider-/Modell-Wechsel:** Wechsel von LLM-Provider
 oder Modell lebt seit Werft-Lauf 2026-06-15 (Refs #848, schließt
@@ -488,7 +488,7 @@ fehlenden Mini-App-Konfig scheitern; der Beifang ist additiv, nicht Pflicht.
 
 **RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → A) Naht-Liste" →
 `_HfeJobStore` + Trampolin in `execute()`;
-`brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`).
+`decisions/RAT-48`).
 
 `execute()` läuft ab V1.1 in einem Daemon-Thread im Task — der
 Polling-Loop ist während des 1–5-min-Album-Baus frei für andere
@@ -543,7 +543,7 @@ sofort mit „warte kurz"-Quittung, kein zweiter Thread),
 
 **RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → B)
 Spec-Patch-Skizze" → Restart-Klausel;
-`brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`).
+`decisions/RAT-48`).
 
 Ein Pi-/Heimserver-Restart während eines laufenden HFE-`execute()`-Jobs
 verliert den Build. Der Daemon-Thread und sein In-Memory-JobStore-Slot
@@ -590,7 +590,7 @@ Wartezeit für möglicherweise verworfene Aufnahmen verursacht.
 ab V1.1 im Daemon-Thread im Task; der Polling-Loop ist während des
 1–5-min-Album-Baus frei. Details: HFE-11 (Job-Single-Slot pro Chat) und
 HFE-12 (Restart-Verlust akzeptiert). Ratifizierungs-Paket:
-`brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`.
+`decisions/RAT-48`.
 Persistente Job-Wiederaufnahme über Restart bleibt **OPEN-HSP-L V2**.
 **Verworfen V1 (2026-06-12):** Async-Pattern ohne Job-Tracking-Mechanismus,
 der zu dem Zeitpunkt nicht tragfähig war.

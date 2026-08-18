@@ -28,8 +28,7 @@ für die in `.importlinter` `root_packages` erfassten Komponenten (Wahrheit:
 `.importlinter` + `conventions/module-boundaries.md`). **Deckungs-Caveat:**
 fehlt eine Komponente in `root_packages`, prüft Stufe 2 sie nicht — heutige
 bekannte Lücke: `panel/` (Folge-Ticket #412). Stufe 2 ist ratifiziert
-via PW-15 (xbuddy-prozess#15 + ENTSCHEID
-`brainstorm/berater-runde/20260608-RATIFIZIERT-pw15-lint-imports.md`, Auslöser
+via PW-15 (Prozess-Repo, xbuddy-prozess#15; Auslöser
 PR #402: MOD-5-Verstoß mit grünem Auto-Merge, weil das Repo-Gate `lint-imports`
 nicht required ist — RAT-9 hält CI-Gates draußen).
 

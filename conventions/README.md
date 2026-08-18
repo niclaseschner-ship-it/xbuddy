@@ -21,14 +21,21 @@ für Verhalten").
   Wie-Vertrag** — `conventions/<name>.md` (z. B. `identifiers.md`,
   `config.md`, `logging.md`, `module-boundaries.md`).
 
-## Provenienz-Zeilen und `brainstorm/`-Pfade
+## Provenienz-Zeilen zeigen auf `decisions/`
 
-Ältere Konventionen tragen `Quelle:`-Zeilen mit Pfaden nach
-`brainstorm/berater-runde/…` — das private Deliberations-Archiv dieses
-Projekts (nicht Teil dieses Repos; siehe `../decisions/README.md`). Die
-Pfade lösen sich für Außenstehende bewusst nicht auf; die Entscheidung
-selbst steht durable in `../decisions/`. **Neue Einträge referenzieren nur
-den public Anker** (`Governance: decisions/RAT-<n>`).
+Eine Konvention nennt als Provenienz **nur den public Anker** —
+`Governance: decisions/RAT-<n>`. Der Pfad in das private Deliberations-Archiv
+(nicht Teil dieses Repos; siehe `../decisions/README.md`) lebt **ausschließlich
+im RAT-Record selbst**, nie hier: für Außenstehende löst er sich nicht auf,
+und eine Konvention, die ihn direkt zitiert, hat erfahrungsgemäß oft gar keinen
+Record — genau so ist der Ledger-Rückstand entstanden (#1782, #1902).
+
+Gehört der Entscheid ins Prozess-Repo (PW-Runden zur prep-/Werft-Mechanik),
+ist der public Anker das dortige Ticket (`xbuddy-prozess#<n>`), kein RAT.
+
+`tests/test_ledger_runden_records.py` hält beides mechanisch: keine
+Runden-Datei direkt zitiert, und jeder von hier genannte RAT-Anker existiert
+als Record **und** als Zeile im Ledger-Index.
 
 Eine Konvention darf **maschinell durchgesetzt** werden, wo das geht:
 `module-boundaries.md` (MOD) wird von import-linter (`.importlinter`,

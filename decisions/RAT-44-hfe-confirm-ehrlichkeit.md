@@ -91,3 +91,38 @@ modell-unabhängig — und genau daran war die Loop-interne Variante gescheitert
 - **Ein-Wege-nah:** B ist eine Rang-1-Garantie über jeden Antworttext. Wer sie
   aufweicht, muss denselben Beweis führen wie diese Runde — mit Live-Beleg, nicht
   mit einer Vermutung über Modell-Verhalten.
+
+---
+
+## Fußnote — die Vorgänger-Runde vom 2026-06-24 und was von ihr gilt
+
+Dieselbe Endlosschleife wurde sechs Wochen früher schon einmal beraten
+(`brainstorm/berater-runde/20260624-152550-RATIFIZIERT-hfe-confirm-konflikt.md`,
+Refs #1050). Diese Runde bekommt **keinen eigenen Record**, weil ihr tragender
+Teil von diesem Entscheid abgelöst ist. Sie steht hier, weil sie aus der Spec
+verlinkt ist und ohne Einordnung als gültig gelesen würde.
+
+**Was damals beschlossen wurde — drei Teile:**
+
+1. **Die Vorschlagsfrage eng zur Bestätigungs-Wortliste lenken** („antworte nur
+   mit »ja«"). *Gilt weiter* — es ist die Wortlaut-Klausel in HFE-4.
+2. **Die Wiedervorschlags-Lehre in beiden Prompt-Quellen entschärfen.** *Von
+   diesem Entscheid als gescheiterte Achse markiert:* der Hinweis existierte
+   bereits und wurde vom Modell ignoriert — genau das ist die Regression, die
+   RAT-44 auslöste. Ein weiterer Prompt-Hinweis koppelt an dieselbe versagende
+   Achse (LLM-Compliance).
+3. **Der HFE-4-Spec-Patch** (der Bestätigungs-Block ist wörtlich normiert, also
+   Spec-zuerst). *Gilt weiter* als Genre-Setzung.
+
+**Die Runde hat ihre eigene Grenze benannt** — und das ist der Grund, warum sie
+hier sauber anschließt statt zu widersprechen: sie schrieb ausdrücklich, dass
+Teil 2 **keine harte Garantie** gibt, und stellte ein Kill-Kriterium auf
+(erscheint erneut ein zweiter Vorschlag ohne dazwischenliegende Ausführung,
+trägt die Prompt-Lehre nicht). **Das Kriterium ist eingetreten.**
+
+**Die offene Spec-Frage von damals ist hier beantwortet.** Die Runde legte Nic
+die Frage vor, ob für teure Ausführungs-Phasen das 2026 verworfene
+Agent-Gate reaktiviert werden soll. RAT-44 beantwortet sie mit **nein** und
+wählt stattdessen den deterministischen Filter *nach* dem Modell: der blockt
+nichts, er zensiert eine Falschaussage — und liegt **außerhalb** des
+Agent-Loops, wo die Prompt-Variante gescheitert war.

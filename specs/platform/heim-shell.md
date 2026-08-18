@@ -16,8 +16,7 @@
 >
 > Status: V1-Pilot (RAT-25) → Ziel-Default (RAT-29) → self-contained (RAT-31) · Refs #1182 #1339
 > Architektur ratifiziert via /berater-runde 2026-06-30 (siehe RAT-25), fortgeschrieben RAT-29/RAT-31.
-> Deliberation: `brainstorm/berater-runde/20260630-151000-RATIFIZIERT-pwa-shell-mia.md`,
-> `brainstorm/berater-runde/20260727-144443-RATIFIZIERT-wirbelsaeule-abriss.md`
+> Records: `decisions/RAT-25`, `decisions/RAT-31`
 > Gate-B-Mockups: `specs/mockups/heim-shell/`
 
 Die Heim-Shell ist ein **dünner Split-Layout-Container**, der auf **einem**
@@ -115,7 +114,7 @@ Test-Anker: seiten/tests/test_heim_shell.py::test_shell3_zwei_iframes
 > registry-frei**. Damit wird das unten stehende „**ein** prozess-weiter
 > Shell-Zustand … **eine** Subscriber-Menge (ein Gerät = ein Ziel)" **abgelöst**:
 > der Zustand wird **pro ephemerer Verbindungs-ID gekeyt** (Mechanismus B, Berater-
-> Runde `brainstorm/berater-runde/20260729-1230-RATIFIZIERT-registry-frei-multi-geraet.md`).
+> Runde `decisions/RAT-35`).
 > Der Client erzeugt pro Shell-Dokument eine anonyme `crypto.randomUUID()` (`sid`,
 > geräte-anonym — **kein** `panel_id`- oder Geräte-Registry-Key, RAT-31-Invariante
 > gewahrt), sendet sie beim SSE-Connect (Query-Param) **und** bei jedem

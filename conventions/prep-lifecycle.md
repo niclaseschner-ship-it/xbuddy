@@ -412,7 +412,7 @@ Prep-Lauf:
 Output: einzeilige Bilanz, von /arbeitstag-prep am Ende jeder Retro
 abrufbar (`cards=N preflight_missing=X over_14_lines=Y followup_pain=Z%`).
 
-**Getrennte Nenner** (PW-86-RATIFIZIERT 2026-07-06, `brainstorm/berater-runde/20260706-154616-RATIFIZIERT-pw86-prep11-messnaht.md` Paket-Sektion „Die gedrehte Form"): Der bisherige gemeinsame Nenner (alle `status:ready`-Tickets im Fenster) verdünnt die **Form**-Metriken bis zur Bedeutungslosigkeit — Tickets, die **ohne Karten-Render** ready wurden (Werft-Stempel mit `werft_verdict`, Koordinations-Override mit direktem `prep_verdict`), haben nie eine gerenderte Karte und dürfen die Kartenform nicht mitzählen (Bug-Beleg 2026-07-06: 0 gerenderte Karten unter 16 ready-Tickets → Formmetriken maßen Rauschen). Daher:
+**Getrennte Nenner** (PW-86-RATIFIZIERT 2026-07-06, Prozess-Repo xbuddy-prozess#86, Paket-Sektion „Die gedrehte Form"): Der bisherige gemeinsame Nenner (alle `status:ready`-Tickets im Fenster) verdünnt die **Form**-Metriken bis zur Bedeutungslosigkeit — Tickets, die **ohne Karten-Render** ready wurden (Werft-Stempel mit `werft_verdict`, Koordinations-Override mit direktem `prep_verdict`), haben nie eine gerenderte Karte und dürfen die Kartenform nicht mitzählen (Bug-Beleg 2026-07-06: 0 gerenderte Karten unter 16 ready-Tickets → Formmetriken maßen Rauschen). Daher:
 - `rendered_card_total` = im Prep-Lauf zu Nic gerenderte Karten (getragen vom `card_pre_flight v1`-Marker). **`over_14_lines` und `followup_pain`** messen die Qualität *dieser* Karten und teilen durch `rendered_card_total`; `followup_pain` zählt nur auf Karten mit `card_pre_flight`.
 - **`preflight_missing` bleibt semantisch unverändert** (Karten *ohne* `card_pre_flight` — ratifiziert: entdünnen, nicht abschalten). Es darf **nicht** über `rendered_card_total` laufen (Zähler und Nenner wären disjunkt → strukturell 0, der Trigger-4-Falsifikator stürbe still). Sein Fehlalarm im reinen Override-Betrieb wird stattdessen über die **Trigger-4-Aussetzung bei `rendered_card_total = 0`** gefangen. **Offen (Bau xbuddy#1359):** ein Nenner, der marker-lose *gerenderte* Karten von nie-gerenderten Nicht-Kartenpfad-Tickets trennt — der Marker allein kann beide nicht unterscheiden; die Nenner-Regel für `preflight_missing` im Misch-Lauf klärt das Bau-Ticket empirisch. (Bau: xbuddy#1359.)
 
@@ -551,10 +551,10 @@ Laufzeit-Deploy-Ziel `~/.claude/`:
 
 Spur:
 
-- PW-26 RATIFIZIERT: `brainstorm/berater-runde/20260609-195710-RATIFIZIERT-pw26-spec-vor-karte.md`
+- PW-26 RATIFIZIERT: `xbuddy-prozess#26`
 - xbuddy-prozess#26 — Original-Ticket
 - xbuddy-prozess#33 — RECON-3-1 Skip-Pfad-Klarstellung (Folge-Ticket, vertagt)
 - xbuddy-prozess#34 — Mess-Skript für Rollback-Quote (Folge-Ticket, vertagt)
-- Karten-Form-Reform RATIFIZIERT 2026-06-21: `brainstorm/berater-runde/20260621-1700-RATIFIZIERT-karten-form-reform-prep.md` — PREP-10 + PREP-11 + Erweiterung PREP-1 um KOORD-WAHL + Schließen-Karte
+- Karten-Form-Reform RATIFIZIERT 2026-06-21 (Prozess-Repo; Folge-Ticket xbuddy-prozess#69) — PREP-10 + PREP-11 + Erweiterung PREP-1 um KOORD-WAHL + Schließen-Karte
 - xbuddy-prozess#69 — Mess-Skript `tools/card_form_quote.py` (Welle-1-Beobachtung)
-- PW-84 Antiberater-Floor RATIFIZIERT 2026-07-05: `brainstorm/berater-runde/20260705-2145-RATIFIZIERT-pw84-antiberater-pflicht-prep.md` — PREP-12 Maturation-Berater-Mechanik (xbuddy-prozess#84)
+- PW-84 Antiberater-Floor RATIFIZIERT 2026-07-05: `xbuddy-prozess#84` — PREP-12 Maturation-Berater-Mechanik (xbuddy-prozess#84)

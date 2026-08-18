@@ -331,7 +331,7 @@ Multi-Anbieter-Motor ist eine offene Convention-Delta-Frage (RAT-26 Offene
 Folge-Punkte; Convention-Delta-Runde noch ausstehend).
 
 Bau-Ticket: #1316. Ratifiziertes Paket:
-`brainstorm/berater-runde/20260705-2223-RATIFIZIERT-1316-litellm-rat26.md`.
+`decisions/RAT-26`.
 
 ### LLMP-S13 — `mistral/`-Modell-Präfix zentral normalisieren; Store-Slots im LLMP-5-Format
 
