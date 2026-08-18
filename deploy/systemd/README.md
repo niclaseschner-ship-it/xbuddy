@@ -231,6 +231,8 @@ Zeile ohne Datei.
 | `deploy/systemd/xbuddy-essen.service.d/20-fotos.conf` | `/etc/systemd/system/xbuddy-essen.service.d/20-fotos.conf` | Foto-Verzeichnis (ESSEN-23) |
 | `deploy/systemd/xbuddy-familie.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-familie.service.d/10-data-path.conf` | **Funktional nötig**: fängt die SVC-5-Verletzung der `familie`-Vorlage ab (`--registry` zeigt sonst in den Checkout) |
 | `deploy/systemd/xbuddy-familie.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-familie.service.d/40-auth-token.conf` | Bot-Token für HART-Auth (T1638) |
+| `deploy/systemd/xbuddy-eltern-chat.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-eltern-chat.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-essen.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-essen.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
 | `deploy/systemd/xbuddy-familie.service.d/memory.conf` | `/etc/systemd/system/xbuddy-familie.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) — #1785 |
 | `deploy/systemd/xbuddy-familie.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-familie.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1801 |
 | `deploy/systemd/xbuddy-hoerspiel-emil.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-hoerspiel-emil.service.d/40-auth-token.conf` | Bot-Token für HART-Auth (T1640) |
@@ -248,17 +250,26 @@ Zeile ohne Datei.
 | `deploy/systemd/xbuddy-photo.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-photo.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
 | `deploy/systemd/xbuddy-plan.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-plan.service.d/10-data-path.conf` | SVC-5: Config-JSON + SQLite-DB außerhalb des Checkouts |
 | `deploy/systemd/xbuddy-plan.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-plan.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
+| `deploy/systemd/xbuddy-hoerspiel.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-hoerspiel.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-hoerspiel-emil.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-hoerspiel-emil.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-hoerspiel-finn.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-hoerspiel-finn.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-kibuddy.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-kibuddy.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-panel.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-panel.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-photo.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-photo.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
 | `deploy/systemd/xbuddy-plan.service.d/memory.conf` | `/etc/systemd/system/xbuddy-plan.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) — #1785 |
 | `deploy/systemd/xbuddy-plan.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-plan.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1801 |
 | `deploy/systemd/xbuddy-routine.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-routine.service.d/10-data-path.conf` | SVC-5-Datenpfad (Etappe-1b-Override) |
 | `deploy/systemd/xbuddy-seiten.service.d/30-token-sharing.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/30-token-sharing.conf` | Bot-Token-Sharing für Mini-App-Auth (RAT-16, T684) |
 | `deploy/systemd/xbuddy-seiten.service.d/30-zugangsdaten-path.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/30-zugangsdaten-path.conf` | Zugangsdaten-Store-Pfad für das Connector-Inventar (#1086) |
 | `deploy/systemd/xbuddy-seiten.service.d/40-auth-mode.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/40-auth-mode.conf` | AUTH-7b Hard-Flip (RAT-32, #1338) |
+| `deploy/systemd/xbuddy-routine.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-routine.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
 | `deploy/systemd/xbuddy-seiten.service.d/auth-paired-at.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/auth-paired-at.conf` | `paired_at`-Store-Pfad (AUTH-2.a, T1389) |
 | `deploy/systemd/xbuddy-seiten.service.d/origins.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/origins.conf` | Funnel-Origin (SREG-7); Wert kommt als Platzhalter aus dem Host-Profil |
 | `deploy/systemd/xbuddy-wetter.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/10-data-path.conf` | SVC-5-Datenpfad |
 | `deploy/systemd/xbuddy-wetter.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
 | `deploy/systemd/xbuddy-wetter.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/40-auth-token.conf` | Bot-Token für `/api/v1/wetter/regeln` (AUTH-3, #1715) |
+| `deploy/systemd/xbuddy-seiten.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-wetter.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
 
 Die Verzeichnisnamen folgen den **Repo-Unit-Namen** aus der `SVC_SRC`-Map von
 `deploy/bootstrap.sh` — die Kind-Instanzen des Hörspiel-Buddy heißen dort
