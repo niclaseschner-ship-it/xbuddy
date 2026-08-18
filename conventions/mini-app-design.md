@@ -248,7 +248,7 @@ Code-Mechanik (`auto_confirm = True` im `WriteTask`-Framework, siehe
 UI-Bau-Patterns (Convention). Vorherige MAD-Inkarnation mischte beides; der
 Genre-Drift wurde beim Antiberater-Codex-Pass aufgedeckt.
 
-*Tickets:* RATIFIZIERT-Datei `brainstorm/berater-runde/20260612-093034-RATIFIZIERT-elternchat-ui-pattern.md` (Punkt 5)
+*Tickets:* Ratifizierung `decisions/RAT-47` (Punkt 5)
 
 ---
 
@@ -262,8 +262,7 @@ Token-Heimat; in dieser Konvention wird MAD-9 nicht mehr inhaltlich
 ausgeführt.
 
 *Tickets:* #684 (Token-Sharing), #708 (Verortung in apps.md APP-7),
-RATIFIZIERT-Datei
-`brainstorm/berater-runde/20260612-093034-RATIFIZIERT-elternchat-ui-pattern.md` (Punkt 5)
+Ratifizierung `decisions/RAT-47` (Punkt 5)
 
 ---
 
@@ -293,8 +292,7 @@ RAT-16-Vendor-Adapter-Disziplin verlangt, dass Skills nicht direkt
 Zukünftige Nicht-Telegram-Adapter (Element-Widget, PWA) implementieren
 dieselbe Launcher-Schnittstelle mit eigenen Capabilities.
 
-*Tickets:* RATIFIZIERT-Datei
-`brainstorm/berater-runde/20260612-093034-RATIFIZIERT-elternchat-ui-pattern.md`
+*Tickets:* Ratifizierung `decisions/RAT-47`
 (Punkt 4 — A4b); #708 (Server-`initData`-Validierung schließen)
 
 ---

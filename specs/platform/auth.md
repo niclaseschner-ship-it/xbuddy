@@ -1,8 +1,7 @@
 # Auth-Strategie — Spec     (ID-Präfix: AUTH)
 
 > Status: V1 (Phase 1, essen-einkauf-Scope) · Refs #948
-> Provenanz: `brainstorm/berater-runde/2026-06-16-1123-RATIFIZIERT-auth-strategie-5-klassen.md`
-> Decision-Record: `decisions/RAT-18-auth-strategie.md`
+> Governance: `decisions/RAT-18-auth-strategie.md`
 
 Die Auth-Spec trägt die Sorten-Grenze für API-Zugriffe in xbuddy. Sie
 definiert, **wer mit welchem Token-Typ welche Route ansprechen darf**, und
@@ -357,7 +356,7 @@ ist ein Regressions-Bug (nie beabsichtigt).
 > decorator-freien Services (wetter/familie/geraete/panel/hoerspiel) bleiben
 > **ausgeklammert** — sie sind die Multi-Geräte-Wirbelsäule (RAT-31-Abriss,
 > Epic #1339), dort geschnitten statt hier decorator-nachgerüstet.
-> [Quelle: `brainstorm/berater-runde/20260727-160000-RATIFIZIERT-auth-cookie-hart-flip.md`]
+> [Quelle: `decisions/RAT-32`]
 
 **[ÜBERHOLT 2026-08-11 — Nic-Setzung, Prüfung am Live-Stand]** Die Ausklammerung
 oben ist erledigt und gilt nicht mehr. Der Abriss ist durch: `router/` und

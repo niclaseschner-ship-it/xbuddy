@@ -120,3 +120,59 @@ zählen nicht als Re-Litigations-Anlass.
 - Matrix-Produkt-Vision (Backlog): `~/brainstorm/produkt-vision/xbuddy-familien-box.md`
 - Verwandte RATs: RAT-3 (KI-zu-API-Pattern für Skill-Adapter), RAT-6 (Familien-Schnittstelle),
   RAT-13 (Seiten-Registry — Naht zur dritten MVP-Funktion)
+
+---
+
+## Nachtrag 2026-06-11 — Werkzeug-Wahl je Funktion: alle drei sind Mini Apps
+
+Dieser Record hielt oben fest, was die MVP-Plattform ist, und ließ die
+**Werkzeug-Wahl je Funktion** ausdrücklich für spätere Runden offen („die
+Mini-App-/Widget-Wahl je Funktion verfeinern"). Genau das ist am 2026-06-11 in
+einer Schärfungs-Runde zu #678 passiert — mit einem Ergebnis, das eine Zeile
+**oben** überholt.
+
+**Nic-Tiebreaker: *„Inline-Keyboard ist keine Option, hartes Nein."*** Alle drei
+MVP-Funktionen (Einkaufsliste, Routine-Anpassen, Seiten-Übersicht) sind **Mini
+Apps**. Der oben genannte Punkt „pinned Inline-Keyboard für die
+tap-im-Supermarkt-Geste" ist damit **nicht mehr gültig** — er steht hier nur
+noch als das, was er war, damit niemand ihn im Fließtext oben für den Stand
+hält.
+
+**Was daraus folgt:**
+
+- Der Antiberater hatte die „alle drei hängen an derselben Mini-App-Infra"-Kopplung
+  als **Bruch** gemeldet. Mit dem Tiebreaker ist sie kein Bruch mehr, sondern
+  ratifizierte Konsequenz: alle drei brauchen den Fernzugang, die
+  Signatur-Prüfung der Startdaten und den Plattform-Wrapper.
+- Die Mockup-Strecke aus der Vorgänger-Werft ist **als Lösungspfad verworfen**;
+  die inhaltlichen Erkenntnisse daraus (Quellen-Marker, Hybrid-Layout,
+  Übernahme-Geste, Listen-Grenze) leben in der Mini-App-Form weiter.
+- **Sequenz:** die Seiten-Übersicht zuerst — sie ist die kleinste Probe, die das
+  ganze Lego-Set (Fernzugang, Signatur-Prüfung, Wrapper, Bot-Domain-Eintrag)
+  auf einmal testet. Erst danach Einkaufsliste, dann Routine.
+
+**Was die Runde außerdem festnagelte** (Antiberater-Korrekturen, jede ein
+Bruch am ersten Entwurf):
+
+- **Kein Vendor-Vokabular außerhalb des Adapters** — die neue neutrale
+  Tap-Nachricht trägt neutrale Feldnamen; ein Grep über die Skills muss null
+  Treffer auf Telegram-Vokabeln haben. Das ist die Adapter-Disziplin von oben,
+  auf einen konkreten Datentyp angewandt.
+- **Auth-Eigentümerschaft:** die Prüfung der Startdaten lebt als **Bibliothek**
+  im Eltern-Chat und wird von anderen Diensten als Python-Modul importiert,
+  nicht über HTTP gerufen. Der Bot-Token bleibt physisch beim Eltern-Chat und
+  wird über die Dienst-Konfiguration geteilt.
+- **Ein „Fakt" aus dem ersten Entwurf war falsch:** eine feste Ablauf-Frist von
+  einer Stunde für die Startdaten existiert nicht. Die Frische-Grenze ist
+  Konfiguration (Vorgabe 24 h).
+- **Jede Mini-App-Route lehnt Aufrufe ohne gültige Startdaten ab** — es gibt
+  keine öffentliche Variante derselben Route.
+
+**Entscheid-File:**
+`brainstorm/berater-runde/20260611-160500-RATIFIZIERT-mvp-678-plan-schaerfung.md`
+
+**Warum Nachtrag und kein eigener Record:** die Runde hat nichts Neues
+beschlossen, sondern die von diesem Record offen gelassene Verfeinerung
+ausgefüllt — und dabei eine seiner Aufzählungs-Zeilen zurückgenommen. Als
+eigener Eintrag stünde die Rücknahme neben dem überholten Wortlaut statt an
+ihm.

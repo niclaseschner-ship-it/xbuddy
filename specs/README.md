@@ -21,17 +21,25 @@ braucht es nicht, um die Spec synchron zu halten.
   einheitliche Form). Specs zitieren Konventions-IDs (z. B. „folgt
   IDENT-1"), beschreiben selbst kein „Wie".
 
-## Provenienz-Zeilen und `brainstorm/`-Pfade
+## Provenienz-Zeilen zeigen auf `decisions/`
 
-Ältere Specs tragen `Quelle:`/`Provenanz:`-Zeilen mit Pfaden nach
-`brainstorm/berater-runde/…` — das ist das **private Deliberations-Archiv**
-dieses Projekts (Schwester-Repo, nicht Teil dieses Repos; siehe
-`../decisions/README.md`, Zwei-Naturen-Modell). Diese Pfade lösen sich für
-Außenstehende bewusst nicht auf: Die Entscheidung selbst ist durable in
-`../decisions/` (RAT-Records) dokumentiert, der tote Pfad ist nur die
-historische Evidenz-Spur (Dateiname = Datum + Status + Thema). **Für neue
-Einträge gilt: nur der public Anker** — `Governance: decisions/RAT-<n>` —
-der Deliberations-Link lebt ausschließlich im RAT-Record selbst.
+Eine Spec nennt als Provenienz **nur den public Anker** —
+`Governance: decisions/RAT-<n>`. Das private Deliberations-Archiv
+(Schwester-Repo, nicht Teil dieses Repos; siehe `../decisions/README.md`,
+Zwei-Naturen-Modell) wird **ausschließlich im RAT-Record selbst** verlinkt.
+
+Der Grund ist nicht Kosmetik: ein direkt zitierter Runden-Pfad löst sich für
+Außenstehende nicht auf — und er umgeht den Ledger. Der vorgeschriebene
+Re-Litigations-Grep läuft über `../decisions/`; was nur als Runden-Pfad in
+einer Spec steht, ist für ihn unsichtbar. Genau so ist der Ledger-Rückstand
+entstanden (#1782, #1902).
+
+Gehört der Entscheid ins Prozess-Repo (PW-Runden zur prep-/Werft-Mechanik),
+ist der public Anker das dortige Ticket (`xbuddy-prozess#<n>`), kein RAT.
+
+`tests/test_ledger_runden_records.py` hält beides mechanisch: keine
+Runden-Datei direkt zitiert, und jeder von hier genannte RAT-Anker existiert
+als Record **und** als Zeile im Ledger-Index.
 
 <!-- Buddy-Spec — Gliederungs-Checkliste (optional, kein Pflichtrahmen)
 
@@ -116,9 +124,7 @@ Existenz/Form-Korrektheit prüfen. Solche Requirements brauchen **keinen**
 zulässig als Spec-Wahl. Die Hebel-0-Form-Regel ist **additiv pro Requirement**,
 nicht ersetzend.
 
-Diese Klausel ist ratifiziert in
-`brainstorm/berater-runde/2026-06-21-1620-RATIFIZIERT-werft-bauer-drift.md`
-(Pfad B Schritt 2).
+Diese Klausel ist ratifiziert in `decisions/RAT-50`.
 
 ## Bindend vs. vorläufig
 

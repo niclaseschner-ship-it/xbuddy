@@ -1,7 +1,7 @@
 # PWA-Mantel — Konvention     (ID-Präfix: PWAM)
 
 *Status: RATIFIZIERT 2026-07-01 (Nic-Gate + Codex Pass-2, #1215). Quelle der
-Ratifizierung: `berater-runde/20260701-164714-RATIFIZIERT-1215-pwa-mantel-unify.md`
+Ratifizierung: `decisions/RAT-52`
 (Nic-Verdikt „Unify-Override"). Jede Klausel trägt ihren Herleitungs-Anker
 inline als `ENTSCHEID → <Sektion> → <Stichwort>`.*
 
@@ -196,7 +196,7 @@ fixte ausschließlich den **HTML**-Pfad (`_mini_app_build_id`,
 `seiten/main.py:588-603`), **nicht** den SW. Damit trägt der installierte SW bei
 reinem `platform.js`-Bump denselben `CACHE_NAME` und servt/precached alte Assets.
 Der Ratifizierungs-Record fordert aber ausdrücklich neuen Cache-Namen bei
-`platform.js`-Bump (`berater-runde/20260701-164714-RATIFIZIERT-1215-pwa-mantel-unify.md:37-41`).
+`platform.js`-Bump (`decisions/RAT-52`).
 **Test-Gate VOR dem Skelett-Sharing** (heute NICHT abgedeckt — T1229 prüft nur
 HTML, `seiten/tests/test_t1229_build_id_platform_js.py`): „`platform.js`-mtime
 neuer ⇒ `GET /seiten/essen/einkauf/sw.js` **und** `GET /seiten/plan/einstellungen/sw.js`

@@ -279,7 +279,7 @@ umgezeigt — das ist Aufgabe der Code-Tracks, nicht dieser Spec.
 
 **Quer-Verweis EC-39 (2026-06-19; ENTSCHEID-File Paket-Sektion „R2-Paket →
 B) Spec-Patch-Skizze" → EC-N3-Klausel;
-`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`):**
+`decisions/RAT-49`):**
 EC-25 deckt Typing **innerhalb** einer mehrstufigen Schreib-Aufgabe ab
 (Session-intern, nach Auth, im Agent-Loop). EC-39 ergänzt das **Sofort-
 Typing bei Empfang** — gesendet vom Polling-Reader direkt nach
@@ -1287,7 +1287,7 @@ gelöst).
 ### EC-37 — Reader/Processor-Polling-Topologie
 
 **RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → A) Naht-Liste";
-`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`).
+`decisions/RAT-49`).
 
 Der Telegram-Long-Poll-Lesepfad (`getUpdates`) läuft in einem Daemon-Thread
 (`name="poll-reader"`), getrennt von der Update-Verarbeitung (`dispatch`).
@@ -1344,7 +1344,7 @@ nicht stillstellt.
 
 **RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → B)
 Spec-Patch-Skizze" → EC-N2-Klausel;
-`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`).
+`decisions/RAT-49`).
 
 Der Long-Poll-Offset (`getUpdates`-`offset`) wird erst nach der
 beobachteten Verarbeitung erhöht. Konkret: der Reader bestätigt ein
@@ -1381,7 +1381,7 @@ dass at-least-once die richtige Wahl ist.
 
 **RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → B)
 Spec-Patch-Skizze" → EC-N3-Klausel;
-`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`).
+`decisions/RAT-49`).
 
 Erhält der Reader (EC-37) ein Telegram-`message`-Update mit
 `chat.type == "private"`, sendet er **Fire-and-Forget**
@@ -1820,7 +1820,7 @@ auf ein eintreffendes Update reagiert.
 
 **Quer-Verweis EC-37/38 (2026-06-19; ENTSCHEID-File Paket-Sektion
 „R2-Paket → A) Naht-Liste" und „R2-Paket → B) Spec-Patch-Skizze";
-`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`):**
+`decisions/RAT-49`):**
 Der `poll_loop` wird ab 2026-06-19 in einen Reader-Daemon-Thread
 (`getUpdates` + Sofort-Typing + Hand-off) und einen Processor-
 Hauptthread (Hand-off-Consume + `dispatch`) geteilt. Der 30-s-Long-Poll-

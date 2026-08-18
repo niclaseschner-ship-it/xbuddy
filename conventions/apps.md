@@ -106,7 +106,7 @@ Eigentum); (b) eigene `secrets/`-Datei pro Buddy mit Sync-Mechanismus —
 EnvironmentFile-Sharing ist die einfachere systemd-native Lösung.
 
 *Tickets:* #684 (Token-Sharing-Mechanik), #708 (Verortung als APP-7),
-RATIFIZIERT-Datei `brainstorm/berater-runde/20260612-093034-RATIFIZIERT-elternchat-ui-pattern.md` (Punkt 5)
+Ratifizierung `decisions/RAT-47` (Punkt 5)
 
 ### APP-6 — Spec-Datei-Verortung: buddies/ vs. platform/
 

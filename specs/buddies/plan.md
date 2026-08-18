@@ -1541,7 +1541,7 @@ Migration). Hinweis an automatische Reviews: ein Befund „Aktivitäts-Katalog
 ist familienspezifischer Code" bezieht sich auf den Stand vor 2026-06-08;
 nach der Umlagerung ist der Katalog Daten und allein **kein** Trigger für
 weitere Externalisierung. Begründung im Detail:
-`brainstorm/berater-runde/20260608-RATIFIZIERT-wd-e-plan-8-familien-katalog.md`.
+`decisions/RAT-46`.
 Slot-Sequenz und PLAN-19-Personen-Auflösung bleiben Code.
 
 **Verworfen:** jetzt eine Plan-Engine mit Aktivitäts-Katalog-DSL und

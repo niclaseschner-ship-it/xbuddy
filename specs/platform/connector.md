@@ -2,7 +2,7 @@
 
 > Status: V1 · Refs [#1086](../../README.md) (T5, Keystone [RAT-20](../../decisions/RAT-20-llm-gateway-ist-lib.md))
 > · Werft-Lauf 2026-06-25 (F1–F4), Scope-Entscheid
-> `brainstorm/berater-runde/20260625-1145-RATIFIZIERT-connector-v1-scope.md`
+> `decisions/RAT-51`
 > · Mockup: `specs/mockups/connector/index.html`
 
 Eine **Eltern-PWA-Seite**, die die externe KI-Anbieter-Landschaft einer XBuddy-Instanz
