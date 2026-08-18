@@ -199,6 +199,82 @@ def test_deklarierte_adressen_liefern_kein_404():
     )
 
 
+# ── #1890 — Route→Verzeichnis: die Seite ist da, der Eintrag fehlt ──────────
+
+def test_jede_seiten_route_hat_einen_verzeichnis_eintrag():
+    """Eine Seiten-Route ohne Eintrag im Ansichts-Verzeichnis macht rot (#1890).
+
+    Die Gegenrichtung zur Mantel-Achse — und der wahrscheinlichere reale Fall:
+    jemand baut die Seite und vergisst das Verzeichnis; die umgekehrte
+    Reihenfolge kommt kaum vor. Fuer den Praefix `/seiten/<komp>/<view>` hatte
+    diese Richtung im ganzen Repo keine Pruefung, obwohl dort fuenf der acht
+    abgeleiteten Eltern-Flaechen und saemtliche PWA-Flaechen liegen.
+
+    Gefragt wird nach einem Eintrag ueberhaupt, nicht nach `zielgruppe:
+    "eltern"` — ohne Eintrag gibt es kein Zielgruppen-Feld zu lesen.
+    """
+    offen = ef.route_luecken()
+    assert not offen, (
+        "Seiten-Routen ohne Eintrag im Ansichts-Verzeichnis (#1890):\n"
+        + "\n".join("  - %s" % b.text for b in offen)
+        + "\n\nFix: die Flaeche im views.json ihrer Komponente eintragen "
+        "(Pfad = die ausgelieferte Adresse). Ist die Route bewusst keine "
+        "gelistete Flaeche, gehoert sie mit Begruendung in "
+        "tests/eltern_flaechen.py:AUSNAHMEN (Achse 'route')."
+    )
+
+
+def test_die_gemessene_routen_menge_ist_nicht_leer():
+    """Sonst pruefte die Achse leere Menge gegen leere Menge — gruen ohne
+    Gegenstand.
+
+    Bewusst KEINE Literal-Liste der erwarteten Routen: die waere genau die
+    Anti-Form, die #1890 abschafft (wer eine Seite vergisst, vergisst auch den
+    Listen-Eintrag). Geprueft wird nur, dass die Formregel `ist_seiten_route`
+    ueberhaupt noch Seiten durchlaesst — bricht sie, faellt es hier auf und
+    nicht erst, wenn eine echte Luecke stumm durchrutscht.
+    """
+    routen = ef.seiten_routen()
+    assert routen, (
+        "Unter %r zaehlt diese Pruefung keine einzige Seiten-Route — dann ist "
+        "sie gegenstandslos gruen. Entweder liefert der seiten-Dienst keine "
+        "Flaechen mehr aus, oder die Formregel ist_seiten_route filtert zu "
+        "hart (tests/eltern_flaechen.py)." % ef.SEITEN_PRAEFIX
+    )
+
+
+def test_waechter_wird_rot_wenn_eine_neue_seiten_route_kein_verzeichnis_hat():
+    """Fehlerpfad-Probe (#1890): diese Achse KANN rot werden.
+
+    Genau der Fall, den der Pruefer zur Laufzeit ausgeloest hat und den alle
+    vier bisherigen Achsen leer durchlaufen liessen: eine echte Route unter
+    `/seiten/…` ohne jeden `views.json`-Eintrag. Hier wird sie in einen Abzug
+    der Routen-Tabelle gehaengt (die echte App bleibt unberuehrt), der Empfang
+    bestaetigt — und ohne sie ist der Befund wieder weg.
+
+    Ein Waechter, der nie rot wird, ist schlimmer als keiner: er erzeugt
+    Zuversicht.
+    """
+    erfunden = "/seiten/frischling/eltern"
+
+    mit_route = ef.route_befunde(app=ef.routentabelle_mit_zusatz(erfunden))
+    kennungen = [b.kennung for b in mit_route]
+    assert erfunden in kennungen, (
+        "Die Achse 'route' hat die nicht eingetragene Seiten-Route NICHT "
+        "gefunden — damit koennte sie die Auslassung, gegen die sie gebaut "
+        "ist, nicht melden. Gefunden: %r" % kennungen
+    )
+    treffer = next(b for b in mit_route if b.kennung == erfunden)
+    assert "views.json" in treffer.text
+
+    ohne_route = [b.kennung for b in ef.route_befunde()]
+    assert erfunden not in ohne_route, (
+        "Ohne die erfundene Route darf sie nicht mehr auftauchen — sonst misst "
+        "die Achse nicht die Routen-Tabelle, die man ihr gibt. Gefunden: %r"
+        % ohne_route
+    )
+
+
 # ── Achse `lader` — kaputte Eintraege werden Befund, nicht blinder Fleck ─────
 
 def test_betriebs_lader_ueberspringt_nichts_undokumentiertes():
@@ -317,6 +393,7 @@ def test_ausnahmen_sind_noch_real():
             k for k in aggregator_komponenten if ef.anschluss_fuer(k) is None
         },
         ef.ACHSE_GEGENRICHTUNG: {b.kennung for b in ef.gegenrichtung_befunde()},
+        ef.ACHSE_ROUTE: {b.kennung for b in ef.route_befunde()},
     }
     veraltet = [
         "%s/%s (%s)" % (e.achse, e.kennung, e.quelle)
@@ -372,17 +449,19 @@ def test_ohne_die_ausnahme_liste_bleiben_genau_diese_befunde_offen(monkeypatch):
     einen NEUEN Fehler derselben Kennung stillschweigend abdeckte).
 
     Das ist zugleich die zweite Fehlerpfad-Probe: sie loest jeden
-    dokumentierten Befund echt aus, statt seine Existenz zu behaupten. Vier
-    der fuenf Achsen machen einen offenen Befund rot; die Achse
+    dokumentierten Befund echt aus, statt seine Existenz zu behaupten. Fuenf
+    der sechs Achsen machen einen offenen Befund rot; die Achse
     `gegenrichtung` verlangt nur seine Benennung (#1822 klammert ihren Bau
-    aus) — offen ist er in beiden Faellen.
+    aus) — offen ist er in beiden Faellen. Die Achse `route` (#1890) faehrt
+    mit, obwohl sie heute keinen dokumentierten Befund traegt: sonst bliebe
+    ein kuenftiger Routen-Eintrag von dieser Form-Probe ungeprueft.
     """
     erwartet = {(e.achse, e.kennung) for e in ef.AUSNAHMEN}
     monkeypatch.setattr(ef, "AUSNAHMEN", ())
 
     offen = set()
     for befund in (ef.mantel_luecken() + ef.anschluss_luecken()
-                   + ef.gegenrichtung_luecken()
+                   + ef.gegenrichtung_luecken() + ef.route_luecken()
                    + [b for b in ef.pfad_befunde() if b.ausnahme is None]
                    + [b for b in ef.lader_befunde() if b.ausnahme is None]):
         offen.add((befund.achse, befund.kennung))

@@ -231,6 +231,8 @@ Zeile ohne Datei.
 | `deploy/systemd/xbuddy-essen.service.d/20-fotos.conf` | `/etc/systemd/system/xbuddy-essen.service.d/20-fotos.conf` | Foto-Verzeichnis (ESSEN-23) |
 | `deploy/systemd/xbuddy-familie.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-familie.service.d/10-data-path.conf` | **Funktional nötig**: fängt die SVC-5-Verletzung der `familie`-Vorlage ab (`--registry` zeigt sonst in den Checkout) |
 | `deploy/systemd/xbuddy-familie.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-familie.service.d/40-auth-token.conf` | Bot-Token für HART-Auth (T1638) |
+| `deploy/systemd/xbuddy-eltern-chat.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-eltern-chat.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-essen.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-essen.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
 | `deploy/systemd/xbuddy-familie.service.d/memory.conf` | `/etc/systemd/system/xbuddy-familie.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) — #1785 |
 | `deploy/systemd/xbuddy-familie.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-familie.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1801 |
 | `deploy/systemd/xbuddy-hoerspiel-emil.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-hoerspiel-emil.service.d/40-auth-token.conf` | Bot-Token für HART-Auth (T1640) |
@@ -248,17 +250,26 @@ Zeile ohne Datei.
 | `deploy/systemd/xbuddy-photo.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-photo.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
 | `deploy/systemd/xbuddy-plan.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-plan.service.d/10-data-path.conf` | SVC-5: Config-JSON + SQLite-DB außerhalb des Checkouts |
 | `deploy/systemd/xbuddy-plan.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-plan.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
+| `deploy/systemd/xbuddy-hoerspiel.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-hoerspiel.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-hoerspiel-emil.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-hoerspiel-emil.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-hoerspiel-finn.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-hoerspiel-finn.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-kibuddy.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-kibuddy.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-panel.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-panel.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-photo.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-photo.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
 | `deploy/systemd/xbuddy-plan.service.d/memory.conf` | `/etc/systemd/system/xbuddy-plan.service.d/memory.conf` | Speicher-Notbremse (`MemoryHigh`, `OOMScoreAdjust`) — #1785 |
 | `deploy/systemd/xbuddy-plan.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-plan.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1801 |
 | `deploy/systemd/xbuddy-routine.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-routine.service.d/10-data-path.conf` | SVC-5-Datenpfad (Etappe-1b-Override) |
 | `deploy/systemd/xbuddy-seiten.service.d/30-token-sharing.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/30-token-sharing.conf` | Bot-Token-Sharing für Mini-App-Auth (RAT-16, T684) |
 | `deploy/systemd/xbuddy-seiten.service.d/30-zugangsdaten-path.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/30-zugangsdaten-path.conf` | Zugangsdaten-Store-Pfad für das Connector-Inventar (#1086) |
 | `deploy/systemd/xbuddy-seiten.service.d/40-auth-mode.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/40-auth-mode.conf` | AUTH-7b Hard-Flip (RAT-32, #1338) |
+| `deploy/systemd/xbuddy-routine.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-routine.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
 | `deploy/systemd/xbuddy-seiten.service.d/auth-paired-at.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/auth-paired-at.conf` | `paired_at`-Store-Pfad (AUTH-2.a, T1389) |
 | `deploy/systemd/xbuddy-seiten.service.d/origins.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/origins.conf` | Funnel-Origin (SREG-7); Wert kommt als Platzhalter aus dem Host-Profil |
 | `deploy/systemd/xbuddy-wetter.service.d/10-data-path.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/10-data-path.conf` | SVC-5-Datenpfad |
 | `deploy/systemd/xbuddy-wetter.service.d/20-eltern-token.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/20-eltern-token.conf` | Bot-Token-Sharing (RAT-16) |
 | `deploy/systemd/xbuddy-wetter.service.d/40-auth-token.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/40-auth-token.conf` | Bot-Token für `/api/v1/wetter/regeln` (AUTH-3, #1715) |
+| `deploy/systemd/xbuddy-seiten.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-seiten.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
+| `deploy/systemd/xbuddy-wetter.service.d/restart-window.conf` | `/etc/systemd/system/xbuddy-wetter.service.d/restart-window.conf` | Neustart-Bremse (`StartLimitIntervalSec`, `StartLimitBurst`) — #1883 |
 
 Die Verzeichnisnamen folgen den **Repo-Unit-Namen** aus der `SVC_SRC`-Map von
 `deploy/bootstrap.sh` — die Kind-Instanzen des Hörspiel-Buddy heißen dort
@@ -458,18 +469,34 @@ Platzhalter-Tabelle oben), nicht aus `deploy/systemd/` selbst.
 
 Rollback ist symmetrisch: Drop-In löschen, `daemon-reload`.
 
-### Bekannte Vorlagen-Drift (Stand 2026-08-10, #1785)
+### Bekannte Vorlagen-Drift (Stand 2026-08-18, #1891)
 
-Diese Abweichungen sind **gemeldet, nicht gefixt** — sie zu ändern gehört in ein
-eigenes Ticket, weil `bootstrap.sh` die Basis-Units überschreibt und das jeden
-Live-Dienst anfasst:
+Die zwei **gefaehrlichen** Abweichungen sind aufgeloest; die zwei harmlosen sind
+**bewusst akzeptiert** und tragen einen Aufloesungs-Trigger. Nichts steht mehr
+als „gemeldet, nicht gefixt" da.
 
-| Ort | Repo-Vorlage | Live in `/etc` | Wirkung |
-|---|---|---|---|
-| `familie/familie.service` → `ExecStart` | ohne `--host`/`--port` | `--host 127.0.0.1 --port 5010` | Harmlos: `familie/main.py` `RUNTIME_SCHEMA` hat genau diese Werte als Default. Trotzdem Drift. |
-| `familie/familie.service` → `--registry` | `__XBUDDY_REPO__/familie/familie.json` (**im Checkout**) | `__XBUDDY_DATA__/familie/familie.json` (per Drop-In `10-data-path.conf`) | Die Vorlage verletzt SVC-5; live rettet das nur ein Drop-In mit `ExecStart=`-Reset. |
-| `plan/plan.service` → `EnvironmentFile` | inline in der Vorlage | per Drop-In `20-eltern-token.conf` | Doppelter Ort für dieselbe Zuweisung. |
-| beide → `Restart=` | `on-failure` (SVC-3-konform) | `always` (hand-editiert) | Siehe SVC-3 in `conventions/services.md`. Die Drift lebt **nur** in `/etc`; ein `bootstrap.sh`-Lauf würde sie von allein beseitigen. Für #1801 re-verifiziert (2026-08-17): `systemctl show xbuddy-plan xbuddy-familie -p Restart` zeigt weiterhin `always` auf beiden. |
+| Ort | Stand | Warum |
+|---|---|---|
+| `familie/familie.service` → `--registry` | **behoben (#1891)** | Die Vorlage legte den Registry-Pfad in den Checkout und verletzte damit SVC-5; live rettete das nur ein Drop-In mit `ExecStart=`-Reset. Fiel es beim Neuaufsetzen weg, startete der Dienst gegen den falschen Pfad. Die Vorlage traegt jetzt `__XBUDDY_DATA__`. |
+| `panel/panel.service` → `--panels` | **behoben (#1891)** | Dieselbe SVC-5-Verletzung wie bei familie, in keiner Liste gefuehrt — beim Aufraeumen gefunden. **Schaerfer**, weil die Checkout-Datei `panel/panels.json` lokal existiert (gitignoriert, Stand Juni): ohne Drop-In waere der Dienst nicht mit einem Fehler gestartet, sondern **still gegen Monate alte Daten**. |
+| `familie/familie.service` → `--host`/`--port` | **behoben (#1891)** | Harmlos (die `RUNTIME_SCHEMA`-Defaults sind dieselben), aber Drift. Stehen jetzt in der Vorlage. |
+| `plan/plan.service` → `EnvironmentFile` | **akzeptiert** | Vorlage und Drop-In `20-eltern-token.conf` setzen denselben Wert. Funktional folgenlos — systemd liest die Datei idempotent. Aufloesung mit dem naechsten Aufraeum-Schritt fuer `/etc`-Artefakte, weil dafuer Datei **und** Soll-Zeile in einem Zug gehen muessen. |
+| `seiten/seiten.service` → `GERAETE_REGISTRY` | **akzeptiert** | Gleiche Lage, gleiche Begruendung (Drop-In `auth-paired-at.conf`). In #1802 als fuenfte, dort nicht gelistete Drift gefunden. |
+| beide → `Restart=` | **lebt nur in `/etc`** | Vorlagen sagen `on-failure` (SVC-3-konform), live steht hand-editiert `always`. Ein `bootstrap.sh`-Lauf beseitigt das von allein. Fuer #1801 re-verifiziert (2026-08-17). |
+
+**Warum die Vorlagen-Korrektur ungefaehrlich war:** `bootstrap.sh` laeuft nicht
+automatisch — es ist ein Onboarding-Werkzeug. Eine geaenderte Vorlage hat deshalb
+**keine Live-Wirkung**; sie wirkt erst beim naechsten Aufsetzen. Genau diese Sorge
+(„beruehrt jeden Live-Dienst") stand hier bis 2026-08-18 als Grund, nichts
+anzufassen.
+
+Gegen die Wiederkehr steht jetzt ein Waechter: `deploy/tests/test_vorlagen_svc5.py`
+prueft die **Vorlagen allein**, ohne Drop-Ins — genau den Zustand, den ein
+frisches Aufsetzen erzeugt. Rueckfall vorgefuehrt (Vorlage zurueckgedreht → rot).
+
+**Die zwei Drop-Ins bleiben stehen**, tragen aber jetzt in ihrem eigenen Kopf,
+dass sie Altlast sind und wann sie gehen. Ein Leser, der nur die Datei oeffnet,
+sieht das — vorher stand es nur hier.
 
 ## Restart nach Code-Update (Pflicht)
 

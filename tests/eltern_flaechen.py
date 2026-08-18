@@ -73,6 +73,31 @@ Tragfaehig ist nur die Start-Adresse — und die auch nur normalisiert:
    Ein reiner String-Vergleich waere hier umgebungsabhaengig falsch; beide
    loesen aber auf dieselbe Regel `/seiten/hoerspiel/<kind_id>/eltern` auf.
 
+## Beide Richtungen, nicht nur eine
+
+Die Mantel-Achse fragt „Eintrag da, Mantel fehlt?". Die Gegenfrage — „Seite da,
+Eintrag fehlt?" — ist der wahrscheinlichere reale Fall: jemand baut die Seite
+und vergisst das Verzeichnis; die umgekehrte Reihenfolge kommt kaum vor. Fuer
+den Praefix `/seiten/<komp>/<view>` hatte diese Richtung im GANZEN Repo keine
+Pruefung (#1890) — und dort liegen fuenf der acht abgeleiteten Eltern-Flaechen
+plus saemtliche PWA-Flaechen. Nachgemessen: eine zur Laufzeit in
+`seiten.main.app` registrierte Eltern-Route ohne jeden `views.json`-Eintrag
+liess alle Achsen dieses Waechters leer.
+
+Die Achse `route` schliesst das. Sie zaehlt die Seiten-Routen **aus der
+`url_map` des Dienstes ab** — kein eingefrorenes Literal-Set, das waere genau
+der Fehler, den sie behebt. Was eine Seite ist und was Zubehoer, entscheidet
+eine Form-Regel (`ist_seiten_route`): GET, echt unter `/seiten/`, kein
+`<path:…>`-Auffangbecken, keine Datei-Endung im letzten Abschnitt. Damit fallen
+`manifest.json`, `sw.js`, die Symbole und der Asset-Durchreicher heraus, ohne
+dass jemand sie einzeln pflegt.
+
+Gefragt wird nach einem Eintrag **ueberhaupt**, nicht nach
+`zielgruppe: "eltern"`: ohne Eintrag gibt es kein Zielgruppen-Feld, das man
+lesen koennte. Genau deshalb ist diese Richtung noetig — die eltern-Ableitung
+der anderen Achsen kann eine Flaeche, die sich nie eingetragen hat, per
+Konstruktion nicht sehen.
+
 ## Ausnahmen sind Daten, nicht Verzweigungen
 
 `AUSNAHMEN` unten ist eine Liste mit Begruendung je Eintrag — nie ein `if` im
@@ -95,6 +120,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -112,6 +138,7 @@ ACHSE_MANTEL = "mantel"        # Eltern-Ansicht ohne vollen Mantel-Eintrag
 ACHSE_ANSCHLUSS = "anschluss"  # Komponente ohne Uebereinstimmungs-Pruefung
 ACHSE_PFAD = "pfad"            # deklarierte Adresse liefert 404
 ACHSE_LADER = "lader"          # Eintrag, den der Betriebs-Lader ueberspringt
+ACHSE_ROUTE = "route"          # Seiten-Route ohne Eintrag im Ansichts-Verzeichnis
 # Gegenrichtung: Mantel-Schluessel OHNE eltern-facing Ansicht. #1822 klammert
 # den Bau dieser Richtung ausdruecklich aus (er haette eine Produkt-Folge: die
 # Heim-Shell erschiene in der Seiten-Uebersicht). Sie wird deshalb nur GEMESSEN
@@ -119,7 +146,7 @@ ACHSE_LADER = "lader"          # Eintrag, den der Betriebs-Lader ueberspringt
 ACHSE_GEGENRICHTUNG = "gegenrichtung"
 
 ACHSEN = (ACHSE_MANTEL, ACHSE_ANSCHLUSS, ACHSE_PFAD, ACHSE_LADER,
-          ACHSE_GEGENRICHTUNG)
+          ACHSE_GEGENRICHTUNG, ACHSE_ROUTE)
 
 
 @dataclass(frozen=True)
@@ -200,38 +227,28 @@ AUSNAHMEN: tuple[Ausnahme, ...] = (
     Ausnahme(
         kennung="seiten",
         achse=ACHSE_ANSCHLUSS,
-        sorte=SORTE_SCHULDSTAND,
+        sorte=SORTE_AUSNAHME,
         begruendung=(
-            "ACHTUNG, GROESSE DER LUECKE: dies ist NICHT 'eine Komponente passt "
-            "nicht ins Schema', sondern die groesste verbleibende Blindheit "
-            "dieses Guards. Der Praefix /seiten/… hat im GANZEN Repo keine "
-            "Route→Manifest-Richtung: die Uebereinstimmungs-Pruefung ist auf "
-            "/display/<slug>/ gebaut (conventions/buddies.md:97), und "
-            "seiten/tests/test_views_manifest_eigentest.py:88 prueft 'Route "
-            "ohne Eintrag' nur fuer /api/v1/seiten. Unter /seiten/… liegen aber "
-            "essen/einkauf, plan/einstellungen, routine/anpassen, wetter/regeln "
-            "und hoerspiel/<kind_id>/eltern — FUENF der acht abgeleiteten "
-            "Eltern-Flaechen und saemtliche PWA-Flaechen. Nachgemessen: eine zur "
-            "Laufzeit in seiten.main.app registrierte Eltern-Route ohne jeden "
-            "views.json-Eintrag laesst ALLE Achsen dieses Guards leer. Das ist "
-            "genau die Auslassungs-Klasse aus der Ticket-Praemisse ('nichts "
-            "zwingt eine neue Komponente zu einem Eintrag') und der "
-            "wahrscheinlichste reale Fall: jemand baut die Seite und vergisst "
-            "das Manifest. Der /display/seiten/-Anschluss selbst liefe "
-            "zusaetzlich leere Menge gegen leere Menge — gruen ohne "
-            "Aussagewert; deshalb hier gefuehrt statt scheinbar angeschlossen."
+            "Der seiten-Dienst liefert unter /display/seiten/ keine einzige "
+            "Route aus: die Uebereinstimmungs-Pruefung liefe hier leere Menge "
+            "gegen leere Menge — gruen ohne Aussagewert. Bis #1890 war das ein "
+            "SCHULDSTAND, weil damit der Praefix /seiten/… ueberhaupt keine "
+            "Route→Verzeichnis-Richtung hatte, obwohl dort essen/einkauf, "
+            "plan/einstellungen, routine/anpassen, wetter/regeln und "
+            "hoerspiel/<kind_id>/eltern liegen — fuenf der acht abgeleiteten "
+            "Eltern-Flaechen und saemtliche PWA-Flaechen. Diese Luecke ist "
+            "geschlossen: die Achse 'route' zaehlt die Seiten-Routen aus der "
+            "url_map des Dienstes ab und verlangt fuer JEDE einen "
+            "Verzeichnis-Eintrag (route_befunde, vorgefuehrt in "
+            "test_waechter_wird_rot_wenn_eine_neue_seiten_route_kein_"
+            "verzeichnis_hat). Was bleibt, ist eine Entscheidung statt einer "
+            "offenen Frage: der /display/-Anschluss ist fuer diese Komponente "
+            "gegenstandslos, die Deckung sitzt auf der eigenen Achse."
         ),
         quelle=(
             "seiten/views.json:5 (erster Pfad, /api/v1/seiten/uebersicht); "
-            "Deckungsluecke: conventions/buddies.md:97 + "
-            "seiten/tests/test_views_manifest_eigentest.py:88"
-        ),
-        trigger=(
-            "#1890 baut die Route→Manifest-Richtung fuer den Praefix /seiten/… "
-            "(jede eltern-facing Route im seiten-Dienst braucht einen Eintrag "
-            "oder eine begruendete Ausnahme). Mit #1890 faellt diese Zeile weg. "
-            "Bewusst NICHT in #1822 gebaut: das ist eine Scope-Erweiterung ueber "
-            "die Abnahme dieses Tickets hinaus."
+            "Deckung seit #1890: tests/eltern_flaechen.py:route_befunde "
+            "(Achse 'route')"
         ),
     ),
     # ── Achse `gegenrichtung` ────────────────────────────────────────────────
@@ -358,14 +375,20 @@ def ausnahme_fuer(achse: str, kennung: str) -> Ausnahme | None:
 # ── Der Baum-Lauf ────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
-class ElternAnsicht:
-    """Eine Ansicht mit `zielgruppe: "eltern"` aus einem Ansichts-Verzeichnis."""
+class Ansicht:
+    """Ein Eintrag aus einem Ansichts-Verzeichnis.
+
+    `zielgruppe` faehrt mit, weil die Achsen sie unterschiedlich brauchen: die
+    Mantel-Pflicht zieht nur `eltern`, die Achse `route` fragt nach einem
+    Eintrag ueberhaupt (eine Route ohne Eintrag hat gar keine Zielgruppe).
+    """
 
     komponente: str
     slug: str
     pfad: str
     pwa: dict = field(default_factory=dict)
     quelle: str = ""
+    zielgruppe: str = ""
 
     @property
     def kennung(self) -> str:
@@ -388,7 +411,11 @@ class Uebersprungen:
 
 @dataclass(frozen=True)
 class Durchlauf:
-    ansichten: tuple[ElternAnsicht, ...]
+    #: nur `zielgruppe: "eltern"` — die Pflicht-Menge der Mantel-Achse
+    ansichten: tuple[Ansicht, ...]
+    #: jeder geladene Eintrag, unabhaengig von der Zielgruppe — die Achse
+    #: `route` fragt nach einem Eintrag ueberhaupt (#1890)
+    alle_ansichten: tuple[Ansicht, ...]
     uebersprungen: tuple[Uebersprungen, ...]
     kaputte_manifeste: tuple[str, ...]
 
@@ -440,7 +467,8 @@ def durchlauf(root: str = REPO_ROOT) -> Durchlauf:
     Ausnahme-Eintrag.
     """
     aggregator = importlib.import_module("seiten.aggregator")
-    ansichten: list[ElternAnsicht] = []
+    ansichten: list[Ansicht] = []
+    alle: list[Ansicht] = []
     uebersprungen: list[Uebersprungen] = []
     kaputte: list[str] = []
     for komponente, _ist_controller, pfad in aggregator.discover_manifests(root):
@@ -451,16 +479,19 @@ def durchlauf(root: str = REPO_ROOT) -> Durchlauf:
             continue
         uebersprungen.extend(_uebersprungene(pfad, komponente, views, quelle))
         for view in views:
-            if view.get("zielgruppe") != "eltern":
-                continue
-            ansichten.append(ElternAnsicht(
+            ansicht = Ansicht(
                 komponente=komponente,
                 slug=view["slug"],
                 pfad=view["pfad"],
                 pwa=dict(view.get("pwa") or {}),
                 quelle=quelle,
-            ))
-    return Durchlauf(tuple(ansichten), tuple(uebersprungen), tuple(kaputte))
+                zielgruppe=str(view.get("zielgruppe") or ""),
+            )
+            alle.append(ansicht)
+            if ansicht.zielgruppe == "eltern":
+                ansichten.append(ansicht)
+    return Durchlauf(tuple(ansichten), tuple(alle), tuple(uebersprungen),
+                     tuple(kaputte))
 
 
 # ── Der Verbund-Schluessel ───────────────────────────────────────────────────
@@ -605,6 +636,123 @@ def gegenrichtung_luecken(root: str = REPO_ROOT) -> list[Befund]:
     return [b for b in gegenrichtung_befunde(root) if b.ausnahme is None]
 
 
+# ── Achse `route` — Route→Verzeichnis (#1890) ────────────────────────────────
+
+#: Der Adressraum, den der seiten-Dienst als Seiten ausliefert. Ein Praefix,
+#: keine Routen-Liste: neue Flaechen entstehen unter genau diesem Praefix und
+#: sollen von selbst in die Pruefung fallen.
+SEITEN_PRAEFIX = "/seiten/"
+
+
+def ist_seiten_route(regel) -> bool:
+    """Ist diese Flask-Regel eine SEITE unter /seiten/ — oder nur Zubehoer?
+
+    Strukturell entschieden, nicht per gepflegter Liste: eine Liste waere genau
+    die Anti-Form, gegen die diese Achse gebaut ist (wer eine Seite vergisst,
+    vergisst auch den Listen-Eintrag).
+
+    * nur GET — eine Flaeche wird geholt, nicht geschickt;
+    * echt tiefer als `/seiten/`;
+    * kein `<path:…>`-Auffangbecken — das ist der Asset-Durchreicher jeder PWA
+      (`/seiten/essen/einkauf/<path:asset>`), keine Flaeche;
+    * keine Datei-Endung im letzten Abschnitt — `manifest.json`, `sw.js`,
+      `icon-192.png`, `wetter-regeln.css` sind Mantel-Zubehoer. Ihre
+      Erreichbarkeit prueft die Achse `pfad` ueber die PWA-Unterfelder; hier
+      waeren sie Rauschen, das nach Ausnahmen verlangte.
+
+    Parametrische Regeln bleiben ausdruecklich DRIN:
+    `/seiten/hoerspiel/<kind_id>/eltern` ist eine echte Eltern-Flaeche.
+    `views_manifest.kanonische_display_pfade` wirft solche Regeln weg
+    (tools/views_manifest.py:308) — genau deshalb ist Richtung B fuer hoerspiel
+    dort leer. Diese Achse macht den Fehler nicht mit; der Verbund laeuft
+    ohnehin ueber die aufgeloeste Regel, nicht ueber Pfad-Strings.
+    """
+    if "GET" not in regel.methods:
+        return False
+    rule = regel.rule
+    if not rule.startswith(SEITEN_PRAEFIX):
+        return False
+    rumpf = rule.rstrip("/")
+    if rumpf == SEITEN_PRAEFIX.rstrip("/"):
+        return False
+    if "<path:" in rule:
+        return False
+    return "." not in rumpf.rsplit("/", 1)[-1]
+
+
+def seiten_routen(app=None) -> set[str]:
+    """Die Seiten-Routen des seiten-Dienstes, auf die Regel normalisiert.
+
+    `/seiten/essen/einkauf` und `/seiten/essen/einkauf/` sind zwei getrennte
+    Flask-Regeln, aber dieselbe Flaeche — der abschliessende Schraegstrich
+    faellt weg, damit hier nicht zweimal dasselbe steht.
+    """
+    app = app if app is not None else _seiten_app()
+    return {regel.rule.rstrip("/")
+            for regel in app.url_map.iter_rules() if ist_seiten_route(regel)}
+
+
+def route_befunde(root: str = REPO_ROOT, app=None) -> list[Befund]:
+    """Jede Seiten-Route OHNE Eintrag in einem Ansichts-Verzeichnis (#1890).
+
+    Die Gegenrichtung zur Mantel-Achse — und der wahrscheinlichere reale Fall:
+    jemand baut die Seite und vergisst das Verzeichnis.
+
+    Gefragt wird nach einem Eintrag **ueberhaupt**, nicht nach
+    `zielgruppe: "eltern"`. Ohne Eintrag gaebe es kein Zielgruppen-Feld zu
+    lesen; eine Zielgruppen-Bedingung machte die Pruefung genau fuer den Fall
+    blind, fuer den sie da ist.
+
+    Der Verbund laeuft ueber dieselbe Normalisierung wie die Mantel-Achse:
+    `hoerspiel/views.json:6` deklariert `/seiten/hoerspiel/mia/eltern`,
+    ausgeliefert wird `/seiten/hoerspiel/<kind_id>/eltern` — ein String-
+    Vergleich waere hier umgebungsabhaengig falsch, die aufgeloeste Regel
+    traegt. `app` ist die Naht fuer die Fehlerpfad-Probe
+    (`routentabelle_mit_zusatz`).
+    """
+    app = app if app is not None else _seiten_app()
+    deklariert: dict[str, list[str]] = {}
+    for ansicht in durchlauf(root).alle_ansichten:
+        adresse = ansicht.pfad.split("?")[0]
+        if not adresse.startswith(SEITEN_PRAEFIX):
+            continue
+        regel = kanonische_regel(adresse, app) or adresse.rstrip("/")
+        deklariert.setdefault(regel, []).append(ansicht.kennung)
+    befunde = []
+    for regel in sorted(seiten_routen(app)):
+        if deklariert.get(regel):
+            continue
+        befunde.append(Befund(
+            ACHSE_ROUTE, regel,
+            "Route %s wird vom seiten-Dienst ausgeliefert, aber KEIN "
+            "Ansichts-Verzeichnis traegt einen Eintrag darauf — die Flaeche "
+            "ist damit fuer jede Pruefung unsichtbar, die auf views.json "
+            "aufsetzt (Mantel-Pflicht, Seiten-Uebersicht, Zielgruppe)" % regel))
+    return befunde
+
+
+def route_luecken(root: str = REPO_ROOT) -> list[Befund]:
+    """Nur die UNdokumentierten Routen-Befunde — das ist, was rot macht."""
+    return [b for b in route_befunde(root) if b.ausnahme is None]
+
+
+def routentabelle_mit_zusatz(pfad: str, app=None):
+    """Ein Abzug der Routen-Tabelle plus EINER erfundenen Seite.
+
+    Fuer die Fehlerpfad-Probe: ein Waechter, der nicht rot werden kann, ist
+    schlimmer als keiner — er erzeugt Zuversicht. Der Abzug (`Rule.empty()` in
+    eine frische `Map`) laesst `seiten.main.app` unberuehrt; ein Eingriff in
+    dessen `url_map` wirkte in Nachbar-Suiten nach, weil die App ein
+    Modul-Global ist.
+    """
+    from werkzeug.routing import Map, Rule
+
+    app = app if app is not None else _seiten_app()
+    regeln = [regel.empty() for regel in app.url_map.iter_rules()]
+    regeln.append(Rule(pfad, endpoint="erfundene.probe", methods=["GET"]))
+    return SimpleNamespace(url_map=Map(regeln))
+
+
 # ── Achse `lader` ────────────────────────────────────────────────────────────
 
 def lader_befunde(root: str = REPO_ROOT) -> list[Befund]:
@@ -717,10 +865,17 @@ ANSCHLUESSE: tuple[Anschluss, ...] = (
                   "photo, plan, routine und wetter je 1 haben. Der Anschluss "
                   "wirkt damit Richtung-A-only: er faengt einen Eintrag ohne "
                   "Route, aber keine Route ohne Eintrag. Das ist derselbe "
-                  "Massstab, mit dem die seiten-Zeile oben als Schuldstand "
-                  "gefuehrt wird; hier ist die Fang-Wirkung nur halb, nicht "
-                  "null, und die Alben-Routen sind ueber Richtung A gedeckt. "
-                  "Die fehlende Haelfte gehoert zur selben Luecke wie #1890."
+                  "Massstab, mit dem die seiten-Zeile oben bis #1890 als "
+                  "Schuldstand gefuehrt wurde; hier ist die Fang-Wirkung nur "
+                  "halb, nicht null, und die Alben-Routen sind ueber Richtung A "
+                  "gedeckt. OFFEN GEBLIEBEN, damit die Formulierung nicht mehr "
+                  "verspricht als sie haelt: #1890 schliesst die Richtung "
+                  "Route→Verzeichnis fuer den Praefix /seiten/… (dort bleiben "
+                  "parametrische Regeln ausdruecklich drin, siehe "
+                  "ist_seiten_route). Fuer /display/<slug>/ zaehlt weiterhin "
+                  "kanonische_display_pfade auf, und die verwirft parametrische "
+                  "Regeln — die fehlende Haelfte hier ist damit eine eigene "
+                  "Luecke derselben Klasse, nicht von #1890 erledigt."
               )),
     Anschluss("photo", "photo.main", begruendung="Bestand: photo/tests/test_views_photo.py:57."),
     Anschluss("plan", "plan.main", begruendung="Bestand: plan/tests/test_views_plan.py:50."),

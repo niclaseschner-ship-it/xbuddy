@@ -107,19 +107,11 @@ _UNIT_FACTOR = {"ms": 0.001, "s": 1.0, "min": 60.0, "h": 3600.0}
 # Reviewfällig ab 2026-11-17 — siehe Modul-Docstring. Jede Zeile fällt raus,
 # sobald der jeweilige Drop-In EXISTIERT UND live ausgerollt ist;
 # test_schuldstand_ist_noch_kaputt hält die Liste in diese Richtung ehrlich.
-_BEKANNTER_SCHULDSTAND_STARTLIMIT_FEHLT = {
-    "eltern-chat/eltern-chat.service",
-    "essen/essen.service",
-    "hoerspiel/hoerspiel-emil.service",
-    "hoerspiel/hoerspiel-finn.service",
-    "hoerspiel/hoerspiel.service",
-    "kibuddy/kibuddy.service",
-    "panel/panel.service",
-    "photo/photo.service",
-    "routine/routine.service",
-    "seiten/seiten.service",
-    "wetter/wetter.service",
-}
+_BEKANNTER_SCHULDSTAND_STARTLIMIT_FEHLT: set[str] = set()
+# LEER seit #1883 — alle Dienste tragen jetzt ein Drop-In mit der Bremse.
+# Die Konstante bleibt bewusst stehen: sie ist die Form, in der ein
+# kuenftiger Ausnahmefall benannt werden MUESSTE. Ein neuer Dienst ohne
+# Fenster steht nicht darauf und macht den Test rot — genau so soll es sein.
 
 
 def _to_seconds(value):
