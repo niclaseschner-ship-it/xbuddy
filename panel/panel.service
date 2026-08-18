@@ -16,7 +16,12 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-ExecStart=__XBUDDY_PYTHON__ -m panel.main --host 127.0.0.1 --port 5041 --panels __XBUDDY_REPO__/panel/panels.json
+# SVC-5 (#1891): der Panel-Store liegt AUSSERHALB des Checkouts. Bis 2026-08-18
+# stand hier __XBUDDY_REPO__ — dieselbe Verletzung wie bei familie, aber mit
+# schaerferer Folge: die Checkout-Datei panel/panels.json EXISTIERT (lokal,
+# gitignoriert, Stand Juni). Fiele das Drop-In 10-data-path.conf weg, startete
+# der Dienst nicht mit einem Fehler, sondern STILL gegen Monate alte Daten.
+ExecStart=__XBUDDY_PYTHON__ -m panel.main --host 127.0.0.1 --port 5041 --panels __XBUDDY_DATA__/panel/panels.json
 Restart=on-failure
 RestartSec=10
 

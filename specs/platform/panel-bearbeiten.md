@@ -3,12 +3,14 @@
 Die **eltern-seitige Settings-Seite**, mit der Eltern die Kacheln **einer
 Panel-Instanz** verschieben, ausblenden, entfernen und hinzufügen — die
 Home-Screen-Settings-Metapher vom Handy. Der Eltern-Chat liefert auf Nachfrage
-einen **Link** auf die System-Übersichtsseite (SREG-12), auf der **je Panel
-direkt eine Editor-Karte mit kopierbarem Link** an seinem gepaarten Display
-sichtbar ist — kein mehrstufiger Chat-Dialog. Folgt dem Muster RAT-2/#328
+einen **Link** auf die System-Übersichtsseite (SREG-12) — kein mehrstufiger
+Chat-Dialog. (Wie die Editor-Karte dort erscheint, ist seit RAT-31 E3 offen:
+der frühere Weg „je Panel eine Karte an seinem gepaarten Display" ist abgerissen,
+siehe den Vermerk an PBE-2.) Folgt dem Muster RAT-2/#328
 (Garderoben-Editor): der **Daten-Eigentümer-Service** (hier der panel-Service,
-:5041) liefert seine eigene Editor-Seite, die **zeigt UND editiert**; Auth =
-Heimnetz/Tailscale-Grenze.
+:5041) liefert seine eigene Editor-Seite, die **zeigt UND editiert**; Auth = der
+same-origin-Cookie der seiten-Shell (PBE-3 — die frühere Formulierung
+„Heimnetz/Tailscale-Grenze" ist mit der Nic-Setzung vom 2026-07-31 ersetzt).
 
 Diese Fähigkeit löst **OPEN-PREG-A** (`panel-registry.md`) auf — den dort
 vorgesehenen „späteren Tile-Schreiber". Sie ändert ausschließlich `tiles`, nie
@@ -43,6 +45,36 @@ aus der `tiles`-Sicht genau dieser Instanz (PREG-14) und zeigt sie in
 Listen-Reihenfolge.
 
 ### PBE-2 — Deterministische Editor-URL je Panel-Instanz, auffindbar über #347
+
+> **[TEILWEISE ÜBERHOLT 2026-07-27 durch RAT-31 E3 (#1496)]**
+> Der **Auffind-Weg** dieser Klausel existiert nicht mehr. Was unten über die
+> Seiten-Registry, die Sorte-d-Einträge und die Hero-Sektion „Geräte-Paare"
+> steht, ist abgerissen:
+>
+> - `specs/platform/seiten-registry.md` **SREG-11**: „Panel-Editor-Einträge
+>   existieren nicht mehr"; **SREG-12**: „~~Editor-Eintrag je Panel (d/e)~~ —
+>   entfernt RAT-31 E3".
+> - Im Code ist `hero_paare` immer `[]` (`seiten/render.py`), festgenagelt in
+>   zwei Tests.
+> - „**neben dem gepaarten Display**" ist zusätzlich gegenstandslos: RAT-31 §2
+>   listet die Panel-zu-Display-Bindung unter *stirbt*. Es gibt kein Paar mehr.
+>
+> **Was gültig bleibt:** die deterministische URL selbst
+> (`/controller/app-panel/<panel_id>/bearbeiten`) — der Editor lebt und ist
+> erreichbar, er ist nur nicht mehr auffindbar. Und der Satz „der Chat macht
+> **kein** Pro-Panel-Matching": den bestätigt ESB-3
+> (`conventions/eltern-seite.md`, RAT-42 vom 2026-07-31, also **nach** RAT-31).
+>
+> **Warum dieser Vermerk hier steht:** `seiten-registry.md` hält bereits fest,
+> dass dieser Konsumenten-Pfad nicht mehr relevant ist — aber PBE-2 selbst wusste
+> nichts davon. Am 2026-08-18 hat ein Bau-Track (#1906) genau deshalb eine
+> abgerissene Sektion gebaut bekommen sollen; die Reifung hatte korrekt
+> „ledger: sauber" gemeldet, weil der Rückzug als **Spec-Text** lebt und nicht
+> als Entscheid-Klausel. Ein Grep über `decisions/` findet ihn strukturell nicht.
+>
+> **Der Ersatz-Weg** (Editor-Karte in der Buddy-Gruppe `app-panel`, ohne
+> Hero-Sektion) ist offen — siehe #1906 und SREG-12 Layout Punkt 3.
+
 Die Editor-Seite (PBE-1) wird unter einer **deterministisch aus der `panel_id`
 abgeleiteten URL** ausgeliefert: `/controller/app-panel/<panel_id>/bearbeiten`
 (Sub-Pfad der Panel-Display-URL `/controller/app-panel/<panel_id>`, PANEL-2;
