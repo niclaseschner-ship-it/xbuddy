@@ -13,7 +13,14 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-ExecStart=__XBUDDY_PYTHON__ -m familie.main --registry __XBUDDY_REPO__/familie/familie.json
+# SVC-5 (#1891): die Registry liegt AUSSERHALB des Checkouts. Bis 2026-08-18
+# stand hier __XBUDDY_REPO__ — die Vorlage verletzte damit SVC-5, und live
+# rettete das nur das Drop-In 10-data-path.conf mit ExecStart=-Reset. Faellt
+# das Drop-In bei einem Neuaufsetzen weg, startete der Dienst gegen den
+# falschen Pfad. Host und Port stehen jetzt ebenfalls hier, statt nur im
+# Drop-In (sie entsprechen den RUNTIME_SCHEMA-Defaults, waren also harmlos
+# — aber Drift).
+ExecStart=__XBUDDY_PYTHON__ -m familie.main --host 127.0.0.1 --port 5010 --registry __XBUDDY_DATA__/familie/familie.json
 Restart=on-failure
 RestartSec=10
 
