@@ -152,12 +152,27 @@ Anforderungen (EC-4 ff.). Das System bestätigt den Abschluss mit einer Nachrich
 in der Familien-Gruppe.
 
 **Die Abschluss-Nachricht trägt einen Fähigkeits-Teaser, keine Leerfloskel.**
-Sie nennt nicht nur, dass die Einrichtung fertig ist, sondern zeigt an einer
-kurzen Auswahl, was die Familie ab jetzt fragen kann. Die Fähigkeiten stammen
-aus dem live registrierten Katalog (EC-8) und werden je Aufgabe über
-`anzeige_copy` beschrieben, mit dem `description`-Fallback (EC-42) — dieselbe
-Quelle, aus der auch die Selbstauskunft liest (EC-43). Dadurch kann die
-Begrüßung keine Fähigkeit versprechen, die es nicht gibt.
+Sie nennt nicht nur, dass die Einrichtung fertig ist, sondern zeigt, was die
+Familie ab jetzt fragen kann. Die Fähigkeiten stammen aus dem live registrierten
+Katalog (EC-8) und werden je Aufgabe über `anzeige_copy` beschrieben, mit dem
+`description`-Fallback (EC-42) — dieselbe Quelle, aus der auch die Selbstauskunft
+liest (EC-43). Dadurch kann die Begrüßung keine Fähigkeit versprechen, die es
+nicht gibt.
+
+**Vollständig, ohne Auswahl-Regel (Nic-Setzung 2026-08-17, #1104).** Der Teaser
+listet **jede** registrierte Katalog-Aufgabe — es gibt **kein** Ausblende-Feld
+und keine Auswahl-Heuristik. Der Umfang der Begrüßung ist damit identisch mit
+dem der Selbstauskunft (EC-43), mit **einem** Unterschied: EC-43 nimmt die
+Selbstauskunfts-Aufgabe selbst aus, ONB-7 kennt diese Ausnahme nicht — der
+Teaser ist keine Katalog-Aufgabe. Die Begrüßung nennt also **eine Fähigkeit
+mehr** als die Selbstauskunft.
+
+Bewusst in Kauf genommen: die Familie liest beim ersten Kontakt auch
+Betriebs-Fähigkeiten („Cookie nachschicken", „Gerät anlegen"). Das ist die Folge
+der Setzung und kein Versehen; ein Ausblende-Feld wird heute **nicht** gebaut.
+Weil es keine Auswahl-Regel gibt, ist die Anforderung ohne weitere Festlegung
+nach ONB-9 prüfbar: die Zahl der genannten Fähigkeiten muss der Zahl der
+registrierten Katalog-Aufgaben entsprechen.
 
 **Deterministisch zusammengestellt.** Der Teaser wird aus dem Katalog gerendert,
 nicht vom Sprachmodell formuliert. Die Anforderung gibt keine feste Wortwahl
