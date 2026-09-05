@@ -259,3 +259,38 @@ zwei Neustart-Werte.
 
 Anlass: #1801 (erste zwei Dienste), #1883 (Schuldstand n=13, Nic-Wahl a
 2026-08-17: feste Regel in die Grundvorlagen statt elf Einzeldateien).
+
+### SVC-10 — Repo-Importe: der Einstiegspunkt setzt den Suchpfad, nicht die Unit
+
+Ein Dienst, dessen Code Repo-Module importiert (`tools.*`, `deploy.*`), macht
+den Repo-Wurzelpfad **selbst im Einstiegspunkt** verfügbar — nicht über eine
+`Environment=PYTHONPATH`-Zeile in der Unit-Datei.
+
+Grund ist keine Ästhetik, sondern eine Fehlerklasse: Python legt beim Aufruf
+`python <pfad>/skript.py` das **Skript**-Verzeichnis auf den Suchpfad, nicht das
+Arbeitsverzeichnis. Steht die Einstellung nur in der Unit, ist jeder andere
+Aufruf desselben Codes (Probelauf von Hand, Test, neu ausgerollte Vorlage) still
+kaputt — und zwar **nur** in den Zweigen, die den Import brauchen. Am
+2026-08-13 lief die Dienst-Überwachung deshalb monatelang grün, ohne einen
+einzigen Alarm zustellen zu können; die Vorlage im Repo trug den Fehler weiter.
+
+Der Einstiegspunkt trägt die Naht damit dort, wo der Code lebt, und die
+Unit-Vorlage bleibt frei von Sondereinstellungen. Vorbild ist der Eltern-Chat.
+
+**Ladefehler sind laut — fehlende Dateien nicht (Nic-Verdikt 2026-09-05, #1872).**
+Wo ein Dienst eine Registry oder Konfiguration lädt, ist zwischen zwei Fällen zu
+unterscheiden:
+
+- **Datei fehlt** → `INST-6`/`CONFIG-4` gelten unverändert: Code-Default,
+  Warnung, der Prozess startet weiter. Das ist der normale Zustand vor dem
+  Onboarding und **kein** Fehler.
+- **Laden bricht** (Import schlägt fehl, Datei ist unlesbar oder nicht parsebar
+  im Sinne eines Defekts) → der Fehler wird **gemeldet**. Ein `except`, das
+  jeden Fehler abfängt und eine leere Liste zurückgibt, ist verboten: eine
+  Überwachung, die nicht weiß, was sie überwachen soll, darf nicht grün melden.
+
+Die Grenze ist **fehlend ≠ kaputt**. INST-6 wird dadurch nicht ausgehöhlt — es
+regelt den fehlenden, nicht den defekten Fall.
+
+Anlass: #1872 (zwei Hörspiel-Instanzen fielen still aus der Überwachung, weil
+der Registry-Import ohne Suchpfad scheiterte und der Fehler geschluckt wurde).
