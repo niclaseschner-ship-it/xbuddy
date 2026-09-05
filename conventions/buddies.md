@@ -160,6 +160,19 @@ Backfill-PR, #387), **nicht** in der Aggregator-Durchreichung (SREG-10). Ein
 Kachel-Icon ist **nie** ein app-eigenes Asset (URL-13) und **nie** das
 View-Hero-Bild.
 
+**Benannte Ausnahme — das Demo-Bilderset (2026-09-05, Nic-Verdikt zu #1853).**
+Für das mitgelieferte Demo-Set (`tools/demo/assets/icons/`) gilt der Satz oben
+**nicht**: dort **darf** eine automatisierte Probe prüfen, dass jeder in einem
+`views.json` referenzierte Icon-Pfad im Set vorhanden ist. Grund: die Demo hat
+**kein** Ausrollen und **keinen** Backfill, in dem das Gate greifen könnte — das
+Set wird von Hand kuratiert und mit dem Repo ausgeliefert. Ohne Probe fällt eine
+Lücke erst beim Vorführen auf; am 2026-09-05 fehlten so vier von acht
+referenzierten Piktogrammen.
+
+Die Ausnahme ist **eng**: sie gilt nur für das Demo-Set, nicht für Instanz-Icons,
+und sie verschiebt die Durchsetzungs-Stufe (SREG-10, `icons_erforderlich`) für
+den Live-Betrieb **nicht**.
+
 **Durchsetzungs-Stufe** definiert SREG-10 (Schalter `icons_erforderlich`), nicht
 dieser Text — so bleibt die gestaffelte Einführung (Toleranz → Backfill → Härtung)
 ohne Selbstwiderspruch. Rollout-Detail im Ticket #387.

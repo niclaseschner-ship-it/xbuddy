@@ -40,6 +40,18 @@ Repo (kein PNG, kein `pictogram_cache.json` wird committet) — sie ist
 Per-Instanz-Daten wie das Server-Zertifikat (`conventions/urls.md` URL-11)
 oder die `config.json` einer Komponente (`conventions/config.md` CONFIG-1).
 
+**Benannte Ausnahme — das Demo-Bilderset (2026-09-05, Nic-Verdikt zu #1853).**
+`tools/demo/assets/icons/` ist die **einzige** committete Icon-Wurzel. Sie
+existiert, damit die Demo ohne Instanz-Daten und ohne Netz startet, und wird
+beim Demo-Start als `ICON_ROOT` gesetzt. Sie stand bisher ungedeckt gegen den
+Satz oben; die Ausnahme schreibt den Ist-Zustand fest, statt ihn stillschweigend
+zu dulden.
+
+Bedingungen: nur Piktogramme, die ein mitgeliefertes `views.json` referenziert
+(kein Vorrat); keine Familien- oder Instanz-Daten; und eine Probe hält die
+Vollständigkeit fest (`conventions/buddies.md` BUD-4, benannte Ausnahme). Für
+jede andere Icon-Wurzel gilt der Satz oben unverändert.
+
 | Wert | Default | Override | gesetzt durch |
 |---|---|---|---|
 | `icon-root` | `/home/buddy/apps/icons/` | Arg `$1` oder ENV `ICON_ROOT` beim Seed (ICONS-4); seiten-Config `--icon-root` / ENV `ICON_ROOT` beim Serving (ICONS-5, `router.md` ROU-26, `seiten-registry.md` SREG-18, RAT-31 E6f-B #1586) | Instanz-Betreiber (Ops) beim Ausrollen |
