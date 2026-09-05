@@ -134,8 +134,10 @@ Pflicht-Experiment vor Layout-Merge: Tablet-Screenshot mit 8 Slots × 3
 Tagen × 5 Terminen + 2 Spans, Termin-Bereich ≥ 200 px sichtbar.
 **Verworfen:** freier `flex`-Wuchs des Schedule-Bereichs, der die
 Termin-Leiste aus dem Frame drückte (heutige Form, Befund 2026-06-22).
-**Verworfen:** `vh`-Skalierung — auf fixem Tablet kein Viewport-Wechsel,
-nur Indirektion ohne Nutzen.
+**Verworfen (überholt durch RAT-39, 2026-07-30):** `vh`-Skalierung — die
+Begründung „auf fixem Tablet kein Viewport-Wechsel" trug nur, solange die
+Fläche fix war. RAT-39 hat den Uniform-Scale abgelöst; die Anzeige-Flächen
+wachsen seither mit. Die Ablehnung gilt damit **nicht mehr** — siehe PLAN-26.
 
 **Icon-Migration abgeschlossen (V1.3 → T1114, 2026-06-30):** Die
 Migrations-Lesephase für alte interne Icon-Keys (`sun`/`clock`/`fork`/`moon`/
@@ -912,6 +914,31 @@ Aktivitäts-Slots als runde Stempel ohne Label, keine Termin-Leiste. Die Maße
 beider Stufen werden 1:1 aus dem Wireframe-Handoff übernommen (E-PLAN-5). Das
 Layout zielt auf ein 1920×1080-Kiosk-Display; die Lese-Kind-Stufe passt ohne
 Scrollen.
+
+**[GEÄNDERT 2026-09-05 — Nic-Verdikt zu #1915, Wahl `A`; setzt RAT-39 fort]**
+Die feste Zielauflösung im Satz oben ist **überholt**. RAT-39 (RATIFIZIERT
+2026-07-30, „echter Reflow ersetzt den Uniform-Scale") nennt das
+plan-Innenleben ausdrücklich in seiner Reihenfolge; 1920×1080 ist ab hier
+**Referenz-Maß, nicht Zielgröße**. Die Stufen-Maße aus dem Wireframe-Handoff
+bleiben unverändert — was sich ändert, ist, wie viele Elemente auf eine
+gegebene Fläche gepackt werden.
+
+**Die Packung der Termin-Leiste entscheidet die Anzeige, nicht der Server.**
+Der Server liefert **alle** Termine des Zeitraums; wie viele davon sichtbar
+sind und ab wann der „noch M weitere"-Zähler greift, bestimmt das Gerät
+anhand seiner tatsächlichen Höhe. Damit wächst jede Fläche von allein mit,
+ohne dass eine neue Bildschirmgröße eine Server-Änderung braucht.
+
+**Was das ausschließt:** eine im Server einkompilierte Höhenannahme (heute
+eine feste Pixelzahl) ist **nicht mehr zulässig**. Auf Flächen, die höher
+sind als das Referenz-Maß, fehlte dadurch die untere Hälfte der Termine,
+ohne dass es jemandem auffiel — der Server kann die Fläche nicht kennen.
+
+**Nicht Teil dieser Klausel ist die Bauform** der Höhen-Ermittlung im
+Browser (Container-Query, Messung nach dem ersten Zeichnen, …). Sie wird im
+Bau entschieden und dort begründet — die Spec normiert das Soll, nicht das
+Wie (RAT-39 Zwei-Wege-Tür: bricht die Ansicht, wird sie einzeln
+zurückgerollt).
 
 *Tickets:* #40
 
