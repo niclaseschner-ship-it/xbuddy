@@ -233,6 +233,43 @@ auf einem alten iPhone (iOS 12 statt iOS 14).
 
 *Tickets:* #624
 
+### EC-45 — Zustands-Wächter: keine Behauptung über den Haushalt ohne Nachsehen
+
+**Nic-Verdikt 2026-09-05 (#1919, Wahl `A`).** EC-30 verbietet dem Modell,
+XBuddy-Zustand aus Welt-Wissen zu erfinden. Bis heute existierte diese Regel
+**nur als Prosa im System-Prompt** — kein Code prüfte sie. Belegt: auf „zeig mir
+die Einkaufsliste" antwortete der Bot mit erfundenen Listeneinträgen, statt den
+Mini-App-Knopf zu schicken.
+
+**Ein deterministischer Wächter läuft nach der Modell-Antwort** und ersetzt sie,
+wenn sie **Haushalts-Zustand behauptet**, ohne dass im selben Turn eine
+Katalog-Aufgabe (EC-8) diesen Zustand gelesen hat. Ersetzt wird durch einen
+festen Text, der ehrlich sagt, dass nicht nachgesehen wurde, und auf den Weg
+zeigt, der es kann. Der Wächter urteilt über die **Antwort**, nicht über die
+Absicht — er ist eine Nachprüfung, kein Vor-Router.
+
+**Bauform: nachträglich prüfen, nicht vorher erzwingen.** Der Wächter sitzt
+neben dem bestehenden Knopf-Filter (EC-41) im selben Nach-Antwort-Pfad. Ein
+Werkzeug-**Zwang** im Agent-Loop ist ausdrücklich **nicht** die gewählte Form:
+für die benachbarte Vollzugs-Lüge wurde genau diese Bauform schon einmal
+verworfen, und der Nach-Antwort-Filter ist der belegte Präzedenzfall im selben
+Code.
+
+**Auslöse-Schärfung.** Eine Anfrage, die eine Mini-App-Fläche beim Namen nennt
+(„zeig mir die Einkaufsliste"), muss die zugehörige Katalog-Aufgabe auslösen.
+Rutscht sie am Werkzeug vorbei, ist das ein Defekt der Trigger-Formulierung
+(EC-40), nicht ein Fall für den Wächter — der Wächter ist das Netz, nicht der
+Normalweg.
+
+**Die EC-41-Ermahnung in den Werkzeug-Beschreibungen bleibt (Auflage
+2026-09-05).** Der Negativ-Hinweis, den EC-41 den Beschreibungen der
+EC-40-Familie vorschreibt, wird **nicht** entfernt. **Mechanik ergänzt Prosa,
+sie ersetzt sie nicht:** der Hinweis verhindert den Fall *vor* der Antwort, der
+Wächter fängt ihn *danach*. Beides zusammen ist gewollt, und der Hinweis kostet
+nichts.
+
+*Tickets:* #1919 (Refs #1859 — Nebenbefund der Cookie-Probe)
+
 ### EC-23 — Telemetrie an Bot-Antworten
 
 Wenn eine Bot-Antwort durch mindestens einen Provider-Call entstanden ist,
