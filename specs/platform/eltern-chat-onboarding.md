@@ -148,10 +148,32 @@ Onboarding bindet dann keine abweichende Gruppe.
 ### ONB-7 — Moduswechsel in den KI-Modus
 Nach erfolgreicher Validierung (ONB-4) und Speicherung (ONB-5) verlässt die
 Instanz den Onboarding-Modus: ab dann gelten die regulären Eltern-Chat-
-Anforderungen (EC-4 ff.). Das System bestätigt den Abschluss mit einer
-hart-codierten Nachricht in der Familien-Gruppe.
+Anforderungen (EC-4 ff.). Das System bestätigt den Abschluss mit einer Nachricht
+in der Familien-Gruppe.
 
-*Tickets:* #33
+**Die Abschluss-Nachricht trägt einen Fähigkeits-Teaser, keine Leerfloskel.**
+Sie nennt nicht nur, dass die Einrichtung fertig ist, sondern zeigt an einer
+kurzen Auswahl, was die Familie ab jetzt fragen kann. Die Fähigkeiten stammen
+aus dem live registrierten Katalog (EC-8) und werden je Aufgabe über
+`anzeige_copy` beschrieben, mit dem `description`-Fallback (EC-42) — dieselbe
+Quelle, aus der auch die Selbstauskunft liest (EC-43). Dadurch kann die
+Begrüßung keine Fähigkeit versprechen, die es nicht gibt.
+
+**Deterministisch zusammengestellt.** Der Teaser wird aus dem Katalog gerendert,
+nicht vom Sprachmodell formuliert. Die Anforderung gibt keine feste Wortwahl
+mehr vor, wohl aber die Herkunft der Fähigkeits-Aussagen: sie sind
+Katalog-Wahrheit, nicht Modell-Wissen. E-ONB-1 (hart-codierter Onboarding-Modus
+ohne Sprachmodell) bleibt davon unberührt — dessen Begründung ist, dass während
+des Onboardings noch kein KI-Zugang besteht; ONB-7 ist genau der Moment, in dem
+er anfängt zu bestehen.
+
+**SREG-5-Leitplanke.** Der Teaser nennt **keine** konkrete Seite und **keine**
+Mini-App-Adresse. Für »wo sehe ich X« verweist er sprachlich auf die
+Seiten-Übersicht-Fähigkeit, die selbst als Fähigkeit auftaucht — nicht auf
+einzelne Seiten-Adressen (`seiten-registry.md` SREG-5, gleiche Leitplanke wie
+EC-43).
+
+*Tickets:* #33, #1104
 
 ### ONB-8 — Schutz des Keys
 Das System spiegelt einen entgegengenommenen Key zu keinem Zeitpunkt im Klartext
