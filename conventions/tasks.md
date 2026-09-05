@@ -159,10 +159,16 @@ Bilderrahmen"). **Nicht geeignet** für mehrstufige Klärungen
 das Confirm-Gate (TASK-4) bzw. die Privatchat-Session-Form (TASK-5).
 
 Heimat des Patterns: `eltern-chat/skills/foto_senden_task.py` erbt von
-`ReadTask`, `execute()` ruft die trigger-agnostische Funktion direkt; die
-`description` der Aufgabe erklärt dem LLM das Undo-Modell (D6/FSE-4 — der
-Widerruf ist ein **zweiter** `tool_use` mit der `id` aus der ersten Quittung,
-kein neuer State).
+`ReadTask`, `execute()` ruft die trigger-agnostische Funktion direkt.
+
+**[GEÄNDERT 2026-09-05 — Nic-Verdikt zu #1253]** Die `description` erklärt dem
+LLM **kein** Undo-Modell mehr. Der frühere Wortlaut normierte den Widerruf als
+**zweiten `tool_use` mit der `id` aus der ersten Quittung** — das setzte voraus,
+dass die technische Kennung sichtbar mitläuft. Beides ist entfallen: das Undo
+bindet **deterministisch vor dem Agenten** an den A2-Receipt (EC-10,
+„Undo-Bindung ist deterministisch, nicht LLM-gewählt“), das Modell entscheidet
+über die Umkehr nie. Ein Skill bietet dem Modell daher **keinen**
+Widerruf-Aufruf an; wo es ihn noch gibt, ist er toter Pfad (CLAUDE.md §6).
 
 **Verweis-Klausel (EC-10 A2-Klausel).** Skills, die unter die EC-10
 A2-Klausel fallen (Sofort-Write + Quittung + Undo-Wort als Default —

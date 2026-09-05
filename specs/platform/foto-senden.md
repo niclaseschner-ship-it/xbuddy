@@ -72,9 +72,19 @@ Anders als die propose→confirm-Schreibaufgaben (RZS-5, E-EC-7) wirkt diese
 Funktion **sofort**: Sie ruft PHOTO-13, und nach erfolgreichem Ingest
 - **bestätigt** sie kurz (z. B. „Im Bilderrahmen 📷 — beim nächsten Öffnen von
   `/display/photo/rahmen` sichtbar", EC-21 via Reload-on-Read), und
-- bietet ein **Rückgängig** an: auf Widerruf ruft sie `DELETE
-  /api/v1/photo/medien/<id>` (PHOTO-16) mit der gerade angelegten `id` aus der
-  PHOTO-13-Antwort (`{"id": …}`).
+- bietet ein **Rückgängig** an: die Quittung nennt das Undo-Wort `falsch` und
+  den Effekt in einem Satz (EC-10 A2-Klausel). Der Undo-Pfad läuft
+  **deterministisch vor dem Sprachmodell** über den A2-Receipt — dort stehen
+  `resource_id` und `inverse_call`; ausgeführt wird `DELETE
+  /api/v1/photo/medien/<id>` (PHOTO-16) mit der bei PHOTO-13 angelegten `id`.
+
+**[GEÄNDERT 2026-09-05 — Nic-Verdikt zu #1253]** Früher lief der Widerruf als
+**zweiter `tool_use`** des Modells, wofür die Quittung die technische `id`
+sichtbar mitführen musste. Das ist entfallen: das Modell entscheidet über das
+Rückgängigmachen ohnehin nie (EC-10, „Undo-Bindung ist deterministisch, nicht
+LLM-gewählt“), und der Vor-Agent-Pfad findet den letzten unversiegelten
+Schreibakt selbst. **Die sichtbare Quittung trägt deshalb keine technische
+Kennung und kein zweites Umkehr-Wort** — die Familie sieht genau `falsch`.
 
 Diese Sofort-Wirkung-mit-Undo ist ein **bewusster Entscheid** (E-FSE-1), nicht ein
 Bruch der Bestätigungs-Regel: das Senden des nackten Mediums ist selbst die
@@ -127,11 +137,15 @@ Pflicht-Tests (EC-17, analog ROUTINE-18/RZS-7):
 - Nicht-Mitglied (`is_member_fn` → false) sendet ein Medium → Ablehnung, **kein**
   `POST` (FSE-2).
 - Happy-Path Foto: kommentarloses Foto → `execute` ruft `POST
-  /api/v1/photo/medien` (multipart) mit dem erwarteten Medium; Quittung enthält
-  die zurückgegebene `id` (Transport-Stub, CLIENT-1).
+  /api/v1/photo/medien` (multipart) mit dem erwarteten Medium; die
+  zurückgegebene `id` landet im A2-Receipt (Transport-Stub, CLIENT-1).
+- **Die sichtbare Quittung enthält KEINE technische Kennung** und genau **ein**
+  Umkehr-Wort (`falsch`) — negativer Test. **[GEÄNDERT 2026-09-05, #1253 —
+  vorher verlangte diese Zeile das Gegenteil.]**
 - Happy-Path Video: kommentarloses Video → gleicher Pfad (FSE-5).
-- Rückgängig: nach Ingest ruft der Widerruf `DELETE /api/v1/photo/medien/<id>`
-  mit der angelegten `id` (FSE-4).
+- Rückgängig: nach Ingest führt `falsch` im selben Chat-Faden `DELETE
+  /api/v1/photo/medien/<id>` mit der `id` aus dem A2-Receipt aus (FSE-4) —
+  **ohne** dass Quittung oder Werkzeug-Beschreibung die `id` sichtbar machen.
 - Grenze: PHOTO-13 lehnt überlanges Video mit 4xx ab → Skill meldet die Grenze,
   schreibt nicht (FSE-5, EC-7).
 - Medium **mit** Begleittext → dieser Skill greift **nicht** (FSE-3).
