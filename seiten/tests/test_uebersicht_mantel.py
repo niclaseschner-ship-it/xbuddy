@@ -75,7 +75,8 @@ def test_sw_js_network_first_mit_scope_header():
 
 def test_template_head_block():
     """Head wie bei den anderen Mänteln: Manifest, Icon, apple-touch-icon, SW."""
-    html = open(_TEMPLATE, encoding="utf-8").read()
+    with open(_TEMPLATE, encoding="utf-8") as f:
+        html = f.read()
     assert '<link rel="manifest" href="/api/v1/seiten/uebersicht/manifest.json">' in html
     assert 'rel="apple-touch-icon" href="/api/v1/seiten/uebersicht/icon-192.png"' in html
     assert "serviceWorker" in html
@@ -89,7 +90,8 @@ def test_gerenderte_uebersicht_traegt_mantel():
     html = r.get_data(as_text=True)
     assert "/api/v1/seiten/uebersicht/manifest.json" in html
     # build_id und SW-Scope sind eingesetzt, kein leerer Platzhalter.
-    assert "uebersicht.css?v=" in html and "uebersicht.css?v=\"" not in html
+    assert "uebersicht.css?v=" in html
+    assert "uebersicht.css?v=\"" not in html
     assert "scope: \"%s\"" % _START in html
     assert "no-store" in r.headers.get("Cache-Control", "")
 
