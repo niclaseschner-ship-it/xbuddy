@@ -36,7 +36,7 @@
       "pfad": "/api/v1/seiten/connector/",
       "label": "KI-Anbieter (Connector)",
       "synonyme": ["connector", "ki-anbieter", "schnittstellen", "provider", "kosten", "tokens"],
-      "zeigt": "Read-only Übersicht der externen KI-Anbieter: Schnittstellen, Kosten und welcher Buddy welche nutzt.",
+      "zeigt": "Welche KI-Dienste genutzt werden, was sie kosten und welcher Buddy sie braucht.",
       "zielgruppe": "eltern",
       "pwa": {
         "manifest": "/api/v1/seiten/static/connector/manifest.json",
@@ -51,7 +51,7 @@
       "pfad": "/seiten/hoerspiel/player",
       "label": "Hörspiel-Player",
       "synonyme": ["hörspiel", "hoerspiel", "player", "abspielen", "folgen"],
-      "zeigt": "Installierbarer Hörspiel-Player: Folgen auswählen und abspielen.",
+      "zeigt": "Hörspiel-Folgen auswählen und abspielen.",
       "zielgruppe": "kind",
       "pwa": {
         "manifest": "/seiten/hoerspiel/player/manifest.json",

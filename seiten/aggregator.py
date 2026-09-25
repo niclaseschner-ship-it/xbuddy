@@ -282,7 +282,7 @@ def lade_views_mit_per_view_resilienz(pfad, app_slug):
     `views_manifest.load()`. Der strenge Lader wirft bei einem einzigen
     fehlerhaften Eintrag die **ganze Datei** weg — eine Prüfung darauf wäre
     grün, obwohl ihr Gegenstand aus der Menge verschwunden ist (realer Fall:
-    `hoerspiel/views.json` trägt einen ungültigen `zielgruppe`-Wert; mit dem
+    `hoerspiel/views.json` trug bis #1953 einen ungültigen `zielgruppe`-Wert; mit dem
     strengen Lader verschwände auch die Eltern-Ansicht derselben Datei).
     Übersprungene Einträge sind deshalb ein **Befund**, kein blinder Fleck:
     der Aufrufer soll die Differenz zur Roh-Liste melden.

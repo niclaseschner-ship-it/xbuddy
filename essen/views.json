@@ -12,7 +12,7 @@
         "lebensmittel wünschen",
         "was essen"
       ],
-      "zeigt": "Tabbed Single-Canvas: Kind wählt Lebensmittel und Gerichte per Touch-Tap aus dem Katalog und legt Wünsche auf die Liste.",
+      "zeigt": "Kinder tippen an, was sie essen möchten — landet als Wunsch auf der Einkaufsliste.",
       "zielgruppe": "kind",
       "icons": ["arasaac/28339.png"]
     },

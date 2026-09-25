@@ -1647,6 +1647,9 @@ def wetter_regeln_css_public():
 
 _HOERSPIEL_ELTERN_COMPONENT = "hoerspiel-eltern"
 
+# #1953: reservierter Slug des generischen Einstiegs (kein Kindername im Repo).
+HOERSPIEL_ELTERN_GENERISCH = "alle"
+
 _HOERSPIEL_ELTERN_MIME = {
     ".json": "application/manifest+json",
     ".js":   "application/javascript",
@@ -1702,6 +1705,16 @@ def hoerspiel_eltern_view(kind_id: str):
 
     Cache-Buster: build_id aus pwa_mantel (eltern.js + eltern.css, PWAM-4/5).
     """
+    # #1953: generischer Einstieg ohne Kindernamen im Repo — die Übersicht
+    # verlinkt `/seiten/hoerspiel/alle/eltern` (hoerspiel/views.json). Der
+    # reservierte Slug leitet zur Laufzeit auf die erste Instanz der Registry
+    # (instanzen.json) um; die Folgen aller Kinder zeigt die Seite ohnehin
+    # (HSP-35), die Einstellungen gelten je Kind.
+    if kind_id == HOERSPIEL_ELTERN_GENERISCH:
+        instanz_slugs = [e["kind_id"] for e in _hsp_instanzen()]
+        if instanz_slugs:
+            return redirect("/seiten/hoerspiel/%s/eltern" % instanz_slugs[0], code=302)
+
     # MAD-7-konform: HTML-Render-Route laed Skeleton OHNE Auth. JS macht ensureAuth().
     build_id = _hoerspiel_eltern_build_id()
     sw_scope = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT].sw_scope

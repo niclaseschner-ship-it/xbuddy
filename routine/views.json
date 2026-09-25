@@ -10,7 +10,7 @@
         "checkliste",
         "morgen"
       ],
-      "zeigt": "Die tägliche Morgen-Checkliste mit ablaufender Uhr.",
+      "zeigt": "Die Morgen-Checkliste mit Uhr, damit alle rechtzeitig fertig sind.",
       "zielgruppe": "kind",
       "icons": ["arasaac/7152.png"]
     },
@@ -20,7 +20,7 @@
       "pfad": "/seiten/routine/anpassen",
       "label": "Morgenroutine anpassen",
       "synonyme": ["routine", "morgenroutine", "anpassen", "aufgaben", "reihenfolge"],
-      "zeigt": "Morgenroutine der Kinder anpassen: Items umordnen, hinzufügen, entfernen.",
+      "zeigt": "Schritte der Morgenroutine hinzufügen, umsortieren oder entfernen.",
       "zielgruppe": "eltern",
       "pwa": {
         "manifest": "/seiten/routine/anpassen/manifest.json",

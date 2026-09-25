@@ -59,6 +59,18 @@ _MINI_APP_BASE = "https://xbuddy.example.com"
 _UEBERSICHT_PATH = "/api/v1/seiten/uebersicht"
 _UEBERSICHT_URL = _MINI_APP_BASE + _UEBERSICHT_PATH
 
+
+def _web_app_knopf(result):
+    """Der Mini-App-Knopf (web_app_url) aus der Knopf-Liste (#1953)."""
+    knoepfe = result["presentation"]["inline_buttons"]
+    return next(k for k in knoepfe if "web_app_url" in k)
+
+
+def _browser_knopf(result):
+    """Der Browser-Knopf (url) aus der Knopf-Liste (#1953)."""
+    knoepfe = result["presentation"]["inline_buttons"]
+    return next(k for k in knoepfe if "url" in k)
+
 # ============================================================
 #  AC1 — Pivot-Antwort: Form-(b)-Dict mit inline_button auf die Übersicht
 # ============================================================
@@ -84,7 +96,7 @@ def test_AC1_inline_button_vorhanden():
         is_member_fn=_immer_mitglied,
         mini_app_url=_UEBERSICHT_URL,
     )
-    assert "inline_button" in result["presentation"]
+    assert _web_app_knopf(result)
 
 
 def test_AC1_web_app_url_korrekt():
@@ -96,7 +108,7 @@ def test_AC1_web_app_url_korrekt():
         is_member_fn=_immer_mitglied,
         mini_app_url=_UEBERSICHT_URL,
     )
-    ib = result["presentation"]["inline_button"]
+    ib = _web_app_knopf(result)
     assert ib["web_app_url"] == _UEBERSICHT_URL, (
         "web_app_url muss die übergebene Übersichts-URL sein: %r" % ib["web_app_url"])
 
@@ -108,7 +120,7 @@ def test_AC1_web_app_url_enthaelt_uebersichts_pfad():
         is_member_fn=_immer_mitglied,
         mini_app_url=_UEBERSICHT_URL,
     )
-    url = result["presentation"]["inline_button"]["web_app_url"]
+    url = _web_app_knopf(result)["web_app_url"]
     assert "/api/v1/seiten/uebersicht" in url
 
 
@@ -119,7 +131,7 @@ def test_1946_knopf_zeigt_nicht_mehr_auf_die_mini_app_uebersicht():
         is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_BASE)
     result = task.run({}, TurnContext(chat_id=42, from_user_id=7))
-    url = result["presentation"]["inline_button"]["web_app_url"]
+    url = _web_app_knopf(result)["web_app_url"]
     assert "mini-app-uebersicht" not in url
 
 
@@ -130,7 +142,7 @@ def test_AC1_button_label_vorhanden():
         is_member_fn=_immer_mitglied,
         mini_app_url=_UEBERSICHT_URL,
     )
-    ib = result["presentation"]["inline_button"]
+    ib = _web_app_knopf(result)
     assert "label" in ib
     assert len(ib["label"]) > 0
 
@@ -142,7 +154,7 @@ def test_AC1_button_label_enthaelt_xbuddy_oder_home():
         is_member_fn=_immer_mitglied,
         mini_app_url=_UEBERSICHT_URL,
     )
-    label = result["presentation"]["inline_button"]["label"]
+    label = _web_app_knopf(result)["label"]
     assert "xbuddy" in label.lower() or "🏠" in label or "home" in label.lower()
 
 
@@ -163,7 +175,7 @@ def test_AC1_trailing_slash_wird_entfernt():
         is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_BASE + "/",
     )
-    url = result["presentation"]["inline_button"]["web_app_url"]
+    url = _web_app_knopf(result)["web_app_url"]
     # Pfad nach dem Schema-Teil darf keinen Doppel-Slash enthalten
     path_part = url.split("://", 1)[-1]
     assert "//" not in path_part, (
@@ -202,7 +214,7 @@ def test_AC2_task_returnt_form_b_dict():
     assert isinstance(result, dict)
     assert "text" in result
     assert "presentation" in result
-    assert "inline_button" in result["presentation"]
+    assert _web_app_knopf(result)
     # Task sendet NICHTS selbst
     assert len(tg.inline_sent) == 0
     assert len(tg.sent) == 0
@@ -217,7 +229,7 @@ def test_AC2_task_baut_uebersichts_url():
 
     result = task.run({}, ctx)
 
-    url = result["presentation"]["inline_button"]["web_app_url"]
+    url = _web_app_knopf(result)["web_app_url"]
     assert url.startswith("https://")
     assert url.endswith(_UEBERSICHT_PATH)
 
@@ -429,8 +441,8 @@ def test_AC5_panel_edit_verweist_auf_uebersichtsseite():
     result = task.run({}, ctx)
 
     # Der Skill gibt den Übersichts-Button zurück — derselbe Pfad wie bei allen anderen Intents
-    assert "inline_button" in result["presentation"]
-    url = result["presentation"]["inline_button"]["web_app_url"]
+    assert _web_app_knopf(result)
+    url = _web_app_knopf(result)["web_app_url"]
     assert _UEBERSICHT_PATH in url, (
         "Panel-Edit-Intent muss auf die Übersichtsseite verweisen, "
         "nicht auf einen Panel-spezifischen Editor-Pfad. URL: %r" % url)
@@ -457,3 +469,42 @@ def test_AC5_panel_edit_description_enthaelt_antwort_formulierung():
         "description fehlt Kachel-Begriff. Description: %r" % task.description)
     assert "übersichtsseite" in desc or "übersicht" in desc, (
         "description fehlt Übersichtsseiten-Verweis. Description: %r" % task.description)
+
+
+# ============================================================
+#  #1953 — zweiter Knopf: im Browser öffnen (dort installierbar)
+# ============================================================
+
+def test_1953_browser_knopf_mit_voller_uebersichts_url():
+    """#1953: neben dem web_app-Knopf ein normaler URL-Knopf auf dieselbe volle
+    Übersichts-Adresse — Telegram öffnet ihn im externen Browser."""
+    result = seiten_uebersicht(
+        chat_id=1, from_user_id=42, is_member_fn=_immer_mitglied,
+        mini_app_url=_UEBERSICHT_URL)
+    knopf = _browser_knopf(result)
+    assert knopf["url"] == _UEBERSICHT_URL
+    assert "Browser" in knopf["label"]
+    assert "web_app_url" not in knopf
+
+
+def test_1953_reihenfolge_web_app_zuerst():
+    result = seiten_uebersicht(
+        chat_id=1, from_user_id=42, is_member_fn=_immer_mitglied,
+        mini_app_url=_UEBERSICHT_URL)
+    knoepfe = result["presentation"]["inline_buttons"]
+    assert len(knoepfe) == 2
+    assert "web_app_url" in knoepfe[0]
+
+
+def test_1953_render_form_b_schickt_beide_knoepfe():
+    """Entry-Path: das Framework übersetzt die Liste in EINE Nachricht mit
+    web_app- und url-Knopf."""
+    from tasks import render_form_b
+    tg = FakeTelegram()
+    result = seiten_uebersicht(
+        chat_id=1, from_user_id=42, is_member_fn=_immer_mitglied,
+        mini_app_url=_UEBERSICHT_URL)
+    render_form_b(result, tg, 1)
+    knoepfe = tg.inline_sent[0]["buttons"]
+    assert knoepfe[0]["web_app_url"] == _UEBERSICHT_URL
+    assert knoepfe[1]["url"] == _UEBERSICHT_URL

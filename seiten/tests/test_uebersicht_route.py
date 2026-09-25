@@ -61,8 +61,10 @@ def client(manifest_root, tmp_path):
     RAT-31 E3 (#1496): keine Snapshot-Holer-Stubs mehr nötig.
     """
     inventar_path = str(tmp_path / "inventar.json")
+    # funnel_origin="" explizit: runtime ist ein Modul-Global, ein Funnel aus
+    # einer Nachbar-Suite schlüge sonst die Heim-Adresse im Kopier-Knopf.
     seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=30,
-                          heim_origin=HEIM, tailscale_origin=TAIL)
+                          heim_origin=HEIM, tailscale_origin=TAIL, funnel_origin="")
     seiten_main.app.config["TESTING"] = True
     return seiten_main.app.test_client()
 
@@ -83,31 +85,34 @@ def test_html_traegt_suchfeld(client):
     assert 'type="search"' in body
 
 
-def test_html_traegt_karten(client):
-    # RAT-31 E3 (#1496): hero-paar/Display-Konzept entfallen; HTML enthält Karten.
+def test_html_traegt_zeilen(client):
+    # #1953: je Seite eine Zeile in der Gruppe ihres Buddys.
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    assert "karte" in body
+    assert 'class="zeile"' in body
 
 
 def test_html_traegt_buddy_gruppen(client):
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    # Buddy-Gruppen-Header trägt App-Slug mit führendem Slash
-    assert "/wetter" in body
-    assert "/plan" in body
+    # #1953: Gruppen-Kopf trägt den Buddy-Namen (seiten/logos.json)
+    assert 'data-gruppe="wetter"' in body
+    assert 'data-gruppe="plan"' in body
+    assert "<h2>Wetter</h2>" in body
 
 
 def test_html_traegt_heim_origin_url_pro_karte(client):
-    """#1458 Funnel-only: Heim-URL erscheint; Tailscale-URL wird nicht mehr gerendert."""
+    """#1953: die volle Adresse steckt nur im „Link kopieren"-Knopf, sichtbar
+    ist sie nicht. #1458: Tailscale-URL wird nicht gerendert."""
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    assert HEIM + "/display/wetter/heute" in body
+    assert 'data-url="' + HEIM + '/display/wetter/heute"' in body
+    assert ">" + HEIM not in body
     # tailscale-URL darf nicht erscheinen (auch nicht wenn tailscale_origin gesetzt war)
     assert TAIL + "/display/wetter/heute" not in body
 
 
 def test_html_traegt_copy_buttons(client):
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    assert 'class="copy-btn"' in body
-    assert 'data-copy=' in body
+    assert 'class="kopieren"' in body
+    assert "Link kopieren" in body
 
 
 def test_html_kein_pointer_events_none_auf_links(client):
@@ -181,7 +186,7 @@ def test_origin_config_default_leer(monkeypatch):
     assert cfg["tailscale_origin"] == ""
 
 
-def test_tailscale_banner_immer_im_html(manifest_root, tmp_path):
+def test_tailscale_banner_entfallen(manifest_root, tmp_path):
     """#1458: tailscale_banner ist immer True — Banner erscheint immer.
 
     RAT-31 E3 (#1496): keine Snapshot-Holer-Stubs mehr nötig.
@@ -192,17 +197,17 @@ def test_tailscale_banner_immer_im_html(manifest_root, tmp_path):
     seiten_main.app.config["TESTING"] = True
     c = seiten_main.app.test_client()
     body = c.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    # Banner-Element muss immer da sein (kein Tailscale mehr)
-    assert '<p class="banner-tailscale"' in body
-    assert "Nur Heim-URL" in body
+    # #1953: keine Adressen mehr sichtbar → auch kein Adress-Banner.
+    assert '<p class="banner-tailscale"' not in body
+    assert "Nur Heim-URL" not in body
 
 
-def test_tailscale_banner_auch_bei_gesetztem_tailscale_origin(client):
+def test_tailscale_banner_entfallen_auch_mit_tailscale_origin(client):
     """#1458 Kerngarantie: Banner erscheint auch wenn tailscale_origin an configure()
     übergeben wurde — der Param wird ignoriert, Banner ist immer aktiv."""
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    # Banner-Element muss auch beim 'client'-Fixture da sein (das setzt tailscale_origin=TAIL)
-    assert '<p class="banner-tailscale"' in body
+    # #1953: das Adress-Banner ist mit den sichtbaren Adressen entfallen.
+    assert '<p class="banner-tailscale"' not in body
 
 
 # ============================================================

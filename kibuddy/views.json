@@ -12,7 +12,7 @@
         "kind-frage",
         "wissensfragen"
       ],
-      "zeigt": "Push-to-Talk-Frage-View: Kind spricht eine Frage, Buddy antwortet mit Text und Icons.",
+      "zeigt": "Kinder stellen per Knopfdruck eine Frage und bekommen eine Antwort mit Bildern.",
       "zielgruppe": "kind",
       "icons": ["arasaac/37404.png"]
     }

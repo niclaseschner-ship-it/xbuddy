@@ -667,28 +667,15 @@ def test_ac4_plan_icons_verschieden_von_einkauf():
         )
 
 
-def test_ac4_make_icons_py_vorhanden():
-    """AC4: seiten/static/plan/_make_icons.py existiert (Kalender-Icon-Generator)."""
-    make_icons_path = os.path.join(_SEITEN_DIR, "static", "plan", "_make_icons.py")
-    assert os.path.isfile(make_icons_path), (
-        "_make_icons.py fehlt in seiten/static/plan/ — Icon-Generator nicht erstellt (AC4)"
-    )
-
-
-def test_ac4_make_icons_py_referenziert_kalender():
-    """AC4: seiten/static/plan/_make_icons.py beschreibt Kalender-Motiv (kein Einkaufskorb)."""
-    make_icons_path = os.path.join(_SEITEN_DIR, "static", "plan", "_make_icons.py")
-    with open(make_icons_path, encoding="utf-8") as f:
-        inhalt = f.read()
-    assert "kalender" in inhalt.lower() or "calendar" in inhalt.lower(), (
-        "_make_icons.py beschreibt kein Kalender-Motiv — Einkaufskorb-Code koennte kopiert sein (AC4)"
-    )
-    assert "einkauf" not in inhalt.lower(), (
-        "_make_icons.py referenziert 'einkauf' — Einkaufswagen-Symbol statt Kalender (AC4)"
-    )
-    assert "einkaufskorb" not in inhalt.lower(), (
-        "_make_icons.py referenziert 'einkaufskorb' — falsches Symbol (AC4)"
-    )
+def test_ac4_plan_logo_ist_kalender():
+    """AC4 / #1953: das Plan-Logo kommt aus der zentralen Logo-Tabelle
+    (seiten/logos.json, Generator seiten/static/logos/_make_logos.py) und ist
+    das ARASAAC-Kalender-Piktogramm 32488 — kein Einkaufskorb."""
+    import json
+    with open(os.path.join(_SEITEN_DIR, "logos.json"), encoding="utf-8") as f:
+        logos = json.load(f)
+    assert logos["buddies"]["plan"]["arasaac"] == 32488
+    assert logos["maentel"]["plan"]["buddy"] == "plan"
 
 
 # ── PLAN-1139-FIX1: Null-Guard im Anlege-Flow ───────────────────────────────
