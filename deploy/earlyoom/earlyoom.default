@@ -1,0 +1,43 @@
+# earlyoom — Speicher-Notbremse (#1800)
+#
+# Soll-Zustand fuer /etc/default/earlyoom. Deploy: deploy/earlyoom/install.sh
+# (siehe deploy/earlyoom/README.md). Bis #1802 lag diese Datei NUR auf der
+# Maschine und war nirgends versioniert — von Hand geaendert (zuletzt
+# 2026-08-17 09:26), ohne dass ein Neuaufsetzen sie mitgebracht haette.
+#
+# -m 12 -s 12 : eingreifen, wenn weniger als 12% RAM UND 12% Swap frei sind.
+#
+# --avoid  : NIE zuerst toeten.
+#   - claude/python/python3/postgres/tmux/sshd/systemd/dbus-daemon: die
+#     Cockpit-Sessions, der Cockpit-Server, die Datenbank und Infra-Prozesse.
+#     Achtung: comm=python trifft AUCH immich-ML — die Kurznamen sind nicht
+#     unterscheidbar, der Schutz ist der Preis dafuer.
+#   - pipewire/pipewire-pulse/wireplumber (Ton-Stapel), gvfsd* (Datei-Dienste)
+#     und gnome-keyring-d* (Zugangsdaten-Speicher, comm wird vom Kernel auf 15
+#     Zeichen gekappt -> "gnome-keyring-d"): #1800-Nachtrag vom 2026-08-17.
+#     Diese Prozesse kosten zusammen unter 40 MB, ihr Tod gewinnt praktisch
+#     nichts — aber der Keyring-Kill hat am 17.08. den `gh`-Token unlesbar
+#     gemacht und die gesamte Repo-Arbeit (Merge/Push/Ticket-Zugriff) fuer
+#     Stunden lahmgelegt (5 Kills in 20 Minuten). Vorher stand keiner dieser
+#     Dienste auf der Schutzliste.
+#
+# --prefer : zuerst toeten. Der entbehrliche Teil: immich-Stack, paperless
+#   (granian/celery), tika (java) und node. Absichtlich SO belassen: die
+#   Maschine soll bei Druck zuerst Immich/Paperless verlieren, nicht die
+#   Familien-sichtbaren Dienste — das ist gewollte, bestehende Politik.
+#
+#   `chromium` (der Flurbildschirm-Kiosk) stand hier bis #1800 ebenfalls drin
+#   und war damit der bevorzugte Abschuss neben Immich. Ein
+#   `OOMScoreAdjust`-Drop-In auf kiosk.service wurde dagegen erwogen und
+#   verworfen (#1870, 2026-08-17-Messung): Chromium setzt den oom_score_adj
+#   seiner Renderer-/GPU-Kindprozesse selbst auf 200, unabhaengig vom Wert der
+#   Elter-Unit — ein Unit-weites OOMScoreAdjust haette nichts bewirkt. Die
+#   einzig wirksame Stellschraube ist dieses `--prefer`/`--avoid`-Regelwerk,
+#   und die Korrektur ist: `chromium` NICHT mehr bevorzugt toeten. Kiosk faellt
+#   damit auf reine oom_score-Bewertung zurueck wie alles, was auf keiner der
+#   beiden Listen steht — nicht mehr aktiv vorne in der Abschuss-Reihe.
+#
+# Ohne --avoid/--prefer waehlte earlyoom rein nach oom_score und toetete
+# 4-9-MB-Prozesse fuer 4-9 MB Gewinn — 725 Kills in 24h am 2026-08-17, davon
+# ein Grossteil Kiosk-Chromium in einer Neustart-Aufschaukel-Schleife (#1870).
+EARLYOOM_ARGS=-m 12 -s 12 --avoid '^(claude|python|python3|postgres|tmux|sshd|systemd|dbus-daemon|pipewire|pipewire-pulse|wireplumber|gvfsd.*|gnome-keyring-d.*)$' --prefer '(immich|granian|celery|^java$|^node$)'
