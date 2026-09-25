@@ -158,9 +158,9 @@ def test_patch_config_ohne_key_422(client_keyless):
 def test_patch_config_modell_wechsel(client):
     """HSP-27b: Modell-Wechsel zu bekanntem Modell → 200 + Echo."""
     response = client.patch("/api/v1/hoerspiel/mia/config",
-                            json={"llm_model": "claude-sonnet-4-6"})
+                            json={"llm_model": "claude-sonnet-5"})
     assert response.status_code == 200
-    assert response.get_json()["llm_model"] == "claude-sonnet-4-6"
+    assert response.get_json()["llm_model"] == "claude-sonnet-5"
 
 
 def test_patch_config_unbekanntes_modell_422(client):
