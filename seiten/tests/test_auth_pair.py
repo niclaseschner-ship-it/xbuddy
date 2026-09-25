@@ -1,8 +1,9 @@
 """AUTH-2.a — Pairing-Endpoint /auth/pair (T948, RAT-31 E6c).
 
 Testet den seiten-Endpoint GET /auth/pair?token=<X> (auth.md AUTH-2.a):
-  - gültiger Token → 302 auf /api/v1/seiten/uebersicht (SREG-12, neutral)
-    + Set-Cookie xbuddy_session (HttpOnly/Secure/SameSite=Lax).
+  - gültiger Token → 200 mit Erfolgsseite („Dieses Gerät ist jetzt
+    angemeldet", Knopf zur Übersicht /api/v1/seiten/uebersicht, SREG-12,
+    #1939) + Set-Cookie xbuddy_session (HttpOnly/Secure/SameSite=Lax).
   - ungültiger/abgelaufener/fehlender Token → 400 mit Anweisungsseite.
   - Cookie-Subjekt ist das Token-Subjekt (verifizierbar über die Lib).
 
@@ -40,13 +41,21 @@ def client():
     return seiten_main.app.test_client()
 
 
-def test_gueltiger_token_setzt_cookie_und_redirected_neutral(client):
+def test_gueltiger_token_setzt_cookie_und_zeigt_erfolgsseite(client):
     token = sc.sign_pairing(SUBJEKT_ID, BOT_TOKEN)
     resp = client.get("/auth/pair?token=%s" % token)
 
-    assert resp.status_code == 302
-    # RAT-31 E6c: neutraler Redirect auf die Übersicht für ALLE Geräte.
-    assert resp.headers["Location"].endswith("/api/v1/seiten/uebersicht")
+    # #1939: sichtbares Erfolgssignal statt nacktem 302.
+    assert resp.status_code == 200
+    assert "Location" not in resp.headers
+    assert resp.headers["Content-Type"].startswith("text/html")
+    body = resp.get_data(as_text=True)
+    assert "Dieses Gerät ist jetzt angemeldet" in body
+    # RAT-31 E6c: neutral für ALLE Geräte — der Knopf führt auf die Übersicht.
+    assert 'href="/api/v1/seiten/uebersicht"' in body
+    assert "Zum Startbildschirm hinzufügen" in body
+    # Keine Fehlerseite im Erfolgsfall.
+    assert "ungültig oder abgelaufen" not in body
 
     set_cookie = resp.headers.get("Set-Cookie", "")
     assert sc.COOKIE_NAME in set_cookie
@@ -63,7 +72,9 @@ def test_ungueltiger_token_gibt_400_mit_anweisung(client):
     resp = client.get("/auth/pair?token=total.kaputt.deadbeef")
     assert resp.status_code == 400
     body = resp.get_data(as_text=True)
+    assert body == seiten_main._PAIR_400_HTML  # #1939: 400-Seite unverändert
     assert "ungültig oder abgelaufen" in body
+    assert "jetzt angemeldet" not in body
     assert resp.headers["Content-Type"].startswith("text/html")
     # Kein Cookie bei Misserfolg.
     assert sc.COOKIE_NAME not in resp.headers.get("Set-Cookie", "")
@@ -78,3 +89,11 @@ def test_abgelaufener_token_gibt_400(client):
 def test_fehlender_token_gibt_400(client):
     resp = client.get("/auth/pair")
     assert resp.status_code == 400
+
+
+def test_erfolgsseite_ist_nicht_cachebar(client):
+    """#1939: die Erfolgsseite trägt ein Set-Cookie — kein Zwischencache darf
+    sie an ein anderes Gerät ausliefern."""
+    token = sc.sign_pairing(SUBJEKT_ID, BOT_TOKEN)
+    resp = client.get("/auth/pair?token=%s" % token)
+    assert "no-store" in resp.headers.get("Cache-Control", "")

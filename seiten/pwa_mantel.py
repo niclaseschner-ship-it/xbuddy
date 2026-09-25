@@ -418,6 +418,29 @@ REGISTRY: dict[str, MantelConfig] = {
         sw_script_route="/shell/<panel_id>/sw.js",
         sw_scope="/shell/",
     ),
+    # ── Übersicht (#1940, SREG-12 / ESB-1) — die EINE Übersicht aller
+    #    xbuddy-Seiten als installierbare PWA. Voll-Mantel via Lib (PWML-1/2):
+    #    Manifest via build_manifest(), sw.js via render_sw() — nichts auf
+    #    Platte außer den Icons (seiten/static/uebersicht/). Die HTML ist
+    #    no-store (Nic 2026-07-31) → network-first: immer frisch, offline der
+    #    letzte Stand. start_url/scope ohne Schrägstrich (die Route hat keinen);
+    #    der SW unter …/uebersicht/sw.js braucht darum Service-Worker-Allowed.
+    #    Auth: HTML cookie-gegatet (AUTH-7b DUAL, #1832) wie bisher.
+    "uebersicht": MantelConfig(
+        build_id_source_set=("uebersicht.css",),
+        template_source_set=("uebersicht.html",),
+        name="Übersicht · XBuddy",
+        short_name="XBuddy",
+        start_url="/api/v1/seiten/uebersicht",
+        icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
+        display="standalone",
+        theme_color="#47503C",
+        background_color="#F5F1E8",
+        html_cache_mode="network-first",
+        stop_prefixes=(),
+        sw_script_route="/api/v1/seiten/uebersicht/sw.js",
+        sw_scope="/api/v1/seiten/uebersicht",
+    ),
     # ── Mini-Apps ohne installierbaren Mantel (kein manifest.json/sw.js auf
     #    Platte). Sie tragen NUR build_id_source_set (HTML-Cache-Buster, T1229);
     #    Manifest-/SW-Felder bleiben None — kein Fork, keine Vorrats-Route. ──

@@ -328,9 +328,9 @@ Cookie im falschen Jar + nicht-erreichbarer Link).
 
 **Funnel-FQDN mit LE-Zertifikat** (`buddyboard.<tailscale-id>.ts.net`-Muster,
 `reference_tailscale_buddyboard`), über die **Familien-User-Geräte** die
-Shell/Views erreichen (AUTH-7b). Der **Pairing-Redirect** (`/auth/pair`,
-AUTH-2.a) muss **same-origin/relativ** bleiben — landet der
-Cookie-Setz-Redirect auf einer anderen Origin als der aufrufenden PWA, sitzt
+Shell/Views erreichen (AUTH-7b). Der **Pairing-Link** (`/auth/pair`,
+AUTH-2.a) und der Übersichts-Knopf seiner Erfolgsseite (#1939) müssen
+**same-origin/relativ** bleiben — landet die Cookie-Setz-Antwort auf einer anderen Origin als der aufrufenden PWA, sitzt
 der `HttpOnly`-First-Party-Cookie im falschen Jar (AUTH-2 iOS-Persistenz-
 Bedingung: PWA **und** `/auth/pair` auf **derselben** Funnel-FQDN).
 
@@ -504,8 +504,16 @@ Buddy/App gruppiert, mit kopierbaren URLs. Volltextsuche filtert live.
 - Eintrag (SREG-1 Sorte b mit Platform-Eigentümer): Quelle ist ein neues
   **`seiten/views.json`** (BUD-3-Schema), das die Übersichts-Seite mit
   `pfad: /api/v1/seiten/uebersicht`, `app: seiten`, `slug: uebersicht`,
-  `label: "Alle Seiten"`, `zielgruppe: "eltern"` listet. Die Übersicht listet
-  sich darüber **selbst** — kein handgepflegter Sonderfall im Aggregator.
+  `label: "Übersicht"` (bis #1940 „Alle Seiten"), `zielgruppe: "eltern"`
+  listet. Die Übersicht listet sich darüber **selbst** — kein handgepflegter
+  Sonderfall im Aggregator.
+- **Installierbar als PWA (#1940, Nic 2026-09-25):** die Übersicht ist die
+  **eine** Übersicht aller xbuddy-Apps und trägt einen vollen Mantel
+  (`pwa_mantel.REGISTRY["uebersicht"]`, PWAM-1..5): Manifest und `sw.js` aus
+  der Lib unter `/api/v1/seiten/uebersicht/`, Icons 192/512/maskable,
+  `apple-touch-icon`. Der SW arbeitet **network-first** (die HTML ist
+  `no-store`), `start_url` = Scope = `/api/v1/seiten/uebersicht`. Die Wurzel
+  `/` des Hubs leitet per `302` hierher (`deploy/nginx/xbuddy-origin.conf`).
 
 **Layout (RAT-31 E3, #1496 — manifest-only):**
 

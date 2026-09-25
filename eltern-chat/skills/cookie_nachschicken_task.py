@@ -57,10 +57,15 @@ PAIRING_SETUP_FEHLT = (
 DM_FMT = (
     "Frischer Pairing-Link — öffne ihn **auf dem Gerät selbst**:\n"
     "%s\n(gilt 15 Minuten)\n"
-    "Nach dem Öffnen kannst du beim Installieren wählen, ob das Gerät ein "
+    "Die Seite zeigt dir dort, ob die Anmeldung geklappt hat. "
+    "Danach kannst du beim Installieren wählen, ob das Gerät ein "
     "Kinder-Display oder ein Elterngerät wird.")
-# Kurzquittung an den Agent-Loop zurück.
-QUITTUNG = "Ich habe dir einen frischen Pairing-Link in den Privatchat geschickt."
+# Kurzquittung an den Agent-Loop zurück. #1939: ehrlich — beim Erzeugen weiß
+# der Bot nur, dass der Link verschickt ist; ob das Einlösen klappt, zeigt die
+# Erfolgsseite von /auth/pair auf dem Gerät (zustandslos, RAT-31 E6c).
+QUITTUNG = (
+    "Ich habe dir einen frischen Pairing-Link in den Privatchat geschickt. "
+    "Öffne ihn auf dem Gerät — dort siehst du, ob es geklappt hat.")
 
 
 class CookieNachschickenTask(WriteTask):

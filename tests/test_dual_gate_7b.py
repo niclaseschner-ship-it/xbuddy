@@ -290,8 +290,8 @@ def test_shell_icon_maskable_public_ohne_quelle_gibt_200(seiten_client):
 def test_auth_pair_e6c_kein_geraete_write(tmp_path):
     """RAT-31 E6c: /auth/pair schreibt KEIN paired_at mehr (kein geraete.json-Write).
 
-    Verifiziert den E6c-Zielzustand: nach erfolgreichem Pairing zeigt der
-    Redirect auf /api/v1/seiten/uebersicht (neutral, gerätelos), und es gibt
+    Verifiziert den E6c-Zielzustand: nach erfolgreichem Pairing weist die
+    Erfolgsseite (#1939) auf /api/v1/seiten/uebersicht (neutral, gerätelos), und es gibt
     keinen geraete.json-Dateischreibvorgang. Das Fehlen von
     `geraete_registry_path` in configure() belegt, dass die Naht entfernt
     wurde (RAT-31 E6c, geraete/ gelöscht #1565).
@@ -301,13 +301,14 @@ def test_auth_pair_e6c_kein_geraete_write(tmp_path):
     token = sc.sign_pairing(DISPLAY_ID, BOT_TOKEN)
     resp = client.get("/auth/pair?token=%s" % token)
 
-    # RAT-31 E6c: neutraler Redirect auf die Übersicht (SREG-12), kein /display/<id>/.
-    assert resp.status_code == 302
-    location = resp.headers["Location"]
-    assert "/api/v1/seiten/uebersicht" in location, (
-        "E6c: Redirect muss auf /api/v1/seiten/uebersicht zeigen, got: %s" % location
+    # RAT-31 E6c: neutral auf die Übersicht (SREG-12), kein /display/<id>/.
+    # #1939: 200-Erfolgsseite mit Knopf zur Übersicht statt nacktem 302.
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'href="/api/v1/seiten/uebersicht"' in body, (
+        "E6c: Erfolgsseite muss auf /api/v1/seiten/uebersicht weisen"
     )
-    # Kein Gerätepfad im Redirect (geraete.json entfallen).
-    assert "/display/" not in location, (
-        "E6c: Redirect darf nicht mehr auf /display/<id>/ zeigen (geraete/ gelöscht)"
+    # Kein Gerätepfad (geraete.json entfallen).
+    assert "/display/" not in body, (
+        "E6c: Erfolgsseite darf nicht mehr auf /display/<id>/ weisen (geraete/ gelöscht)"
     )

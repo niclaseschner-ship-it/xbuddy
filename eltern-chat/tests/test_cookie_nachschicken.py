@@ -93,6 +93,16 @@ def test_erwachsener_bekommt_frischen_link_per_dm():
     token = treffer[0].split("/auth/pair?token=", 1)[1].split()[0].strip()
     assert sc.verify_pairing(token, BOT_TOKEN) is not None
     assert quittung == QUITTUNG
+    # #1939: DM und Quittung sagen, wo das Erfolgssignal kommt (auf dem Gerät).
+    assert "ob die Anmeldung geklappt hat" in treffer[0]
+
+
+def test_quittung_ist_ehrlich():
+    """#1939: beim Erzeugen weiß der Bot nur, dass der Link verschickt ist —
+    die Quittung behauptet keinen Pairing-Erfolg, sondern verweist aufs Gerät."""
+    assert "auf dem Gerät" in QUITTUNG
+    assert "geklappt" in QUITTUNG
+    assert "angemeldet" not in QUITTUNG
 
 
 def test_nicht_erwachsener_bekommt_keinen_token():

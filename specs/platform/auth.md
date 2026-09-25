@@ -121,8 +121,19 @@ durch Cookie, wenn AUTH-6 leer ist).
 
 Der Endpoint `GET /auth/pair?token=<X>` prüft den 15-Minuten-Pairing-Token
 (HMAC mit dem Bot-Token, aus dem Bot-Skill GAA-3.8 generiert), setzt bei
-Erfolg den Cookie `xbuddy_session` und redirected **neutral** auf die
-Geräte-/URL-Übersichtsseite `/api/v1/seiten/uebersicht` (SREG-12).
+Erfolg den Cookie `xbuddy_session` und antwortet **neutral** mit einer
+Erfolgsseite (`200`), die auf die Übersicht `/api/v1/seiten/uebersicht`
+(SREG-12) weist.
+
+**Erfolgsseite (#1939, Nic 2026-09-25):** Statt eines nackten `302` zeigt
+der Endpoint eine eigene Landeseite: „Dieses Gerät ist jetzt angemeldet",
+ein großer Knopf zur Übersicht und ein Satz zum Installieren als App
+(„Zum Startbildschirm hinzufügen"). Anlass: ohne sichtbares Signal wurde
+derselbe Link mehrfach eingelöst, weil unklar blieb, ob es geklappt hatte.
+Die Seite trägt `Cache-Control: no-store` (sie setzt ein Cookie). Eine
+Rückmeldung an den Chat beim Einlösen gibt es bewusst **nicht** — der
+Endpoint bleibt zustandslos (RAT-31 E6c); die Chat-Quittung beim Erzeugen
+sagt darum nur, dass der Link verschickt ist und das Gerät den Erfolg zeigt.
 
 **RAT-31 E6c (Nic-Setzung 2026-07-29, #1565) — neutraler Redirect für alle,
 korrigiert die frühere verwendungs-abhängige Ableitung:** Der Endpoint liest
@@ -937,6 +948,10 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["hoerspiel-eltern"].icons`, `seiten/pwa_mantel.py:477`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/api/v1/seiten/uebersicht/manifest.json` | Ausgeliefert über den ungegateten `uebersicht_manifest_public` (`seiten/main.py`, #1940); Icon-Set aus `REGISTRY["uebersicht"].icons` (`seiten/pwa_mantel.py`). Gleiche Begründung wie `/seiten/essen/einkauf/manifest.json` oben — die Übersicht selbst bleibt AUTH-7b-gegatet, `sw.js` ebenfalls. |
+| `/api/v1/seiten/uebersicht/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["uebersicht"].icons`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
+| `/api/v1/seiten/uebersicht/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/api/v1/seiten/uebersicht/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/display/hoerspiel/static/manifest.webmanifest` | Seit #1858 über eine dedizierte Route ausgeliefert (`hoerspiel/main.py:534`), NICHT über den generischen (jetzt gegateten) Static-Endpoint. `hoerspiel/templates/alben.html:12` lädt das Manifest ohne `crossorigin="use-credentials"` — credential-los per Fetch-Spec, gleiche Klasse wie die `kibuddy`-Zeilen oben. Die drei PNG-Icons unter `/display/hoerspiel/static/` bleiben ungenutzt hinter dem generischen Static-Gate (kein Template/JS referenziert sie; das Manifest zeigt auf `/display/_shared/icons/arasaac/5915.png`, bereits ratifizierte Ausnahme) — sie brauchen keine eigene Zeile. |
 
 Die Asset-Zeilen oben (Manifest, Service-Worker, Icon-/Design-Assets sowie
@@ -1117,8 +1132,8 @@ Kind-Tablet) durchläuft **exakt einen** Auth-Pfad:
 2. **Link auf dem Ziel-Gerät öffnen** — Browser öffnet den Link; der
    `/auth/pair`-Endpoint (AUTH-2.a) prüft das Token, setzt den
    `xbuddy_session`-Cookie (HttpOnly, Secure, SameSite=Lax, 90 Tage
-   rolling, AUTH-2) und leitet **neutral** auf die Übersichtsseite
-   `/api/v1/seiten/uebersicht` weiter (RAT-31 E6c, #1565 — kein
+   rolling, AUTH-2) und zeigt **neutral** eine Erfolgsseite mit Knopf zur
+   Übersichtsseite `/api/v1/seiten/uebersicht` (#1939; RAT-31 E6c, #1565 — kein
    verwendungs-abhängiges Ziel mehr, die Rolle wählt die Familie beim
    PWA-Install).
 3. **Danach: Cookie ist die Identität.** Jeder folgende Zugriff auf
