@@ -331,7 +331,8 @@ def _hoerspiel_primary_slug() -> str:
     """Primärer (erster) Hörspiel-Instanz-Slug aus der zentralen instanzen.json-
     Registry (Option C #1732) — treibt den PWA-Default-Einstieg (start_url). So
     zeigt der installierte Mantel auf die real existierende Live-Instanz statt auf
-    einen hardcodierten Slug. Fallback 'mia' (INST-6-Default), falls Registry leer."""
+    einen hardcodierten Slug. Fallback: der generische Einstieg „alle" (#1953) —
+    kein Kindername im Repo; die Route leitet zur Laufzeit auf die erste Instanz."""
     try:
         from tools import instanzen as _inst
         insts = _inst.lade_instanzen("hoerspiel")
@@ -339,7 +340,7 @@ def _hoerspiel_primary_slug() -> str:
             return insts[0]["slug"]
     except Exception:  # Registry fehlt → INST-6-Default
         pass
-    return "mia"
+    return "alle"
 
 
 _HOERSPIEL_PRIMARY = _hoerspiel_primary_slug()

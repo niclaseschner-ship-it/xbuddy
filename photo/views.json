@@ -11,7 +11,7 @@
         "bilder",
         "slideshow"
       ],
-      "zeigt": "Den digitalen Bilderrahmen mit Auto-Durchlauf der Familien-Fotos und Videos.",
+      "zeigt": "Familienfotos und -videos als Bilderrahmen.",
       "zielgruppe": "kind",
       "icons": ["arasaac/3281.png"]
     }

@@ -11,7 +11,7 @@
         "kleidung",
         "was anziehen"
       ],
-      "zeigt": "Das aktuelle Wetter und die passende Kleidungsempfehlung für den Tag als Diptychon.",
+      "zeigt": "Das Wetter heute und was die Kinder anziehen sollen.",
       "zielgruppe": "kind",
       "icons": ["arasaac/24721.png"]
     },
@@ -27,7 +27,7 @@
         "kleidungsregeln",
         "regeln bearbeiten"
       ],
-      "zeigt": "Die Garderoben-Regelmatrix: Eltern können Kleidungs-Sets je Wetterbedingung einsehen und bearbeiten.",
+      "zeigt": "Festlegen, welche Kleidung bei welchem Wetter empfohlen wird.",
       "zielgruppe": "eltern",
       "pwa": {
         "manifest": "/seiten/wetter/regeln/manifest.json",
