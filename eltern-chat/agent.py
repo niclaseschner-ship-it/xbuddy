@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass, field
 
 from _markdown_button_strip import strip_markdown_buttons
+from _zustands_waechter import guard_einkaufsliste_behauptung
 from model import WRITE, GenerationRequest, Message, ProviderError, TaskResultBlock, TextBlock
 from tasks import HOERSPIEL_INSTANZEN, render_form_b
 from telemetry import ProviderCall, TurnTelemetry
@@ -535,6 +536,12 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             # EC-41-Disziplin im SYSTEM_PROMPT trotz dreier Härtungs-Stufen.
             reply_text = strip_markdown_buttons(
                 reply_text, inline_button_emitted=_inline_button_emitted)
+            # EC-45 (#1919): Zustands-Wächter — eine Einkaufslisten-Behauptung
+            # ohne `einkauf_zeigen`-Aufruf in diesem Turn wird durch einen
+            # ehrlichen Ersatztext ausgetauscht (Nachprüfung, kein Vor-Router;
+            # derselbe Nach-Antwort-Pfad wie der EC-41-Knopf-Filter oben).
+            reply_text = guard_einkaufsliste_behauptung(
+                reply_text, einkauf_gelesen="einkauf_zeigen" in _called_skills)
             if not reply_text:
                 reply_text = _EMPTY_REPLY
             transcript = (messages[len(history_messages):]

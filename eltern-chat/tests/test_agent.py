@@ -508,6 +508,46 @@ def test_EC_30_system_prompt_enthält_trennlinie():
 
 
 # ============================================================
+#  EC-45 — Zustands-Wächter im Agent-Loop verdrahtet (#1919)
+# ============================================================
+
+
+def test_EC_45_erfundene_einkaufsliste_ohne_tool_call_wird_ersetzt():
+    """Live-Befund #1919: auf „zeig mir die Einkaufsliste" antwortet das
+    Modell direkt mit erfundenen Listen-Einträgen, ohne `einkauf_zeigen`
+    aufzurufen. run_turn muss diese Behauptung durch den EC-45-Ersatztext
+    austauschen, statt sie durchzureichen."""
+    provider = FakeProvider([
+        text_response(
+            "Klar, hier ist deine Einkaufsliste:\n"
+            "- Milch\n- Brot\n- Eier\n"
+        )
+    ])
+    result = agent.run_turn(
+        [], _user("zeig mir die Einkaufsliste"), provider, Catalog(), _TURN)
+    assert result.proposal is None
+    assert len(provider.requests) == 1  # kein Tool-Call, kein zweiter Turn
+    assert "Milch" not in result.reply_text
+    assert "nicht in die Einkaufsliste geschaut" in result.reply_text
+
+
+def test_EC_45_echter_einkauf_zeigen_aufruf_bleibt_unangetastet():
+    """Ruft das Modell `einkauf_zeigen` tatsächlich auf, hat es nachgesehen —
+    die anschließende Antwort über den Listen-Inhalt bleibt unverändert."""
+    read = FakeReadTask(
+        name="einkauf_zeigen",
+        result="📋 Einkaufsliste — 3 offen. Zuletzt dazugekommen: Milch, Brot, Eier")
+    provider = FakeProvider([
+        task_call_response("einkauf_zeigen"),
+        text_response("Auf deiner Einkaufsliste stehen: Milch, Brot, Eier."),
+    ])
+    result = agent.run_turn(
+        [], _user("zeig mir die Einkaufsliste"), provider, _catalog(read), _TURN)
+    assert read.run_calls == [{}]
+    assert result.reply_text == "Auf deiner Einkaufsliste stehen: Milch, Brot, Eier."
+
+
+# ============================================================
 #  EC-35 — task_events Insert-Pfad in run_turn (Refs #724)
 # ============================================================
 
