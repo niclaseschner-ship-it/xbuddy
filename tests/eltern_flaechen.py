@@ -709,8 +709,9 @@ def routentabelle_mit_zusatz(pfad: str, app=None):
 
 # ── Achse `chat` — Chat-Verweis→Verzeichnis (#1906) ─────────────────────────
 
-#: Wo die Chat-Knoepfe entstehen. Nur die Skills, nicht deren Tests.
-CHAT_SKILLS = os.path.join("eltern-chat", "skills")
+#: Wo die Chat-Knoepfe entstehen. Nur die Skills, nicht deren Tests. Gelesen
+#: wird nur der Quelltext (ast), importiert wird nichts — MOD-6 bleibt gewahrt.
+CHAT_SKILLS = os.path.normpath("eltern-chat/skills")
 
 #: Was als Verweis auf eine Flaeche zaehlt: ein String-Literal, das GANZ aus
 #: einem Pfad unter einem der Flaechen-Praefixe besteht. Docstrings und
