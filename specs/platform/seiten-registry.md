@@ -328,9 +328,9 @@ Cookie im falschen Jar + nicht-erreichbarer Link).
 
 **Funnel-FQDN mit LE-Zertifikat** (`buddyboard.<tailscale-id>.ts.net`-Muster,
 `reference_tailscale_buddyboard`), über die **Familien-User-Geräte** die
-Shell/Views erreichen (AUTH-7b). Der **Pairing-Redirect** (`/auth/pair`,
-AUTH-2.a) muss **same-origin/relativ** bleiben — landet der
-Cookie-Setz-Redirect auf einer anderen Origin als der aufrufenden PWA, sitzt
+Shell/Views erreichen (AUTH-7b). Der **Pairing-Link** (`/auth/pair`,
+AUTH-2.a) und der Übersichts-Knopf seiner Erfolgsseite (#1939) müssen
+**same-origin/relativ** bleiben — landet die Cookie-Setz-Antwort auf einer anderen Origin als der aufrufenden PWA, sitzt
 der `HttpOnly`-First-Party-Cookie im falschen Jar (AUTH-2 iOS-Persistenz-
 Bedingung: PWA **und** `/auth/pair` auf **derselben** Funnel-FQDN).
 

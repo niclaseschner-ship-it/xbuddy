@@ -621,7 +621,8 @@ def init_data_validate():
 # Spec-Anker: specs/platform/auth.md AUTH-2.a. Der Pairing-Token (15min, HMAC
 # mit Bot-Token, kodiert das Session-Subjekt, stateless — OD4) wird verifiziert;
 # bei Erfolg setzt der Endpoint nur den xbuddy_session-Cookie (AUTH-2) und
-# redirected neutral auf die Übersicht (SREG-12). RAT-31 E6c (Nic-Setzung
+# antwortet mit einer Erfolgsseite, die auf die Übersicht (SREG-12) weist
+# (#1939 — vorher nackter 302, kein sichtbares Erfolgssignal). RAT-31 E6c (Nic-Setzung
 # 2026-07-29): KEINE geraete-Registry mehr — kein paired_at-Write, keine
 # verwendungs-abhängige Ziel-Ableitung. Die Rolle (Kinder-Display vs.
 # Elterngerät) wählt das Elternteil beim PWA-Installieren, nicht der Server.
@@ -641,13 +642,37 @@ _PAIR_400_HTML = (
 )
 
 
+# AUTH-2.a (#1939): Erfolgsseite bei gültigem Token. Vorher ein nackter 302 auf
+# die Übersicht — nichts sagte, dass das Pairing geklappt hatte, und Nic löste
+# denselben Link dreimal ein. Stil wie _PAIR_400_HTML; der Knopf führt auf die
+# eine Übersicht (SREG-12), die als PWA installierbar ist (#1940).
+_PAIR_OK_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät angemeldet · XBuddy</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät ist jetzt angemeldet.</h1>"
+    "<p>Du musst den Link nicht noch einmal öffnen.</p>"
+    "<p><a href=\"/api/v1/seiten/uebersicht\" style=\"display:block;"
+    "text-align:center;padding:1rem;border-radius:.5rem;background:#2d62d8;"
+    "color:#fff;font-size:1.2rem;font-weight:600;text-decoration:none\">"
+    "Zur Übersicht</a></p>"
+    "<p>Tipp: Öffne die Übersicht und wähle im Browser-Menü "
+    "„Zum Startbildschirm hinzufügen“ — dann hast du sie als App.</p>"
+    "</body></html>"
+)
+
+
 @app.route("/auth/pair", methods=["GET"])
 def auth_pair():
-    """AUTH-2.a: `GET /auth/pair?token=<X>` — Pairing-Token → Cookie → redirect.
+    """AUTH-2.a: `GET /auth/pair?token=<X>` — Pairing-Token → Cookie → Erfolgsseite.
 
     Verifiziert den stateless 15-Minuten-Pairing-Token (OD4). Bei Erfolg:
     setzt den xbuddy_session-Cookie (AUTH-2, HttpOnly/Secure/SameSite=Lax) und
-    redirected neutral auf die Übersichtsseite (SREG-12). Bei
+    antwortet 200 mit der Erfolgsseite (#1939) — „Dieses Gerät ist jetzt
+    angemeldet", Knopf zur Übersicht (SREG-12), Install-Hinweis. Bei
     ungültigem/abgelaufenem Token: 400 mit Anweisungsseite (AUTH-2.a).
 
     RAT-31 E6c: kein geraete.json-Read/Write, kein paired_at, keine
@@ -667,8 +692,11 @@ def auth_pair():
         resp.headers["Content-Type"] = "text/html; charset=utf-8"
         return resp
 
-    # RAT-31 E6c: neutraler Redirect auf die Übersicht für alle (SREG-12).
-    resp = redirect("/api/v1/seiten/uebersicht")
+    # RAT-31 E6c: neutral für alle — die Erfolgsseite weist auf die Übersicht
+    # (SREG-12). #1939: 200 statt 302, damit das Gerät sichtbar quittiert.
+    resp = make_response(_PAIR_OK_HTML, 200)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    resp.headers["Cache-Control"] = "no-store"
     resp.set_cookie(
         _session_cookie.COOKIE_NAME,
         _session_cookie.sign_session(subjekt, bot_token),

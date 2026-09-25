@@ -11,8 +11,8 @@
 > **KEINE** Binär-Wahl (Kind-Gerät/Eltern-Gerät) beim Minten und **KEINEN**
 > rollen-tragenden Pairing-Token. Die Rolle (Kinder-Display vs. Elterngerät)
 > wählt das Elternteil **beim PWA-Installieren am Gerät**, nicht der Server.
-> `/auth/pair` setzt nur den Cookie und redirected **neutral** auf die Übersicht
-> (`auth.md` AUTH-2.a). Der Cookie/Link wird **auf Nachfrage im Chat** verteilt.
+> `/auth/pair` setzt nur den Cookie und zeigt **neutral** eine Erfolgsseite mit
+> Knopf zur Übersicht (`auth.md` AUTH-2.a, #1939). Der Cookie/Link wird **auf Nachfrage im Chat** verteilt.
 >
 > Damit **entfallen ersatzlos**: der `GeraeteClient`-Registry-Write (GAA-3.7),
 > die Geräte-Attribut-Abfrage `typ`/`os`/`aufloesung`/`name`/`verwendung`
