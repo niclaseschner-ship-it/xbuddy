@@ -478,6 +478,21 @@ Schalter (Weg B aus #440) — Vorrats-Mechanik ohne Trigger.
 > Aggregator entfernt. Der zugehörige Test-Block (SREG-11-Tests) ist entfernt.
 > Konsumenten-Pfad `specs/platform/panel-bearbeiten.md` PBE-2 ist durch
 > RAT-31 nicht mehr relevant.
+>
+> **Ersatz gebaut (#1906, Nic-Wahl C, 25.09.2026):** statt einer Karte je
+> Panel-Instanz trägt `seiten/views.json` jetzt EINEN Sorte-b-Eintrag
+> (`kacheln`, Platform-Eigentümer wie `uebersicht`/`connector`) auf
+> `GET /api/v1/seiten/uebersicht/kacheln` — eine Auswahl-Seite, die die zur
+> Laufzeit existierenden Panel-Instanzen listet und je Instanz auf ihren
+> längst vorhandenen, deterministischen Editor verlinkt
+> (`/controller/app-panel/<panel_id>/bearbeiten`, PBE-2 unten). Keine
+> Familien-Daten im Repo: die Liste kommt clientseitig per
+> `fetch('/api/v1/panels/')` vom panel-Service (same-origin-Cookie, PBE-3),
+> nicht aus einem committeten Manifest — `panel_eintraege()` bleibt
+> abgerissen. Die Seite teilt sich den PWA-Mantel der Übersicht (keine
+> zweite Install-Identität); dokumentiert als Ausnahme in
+> `tests/eltern_flaechen.py:AUSNAHMEN` (Achse `mantel`, Kennung
+> `seiten/kacheln`).
 
 ## SREG-12 — Gerenderte Eltern-Übersichts-Seite (HTML, neben der Registry-API)
 

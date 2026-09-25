@@ -173,7 +173,28 @@ class Ausnahme:
 
 
 AUSNAHMEN: tuple[Ausnahme, ...] = (
-    # ── Achse `mantel`: keine Ausnahme mehr (die Mini-App-Übersicht ist mit #1946 entfallen) ──
+    # ── Achse `mantel` ───────────────────────────────────────────────────────
+    Ausnahme(
+        kennung="seiten/kacheln",
+        achse=ACHSE_MANTEL,
+        sorte=SORTE_AUSNAHME,
+        begruendung=(
+            "#1906 (Nic-Wahl C, 25.09.2026): die Auswahl-Seite 'Kacheln "
+            "bearbeiten' ist EINE Karte auf der Uebersicht, keine eigene "
+            "installierbare App. Sie teilt sich bewusst den vollen Mantel der "
+            "Uebersicht (pwa_mantel.py:REGISTRY['uebersicht'] — dieselbe "
+            "Scope /api/v1/seiten/uebersicht, dasselbe Manifest/SW/Icons); "
+            "ihre Start-Adresse /api/v1/seiten/uebersicht/kacheln loest aber "
+            "auf eine ANDERE Flask-Regel auf als REGISTRY['uebersicht']."
+            "start_url, darum findet der Verbund-Schluessel dieser Achse "
+            "keinen Treffer. Eine zweite Mantel-Registrierung nur fuer diesen "
+            "Verbund-Schluessel waere eine zweite, fiktive Install-Identitaet "
+            "fuer eine Flaeche, die keine sein soll — genau das Gegenteil "
+            "dessen, was #1906 entschieden hat (keine neue Familien-Daten- "
+            "tragende Registry-Sonderrolle, ein Registry-Eintrag)."
+        ),
+        quelle="seiten/main.py get_seiten_uebersicht_kacheln, seiten/views.json:kacheln",
+    ),
     # ── Achse `anschluss` ────────────────────────────────────────────────────
     Ausnahme(
         kennung="kibuddy",

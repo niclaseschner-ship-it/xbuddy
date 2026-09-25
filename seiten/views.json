@@ -16,6 +16,21 @@
       "zielgruppe": "eltern"
     },
     {
+      "slug": "kacheln",
+      "pfad": "/api/v1/seiten/uebersicht/kacheln",
+      "label": "Kacheln bearbeiten",
+      "synonyme": [
+        "kacheln",
+        "kacheln bearbeiten",
+        "panel bearbeiten",
+        "panel-editor",
+        "kachel-editor",
+        "panels"
+      ],
+      "zeigt": "Panel auswählen, um seine Kacheln zu bearbeiten.",
+      "zielgruppe": "eltern"
+    },
+    {
       "slug": "connector",
       "typ": "pwa",
       "pfad": "/api/v1/seiten/connector/",

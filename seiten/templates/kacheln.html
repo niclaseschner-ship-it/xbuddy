@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+{# #1906 (Nic-Wahl C): Auswahl-Seite "Kacheln bearbeiten" — listet die zur
+   Laufzeit existierenden Panel-Instanzen und verlinkt je Instanz auf ihren
+   deterministischen Editor (/controller/app-panel/<id>/bearbeiten, PBE-2).
+   Teilt sich den PWA-Mantel der Übersicht (dieselbe Scope, dasselbe
+   Manifest/SW) — siehe get_seiten_uebersicht_kacheln in seiten/main.py.
+   Die Panel-Liste selbst kommt NICHT vom Server (keine Familien-Daten im
+   Repo): reines Client-JS holt sie per fetch('/api/v1/panels/'). #}
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#47503C">
+  <title>Kacheln bearbeiten · XBuddy</title>
+
+  <!-- Reuse des Übersichts-Mantels (pwa_mantel.REGISTRY['uebersicht']) —
+       keine eigene Manifest-/SW-/Icon-Registrierung. -->
+  <link rel="manifest" href="/api/v1/seiten/uebersicht/manifest.json">
+  <link rel="icon" href="/api/v1/seiten/uebersicht/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/api/v1/seiten/uebersicht/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="XBuddy">
+
+  <link rel="stylesheet" href="/api/v1/seiten/static/uebersicht.css?v={{ build_id }}">
+  <script src="/api/v1/seiten/static/telegram-anmeldung.js?v={{ build_id }}"{% if telegram_tauschen %} data-tauschen{% endif %}></script>
+</head>
+<body>
+  <header class="page">
+    <a class="zurueck-link" href="/api/v1/seiten/uebersicht">← Übersicht</a>
+    <h1>Kacheln bearbeiten</h1>
+    <p class="kopf-hinweis">Panel wählen, um seine Kacheln zu bearbeiten.</p>
+  </header>
+
+  <main>
+    <section class="sektion" data-sektion="panels">
+      <div class="karten-grid" id="panel-liste" aria-live="polite">
+        <p class="leer-hinweis" id="panel-status">Panels werden geladen …</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // #1906: kein Server-Proxy — same-origin fetch mit dem bereits gesetzten
+    // xbuddy_session-Cookie (derselbe, der diese Seite selbst gegated hat).
+    (function () {
+      const liste = document.getElementById("panel-liste");
+      const status = document.getElementById("panel-status");
+
+      function zeigeStatus(text) {
+        status.textContent = text;
+        status.hidden = false;
+      }
+
+      function renderPanels(panels) {
+        status.hidden = true;
+        if (!panels.length) {
+          zeigeStatus("Noch kein Panel eingerichtet.");
+          return;
+        }
+        panels.forEach((panel) => {
+          const karte = document.createElement("div");
+          karte.className = "karte panel-karte";
+          const anzahlKacheln = (panel.tiles && Array.isArray(panel.tiles.tiles))
+            ? panel.tiles.tiles.length : 0;
+          karte.innerHTML =
+            '<header>' +
+              '<span class="label">' + panel.panel_id + '</span>' +
+            '</header>' +
+            '<p class="zeigt">' + anzahlKacheln + ' Kachel' + (anzahlKacheln === 1 ? '' : 'n') + '</p>' +
+            '<div class="urls">' +
+              '<div class="url-row">' +
+                '<a class="url-link panel-bearbeiten-link" href="/controller/app-panel/' +
+                  encodeURIComponent(panel.panel_id) + '/bearbeiten">Kacheln bearbeiten</a>' +
+              '</div>' +
+            '</div>';
+          liste.appendChild(karte);
+        });
+      }
+
+      fetch("/api/v1/panels/", { credentials: "same-origin" })
+        .then((res) => {
+          if (res.status === 401) {
+            throw new Error("nicht-angemeldet");
+          }
+          if (!res.ok) {
+            throw new Error("http-" + res.status);
+          }
+          return res.json();
+        })
+        .then(renderPanels)
+        .catch((fehler) => {
+          if (fehler && fehler.message === "nicht-angemeldet") {
+            zeigeStatus("Nicht angemeldet — bitte den Pairing-Link aus dem Eltern-Chat erneut öffnen.");
+          } else {
+            zeigeStatus("Panels konnten gerade nicht geladen werden.");
+          }
+        });
+    })();
+  </script>
+</body>
+</html>

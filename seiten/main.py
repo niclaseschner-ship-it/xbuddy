@@ -538,6 +538,53 @@ def get_seiten_uebersicht():
     return resp
 
 
+@app.route("/api/v1/seiten/uebersicht/kacheln", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)
+def get_seiten_uebersicht_kacheln():
+    """#1906 (Nic-Wahl C, 25.09.2026): Auswahl-Seite „Kacheln bearbeiten".
+
+    Verlinkt von EINER Karte auf der Übersicht (Sorte-b-Eintrag in
+    seiten/views.json, wie die Übersicht sich selbst listet) — listet die
+    Panel-Instanzen, die zur LAUFZEIT existieren, und verlinkt je Instanz auf
+    den längst vorhandenen, deterministischen Editor
+    (`/controller/app-panel/<panel_id>/bearbeiten`, PBE-2). Genau EIN Panel
+    bleibt trotzdem gelistet (keine Sonderbehandlung).
+
+    Keine Familien-Daten im Repo: die Panel-Liste ist NICHT committet und wird
+    NICHT hier serverseitig aus panels.json/instanzen.json gebaut — RAT-31 E3
+    (#1496) bleibt abgerissen, `panel_eintraege()` kommt nicht zurück. Der
+    Client holt sie sich selbst per `fetch('/api/v1/panels/')`: derselbe
+    same-origin-Cookie wie diese Seite (PBE-3) authentisiert dort ebenfalls
+    (nginx routet `/api/v1/panels/` same-origin auf den panel-Service, PORT-2)
+    — kein Server-zu-Server-Proxy von hier aus, also auch keine neue
+    Identitäts-Lücke der Sorte #1854 (dortiger Proxy hat kein Cookie; dieser
+    Client-Fetch hat es, weil der Browser ihn same-origin stellt).
+
+    Teilt sich BEWUSST den PWA-Mantel der Übersicht
+    (`pwa_mantel.REGISTRY['uebersicht']` — dieselbe Scope
+    `/api/v1/seiten/uebersicht`, dasselbe Manifest/SW/Icons): eine zweite
+    Mantel-Registrierung wäre eine zweite Install-Identität für eine Fläche,
+    die nur eine Auswahl INNERHALB der Übersicht ist. Dokumentiert als
+    bewusste Ausnahme in `tests/eltern_flaechen.py:AUSNAHMEN` (Achse
+    'mantel', Kennung 'seiten/kacheln').
+
+    Auth (AUTH-11): require_dual_gate(mode=_AUTH_MODE) — wortgleich zur
+    Übersicht selbst (Browser-Fläche, kein tma-Aufrufer bekannt).
+    """
+    bot_token = _get_bot_token()
+    angemeldet = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
+        request.cookies.get(_session_cookie.COOKIE_NAME), bot_token)
+    resp = make_response(render_template(
+        "kacheln.html",
+        build_id=_uebersicht_build_id(),
+        sw_scope=pwa_mantel.REGISTRY["uebersicht"].sw_scope,
+        telegram_tauschen=not angemeldet,
+    ))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
 # ============================================================
 #  #1940 — PWA-Mantel der Übersicht (SREG-12 / ESB-1 / PWAM-5)
 # ============================================================
