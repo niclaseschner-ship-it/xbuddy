@@ -864,9 +864,9 @@ müssen.
   "zeigt": "Default-Verantwortlichkeiten je Slot und Wochentag setzen.",
   "zielgruppe": "eltern",
   "pwa": {
-    "manifest": "/seiten/static/plan/manifest.json",
+    "manifest": "/seiten/plan/einstellungen/manifest.json",
     "start_url": "/seiten/plan/einstellungen",
-    "service_worker": "/seiten/static/plan/sw.js"
+    "service_worker": "/seiten/plan/einstellungen/sw.js"
   },
   "auth": "public"
 }
