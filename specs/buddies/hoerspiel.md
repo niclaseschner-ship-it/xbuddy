@@ -1073,7 +1073,7 @@ gesetzten Providers und antwortet HTTP 422 bei unbekanntem Wert.
 | Provider | Modell-ID | UI-Display-Label |
 |---|---|---|
 | claude  | `claude-opus-5`        | Opus 5 (kreativ, langsamer, teurer) |
-| claude  | `claude-sonnet-4-6`    | Sonnet 4.6 (ausgewogen) |
+| claude  | `claude-sonnet-5`      | Sonnet 5 (ausgewogen) |
 | claude  | `claude-haiku-4-5`     | Haiku 4.5 (schnell, kompakt, günstig) |
 | mistral | `mistral-large-2411`   | Large 2.1 (Frontier, kreativ) |
 | mistral | `mistral-medium-2508`  | Medium 3.1 (ausgewogen, V1-Default Mistral) |
