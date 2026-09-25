@@ -428,7 +428,10 @@ REGISTRY: dict[str, MantelConfig] = {
     #    Auth: HTML cookie-gegatet (AUTH-7b DUAL, #1832) wie bisher.
     "uebersicht": MantelConfig(
         build_id_source_set=("uebersicht.css", "telegram-anmeldung.js"),
-        template_source_set=("uebersicht.html",),
+        # #1906: kacheln.html teilt sich diesen Mantel (dieselbe Scope,
+        # dasselbe Manifest/SW) — seine Aenderungen sollen den build_id-
+        # Cache-Buster trotzdem bumpen.
+        template_source_set=("uebersicht.html", "kacheln.html"),
         name="Übersicht · XBuddy",
         short_name="XBuddy",
         start_url="/api/v1/seiten/uebersicht",
