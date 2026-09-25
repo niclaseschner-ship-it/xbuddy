@@ -504,8 +504,16 @@ Buddy/App gruppiert, mit kopierbaren URLs. Volltextsuche filtert live.
 - Eintrag (SREG-1 Sorte b mit Platform-Eigentümer): Quelle ist ein neues
   **`seiten/views.json`** (BUD-3-Schema), das die Übersichts-Seite mit
   `pfad: /api/v1/seiten/uebersicht`, `app: seiten`, `slug: uebersicht`,
-  `label: "Alle Seiten"`, `zielgruppe: "eltern"` listet. Die Übersicht listet
-  sich darüber **selbst** — kein handgepflegter Sonderfall im Aggregator.
+  `label: "Übersicht"` (bis #1940 „Alle Seiten"), `zielgruppe: "eltern"`
+  listet. Die Übersicht listet sich darüber **selbst** — kein handgepflegter
+  Sonderfall im Aggregator.
+- **Installierbar als PWA (#1940, Nic 2026-09-25):** die Übersicht ist die
+  **eine** Übersicht aller xbuddy-Apps und trägt einen vollen Mantel
+  (`pwa_mantel.REGISTRY["uebersicht"]`, PWAM-1..5): Manifest und `sw.js` aus
+  der Lib unter `/api/v1/seiten/uebersicht/`, Icons 192/512/maskable,
+  `apple-touch-icon`. Der SW arbeitet **network-first** (die HTML ist
+  `no-store`), `start_url` = Scope = `/api/v1/seiten/uebersicht`. Die Wurzel
+  `/` des Hubs leitet per `302` hierher (`deploy/nginx/xbuddy-origin.conf`).
 
 **Layout (RAT-31 E3, #1496 — manifest-only):**
 

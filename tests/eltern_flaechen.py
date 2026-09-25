@@ -185,28 +185,6 @@ AUSNAHMEN: tuple[Ausnahme, ...] = (
         ),
         quelle="seiten/pwa_mantel.py:421 (Kommentar 'Mini-Apps ohne installierbaren Mantel')",
     ),
-    Ausnahme(
-        kennung="seiten/uebersicht",
-        achse=ACHSE_MANTEL,
-        sorte=SORTE_SCHULDSTAND,
-        begruendung=(
-            "Die Seiten-Uebersicht ist als eltern-facing deklariert, hat aber "
-            "als einzige der drei Plattform-Ansichten KEINEN Mantel-Eintrag — "
-            "nach der Baseline ein echter Verstoss, kein Ausnahmefall. Die "
-            "Auth-Spec deckt sie nur auf der Auth-Achse ab (Trigger 2026-08-12 "
-            "gefeuert, seither AUTH-7b DUAL gegatet, #1832/#1863); die "
-            "Mantel-Achse ist dort gar nicht beruehrt. Deshalb Schuldstand "
-            "statt Ausnahme: eine Ausnahme waere eine Entscheidung, dies ist "
-            "eine offene Frage."
-        ),
-        quelle="seiten/views.json:4 (slug 'uebersicht', zielgruppe 'eltern' auf :16)",
-        trigger=(
-            "Eigenes Bau-Ticket entscheidet: entweder bekommt die Uebersicht "
-            "einen vollen Mantel-Eintrag in seiten/pwa_mantel.py:REGISTRY, "
-            "oder sie wird ausdruecklich als nicht-installierbare Flaeche "
-            "ratifiziert. Beides loescht diese Zeile."
-        ),
-    ),
     # ── Achse `anschluss` ────────────────────────────────────────────────────
     Ausnahme(
         kennung="kibuddy",

@@ -948,6 +948,10 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["hoerspiel-eltern"].icons`, `seiten/pwa_mantel.py:477`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/seiten/hoerspiel/<kind_id>/eltern/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/api/v1/seiten/uebersicht/manifest.json` | Ausgeliefert über den ungegateten `uebersicht_manifest_public` (`seiten/main.py`, #1940); Icon-Set aus `REGISTRY["uebersicht"].icons` (`seiten/pwa_mantel.py`). Gleiche Begründung wie `/seiten/essen/einkauf/manifest.json` oben — die Übersicht selbst bleibt AUTH-7b-gegatet, `sw.js` ebenfalls. |
+| `/api/v1/seiten/uebersicht/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["uebersicht"].icons`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
+| `/api/v1/seiten/uebersicht/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/api/v1/seiten/uebersicht/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/display/hoerspiel/static/manifest.webmanifest` | Seit #1858 über eine dedizierte Route ausgeliefert (`hoerspiel/main.py:534`), NICHT über den generischen (jetzt gegateten) Static-Endpoint. `hoerspiel/templates/alben.html:12` lädt das Manifest ohne `crossorigin="use-credentials"` — credential-los per Fetch-Spec, gleiche Klasse wie die `kibuddy`-Zeilen oben. Die drei PNG-Icons unter `/display/hoerspiel/static/` bleiben ungenutzt hinter dem generischen Static-Gate (kein Template/JS referenziert sie; das Manifest zeigt auf `/display/_shared/icons/arasaac/5915.png`, bereits ratifizierte Ausnahme) — sie brauchen keine eigene Zeile. |
 
 Die Asset-Zeilen oben (Manifest, Service-Worker, Icon-/Design-Assets sowie

@@ -818,3 +818,24 @@ def test_T1542_shell_sse_regex_location_steht_vor_shell_prefix():
         "T1542: Regex-Location soll NACH der Prefix-`/shell/`-Location stehen "
         "(Lesbarkeits-Konvention: erst Prefix, dann SSE-Ausnahme darunter)"
     )
+
+
+# ============================================================
+#  #1940 — Wurzel `/` führt auf die eine Übersicht
+# ============================================================
+
+
+def test_1940_wurzel_leitet_auf_uebersicht():
+    """`/` auf dem Hub → 302 auf /api/v1/seiten/uebersicht (Exakt-Match),
+    der Catch-all `location / { return 404; }` bleibt für alles andere."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s*=\s*/\s*\{\s*return\s+302\s+/api/v1/seiten/uebersicht;\s*\}",
+        text,
+    )
+    assert match is not None, "location = / mit 302 auf die Übersicht fehlt (#1940)"
+    assert re.search(r"location\s+/\s*\{\s*return\s+404;\s*\}", text), (
+        "Catch-all location / { return 404; } muss bleiben (URL-1)"
+    )
+    # Relativer Redirect (Funnel 443 vs. LAN 8443, #1459).
+    assert "absolute_redirect off;" in text

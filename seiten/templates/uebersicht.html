@@ -6,229 +6,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Alle Seiten · XBuddy</title>
-  <style>
-    /* SREG-12: Eltern am Handy. Daumen-bedienbar, hoher Kontrast,
-       großzügige Tap-Targets (min 44px). */
-    :root {
-      --bg: #f4f5f7;
-      --card: #ffffff;
-      --ink: #1a1a1a;
-      --ink-soft: #555;
-      --rule: #d8d8d8;
-      --accent: #2d62d8;
-      --warn-bg: #fff4d6;
-      --warn-rule: #e0b900;
-      --variante-rule: #b07cd6;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--ink);
-      line-height: 1.45;
-    }
-    header.page {
-      padding: 16px 14px 8px;
-      background: var(--card);
-      border-bottom: 1px solid var(--rule);
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-    h1 { font-size: 1.3rem; margin: 0 0 10px; }
-    .banner-tailscale {
-      background: var(--warn-bg);
-      border: 1px solid var(--warn-rule);
-      border-radius: 6px;
-      padding: 8px 12px;
-      margin: 0 14px 10px;
-      font-size: 0.9rem;
-    }
-    .banner-snapshot {
-      background: var(--warn-bg);
-      border: 1px solid var(--warn-rule);
-      border-radius: 6px;
-      padding: 8px 12px;
-      margin: 0 14px 10px;
-      font-size: 0.9rem;
-    }
-    input.suche {
-      width: 100%;
-      padding: 10px 12px;
-      font-size: 1rem;
-      border: 1px solid var(--rule);
-      border-radius: 6px;
-      min-height: 44px;
-    }
-    .typ-chips {
-      display: flex;
-      gap: 6px;
-      padding: 8px 14px 12px;
-      overflow-x: auto;
-      background: var(--card);
-      border-bottom: 1px solid var(--rule);
-      -webkit-overflow-scrolling: touch;
-    }
-    .typ-chip {
-      flex: 0 0 auto;
-      padding: 6px 12px;
-      border: 1px solid var(--rule);
-      background: var(--card);
-      border-radius: 999px;
-      font-size: 0.9rem;
-      cursor: pointer;
-      min-height: 36px;
-    }
-    .typ-chip[aria-pressed="true"] {
-      background: var(--accent);
-      color: white;
-      border-color: var(--accent);
-    }
-    main { padding: 12px 14px 80px; }
-    section.sektion { margin: 18px 0; }
-    section.sektion > h2 {
-      font-size: 1.05rem;
-      margin: 0 0 10px;
-      color: var(--ink-soft);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 600;
-    }
-    .karte {
-      background: var(--card);
-      border: 1px solid var(--rule);
-      border-radius: 8px;
-      padding: 10px 12px;
-    }
-    .karte.variante {
-      border-style: dashed;
-      border-color: var(--variante-rule);
-    }
-    .karte > header {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 4px;
-    }
-    .karte .icon {
-      width: 32px;
-      height: 32px;
-      object-fit: contain;
-      flex: 0 0 32px;
-    }
-    .karte .label { font-weight: 600; font-size: 1rem; }
-    .karte .typ-badge {
-      display: inline-block;
-      font-size: 0.7rem;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: var(--rule);
-      color: var(--ink-soft);
-      margin-left: auto;
-      text-transform: uppercase;
-    }
-    .karte .zeigt {
-      color: var(--ink-soft);
-      font-size: 0.9rem;
-      margin: 0 0 8px;
-    }
-    .urls {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .url-row {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-    }
-    .url-label {
-      flex: 0 0 70px;
-      font-size: 0.8rem;
-      color: var(--ink-soft);
-    }
-    .url-link {
-      flex: 1;
-      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-      font-size: 0.82rem;
-      color: var(--accent);
-      text-decoration: underline;
-      overflow-wrap: anywhere;
-      /* SREG-12: Long-Press am Handy fuer Browser-Pfad "Link kopieren" muss
-         funktionieren — daher KEINE Klick-/Selektion-Blockaden auf Link-Inhalten. */
-    }
-    .copy-btn {
-      flex: 0 0 auto;
-      padding: 6px 10px;
-      border: 1px solid var(--rule);
-      background: var(--card);
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.8rem;
-      min-height: 32px;
-      min-width: 44px;
-    }
-    .copy-btn[data-copied="1"] { background: #d4f4dd; border-color: #6abf83; }
-    .buddy-gruppe {
-      background: var(--card);
-      border: 1px solid var(--rule);
-      border-radius: 8px;
-      padding: 14px;
-      margin-bottom: 14px;
-    }
-    .buddy-gruppe > header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 10px;
-    }
-    .buddy-gruppe > header .app-slug {
-      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-      font-weight: 600;
-    }
-    .buddy-gruppe > header .anzahl {
-      font-size: 0.85rem;
-      color: var(--ink-soft);
-    }
-    .karten-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-    }
-    @media (min-width: 720px) {
-      .karten-grid { grid-template-columns: 1fr 1fr; }
-    }
-    .leer-hinweis {
-      text-align: center;
-      padding: 20px;
-      color: var(--ink-soft);
-      font-style: italic;
-    }
-    .toast {
-      position: fixed;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--ink);
-      color: white;
-      padding: 10px 16px;
-      border-radius: 6px;
-      font-size: 0.9rem;
-      opacity: 0;
-      transition: opacity 0.2s;
-      pointer-events: none;
-      z-index: 20;
-    }
-    .toast.visible { opacity: 0.95; }
-    /* SREG-12 Filter: "hidden" Karten/Gruppen */
-    [hidden] { display: none !important; }
-  </style>
+  <meta name="theme-color" content="#47503C">
+  <title>Übersicht · XBuddy</title>
+
+  <!-- #1940: PWA-Mantel (pwa_mantel.REGISTRY['uebersicht']) — Manifest + Icons
+       aus der Lib, absolute Pfade (die Route hat keinen Schrägstrich). -->
+  <link rel="manifest" href="/api/v1/seiten/uebersicht/manifest.json">
+  <link rel="icon" href="/api/v1/seiten/uebersicht/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/api/v1/seiten/uebersicht/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="XBuddy">
+
+  <link rel="stylesheet" href="/api/v1/seiten/static/uebersicht.css?v={{ build_id }}">
 </head>
 <body>
   <header class="page">
-    <h1>Alle Seiten</h1>
+    <h1>Übersicht</h1>
     <input type="search" class="suche" placeholder="Suche (Label, Synonym, Beschreibung) …" aria-label="Volltextsuche">
   </header>
 
@@ -410,6 +203,16 @@
         }
       });
     });
+
+    // #1940: PWA-Mantel — Service-Worker registrieren (best-effort, PWA-3:
+    // fehlt die API oder scheitert die Registrierung, läuft die Seite weiter).
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("/api/v1/seiten/uebersicht/sw.js", { scope: "{{ sw_scope }}" })
+          .catch(e => console.warn("Übersicht: Service-Worker nicht registriert", e));
+      });
+    }
   </script>
 </body>
 </html>

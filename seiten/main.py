@@ -513,10 +513,88 @@ def get_seiten_uebersicht():
     # no-store (Nic 2026-07-31): die Übersicht darf NICHT gecacht werden — sonst
     # zeigen Clients nach einer Link-/Origin-Änderung die alte Version (Cache-
     # Schmerz beim same-origin-Umbau). Immer frisch rendern.
-    resp = make_response(render_template("uebersicht.html", **layout))
+    # #1940: PWA-Mantel — build_id (Cache-Buster fürs CSS) + SW-Scope aus der
+    # Registry (pwa_mantel.REGISTRY['uebersicht']).
+    resp = make_response(render_template(
+        "uebersicht.html",
+        build_id=_uebersicht_build_id(),
+        sw_scope=pwa_mantel.REGISTRY["uebersicht"].sw_scope,
+        **layout,
+    ))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+# ============================================================
+#  #1940 — PWA-Mantel der Übersicht (SREG-12 / ESB-1 / PWAM-5)
+# ============================================================
+# Surface (analog routine/wetter-regeln, #1740-Dispatcher):
+#   GET /api/v1/seiten/uebersicht/manifest.json — build_manifest() aus der Lib.
+#   GET /api/v1/seiten/uebersicht/sw.js         — render_sw() aus der Lib.
+#   GET /api/v1/seiten/uebersicht/icon-*.png    — statisch aus seiten/static/uebersicht/.
+# Auth wie bei den anderen Mänteln: manifest + Icons public (der Browser holt
+# sie credential-los), sw.js und alles andere hinter require_dual_gate.
+_UEBERSICHT_MIME = {
+    ".json": "application/manifest+json",
+    ".js":   "application/javascript",
+    ".png":  "image/png",
+}
+
+
+def _uebersicht_asset_root():
+    """Icons der Übersicht (#1940). Test-Naht: runtime['uebersicht_asset_dir']."""
+    override = runtime.get("uebersicht_asset_dir") if isinstance(runtime, dict) else None
+    return override or os.path.join(os.path.dirname(__file__), "static", "uebersicht")
+
+
+def _uebersicht_build_id():
+    """build_id aus uebersicht.css + Template uebersicht.html (PWAM-4/5)."""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    return pwa_mantel.build_id_for("uebersicht", static_dir)
+
+
+@app.route("/api/v1/seiten/uebersicht/<path:asset>", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)
+def uebersicht_asset_view(asset):
+    """#1940: PWA-Mantel-Assets der Übersicht — manifest.json/sw.js aus der Lib,
+    Icons statisch. Delegiert an `_uebersicht_public_asset` (ein Dispatch-Pfad
+    für gegatete und public Adressen, analog T1832-S1)."""
+    return _uebersicht_public_asset(asset)
+
+
+def _uebersicht_public_asset(asset):
+    """Der eine Dispatch-Pfad für alle Übersichts-Mantel-Assets (#1940)."""
+    cfg = pwa_mantel.REGISTRY["uebersicht"]
+    return serve_mantel_asset(
+        asset,
+        asset_root=_uebersicht_asset_root(),
+        mime_map=_UEBERSICHT_MIME,
+        special=_mantel_special_generated(
+            cfg, "uebersicht", _uebersicht_build_id()),
+    )
+
+
+# AUTH-11-Ausnahme (Watchdog-Fix #1832) — Begruendung wortgleich zu den
+# einkauf-Public-Routen (#1437, kibuddy-Vorbild, sw.js bleibt gegated).
+@app.route("/api/v1/seiten/uebersicht/manifest.json", methods=["GET"])
+def uebersicht_manifest_public():
+    return _uebersicht_public_asset("manifest.json")
+
+
+@app.route("/api/v1/seiten/uebersicht/icon-192.png", methods=["GET"])
+def uebersicht_icon_192_public():
+    return _uebersicht_public_asset("icon-192.png")
+
+
+@app.route("/api/v1/seiten/uebersicht/icon-512.png", methods=["GET"])
+def uebersicht_icon_512_public():
+    return _uebersicht_public_asset("icon-512.png")
+
+
+@app.route("/api/v1/seiten/uebersicht/icon-maskable-512.png", methods=["GET"])
+def uebersicht_icon_maskable_public():
+    return _uebersicht_public_asset("icon-maskable-512.png")
 
 
 @app.route("/api/v1/seiten/layout", methods=["GET"])

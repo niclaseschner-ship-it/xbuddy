@@ -3,7 +3,7 @@
     {
       "slug": "uebersicht",
       "pfad": "/api/v1/seiten/uebersicht",
-      "label": "Alle Seiten",
+      "label": "Übersicht",
       "synonyme": [
         "alle seiten",
         "übersicht",
@@ -12,7 +12,7 @@
         "seitenübersicht",
         "geräte-paare"
       ],
-      "zeigt": "Alle aufrufbaren XBuddy-Seiten mit Geräte-Paaren oben und Buddy-Gruppen darunter.",
+      "zeigt": "Alle aufrufbaren XBuddy-Seiten, nach Buddy gruppiert — als App installierbar.",
       "zielgruppe": "eltern"
     },
     {

@@ -142,6 +142,11 @@ ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS = [
     "/seiten/hoerspiel/mia/eltern/icon-192.png",
     "/seiten/hoerspiel/mia/eltern/icon-512.png",
     "/seiten/hoerspiel/mia/eltern/icon-maskable-512.png",
+    # #1940: Mantel der Übersicht.
+    "/api/v1/seiten/uebersicht/manifest.json",
+    "/api/v1/seiten/uebersicht/icon-192.png",
+    "/api/v1/seiten/uebersicht/icon-512.png",
+    "/api/v1/seiten/uebersicht/icon-maskable-512.png",
 ]
 
 # Befund 2 (Watchdog-Fix, Ticket #1859): die sechs Telegram-web_app-HTML-

@@ -107,6 +107,11 @@ def test_alle_seiten_subpfade_routen_im_manifest_gelistet():
             continue  # #1461 Utility-Route (Client-Reset), kein View
         if "/static/" in pfad:
             continue  # Flask-static, kein View
+        letzter = pfad.rsplit("/", 1)[-1]
+        if "<path:" in letzter or "." in letzter:
+            continue  # #1940 PWA-Mantel-Zubehoer (manifest.json, sw.js, Icons,
+            #           <path:asset>-Durchreicher) — kein View; gleiche
+            #           Form-Regel wie tests/eltern_flaechen.py ist_seiten_route
         if pfad not in manifest_pfade:
             fehlend.append(pfad)
     assert not fehlend, (
