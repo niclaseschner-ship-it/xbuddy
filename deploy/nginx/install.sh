@@ -45,6 +45,24 @@ command -v nginx >/dev/null 2>&1 || die "nginx ist nicht installiert oder nicht 
 command -v sudo  >/dev/null 2>&1 || die "sudo nicht verfügbar — dieses Skript braucht Root-Rechte für cp/nginx -t/reload."
 [ -r "${SRC_CONF}" ] || die "Quell-Datei nicht lesbar: ${SRC_CONF}"
 
+# --- 1b. FQDN-Platzhalter vor dem Vergleich/Validieren füllen ---------------
+# Die Repo-Conf trägt __XBUDDY_TAILSCALE_FQDN__. Früher wurde der erst nach
+# install.sh per sed ersetzt — dann scheiterte `nginx -t` hier immer am
+# Zertifikatspfad mit Platzhalter. Jetzt: FQDN aus ENV oder aus der laufenden
+# Conf, in eine gefüllte Kopie rendern und die installieren.
+FQDN="${XBUDDY_TAILSCALE_FQDN:-}"
+if [ -z "${FQDN}" ] && [ -e "${DEST_CONF}" ]; then
+    FQDN="$(sudo grep -oP '[\w.-]+\.ts\.net' "${DEST_CONF}" | head -1 || true)"
+fi
+if grep -q '__XBUDDY_TAILSCALE_FQDN__' "${SRC_CONF}"; then
+    [ -n "${FQDN}" ] || die "Tailscale-FQDN unbekannt — XBUDDY_TAILSCALE_FQDN=<name>.ts.net setzen."
+    RENDERED_CONF="$(mktemp)"
+    trap 'rm -f "${RENDERED_CONF}"' EXIT
+    sed "s/__XBUDDY_TAILSCALE_FQDN__/${FQDN}/g" "${SRC_CONF}" > "${RENDERED_CONF}"
+    log "FQDN:   ${FQDN}"
+    SRC_CONF="${RENDERED_CONF}"
+fi
+
 log "Quelle: ${SRC_CONF}"
 log "Ziel:   ${DEST_CONF}"
 
