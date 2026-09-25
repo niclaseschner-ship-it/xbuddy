@@ -62,9 +62,8 @@ def test_schwellwerte_unveraendert():
     """-m 12 -s 12 ist Maschinen-Politik (12% RAM/Swap frei) — nicht Teil
     dieses Tickets, darf hier nicht stillschweigend abweichen."""
     args_line = _args_line(_conf_text())
-    assert "-m 12" in args_line and "-s 12" in args_line, (
-        f"Schwellwerte -m 12 -s 12 fehlen oder wurden geändert: {args_line}"
-    )
+    assert "-m 12" in args_line, f"Schwellwert -m 12 fehlt oder wurde geändert: {args_line}"
+    assert "-s 12" in args_line, f"Schwellwert -s 12 fehlt oder wurde geändert: {args_line}"
 
 
 def test_ton_dateidienste_schluesselbund_auf_avoid():
