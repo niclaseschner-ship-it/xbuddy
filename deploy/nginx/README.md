@@ -98,18 +98,9 @@ des Repos.
    `install.sh` (#164):
 
    ```bash
-   FQDN="buddyboard.<tailscale-id>.ts.net"   # Instanz-FQDN anpassen
-
-   # Live-FQDN merken (aus laufender Conf, falls schon deployed):
-   # FQDN=$(grep -oP '[\w.-]+\.ts\.net' /etc/nginx/conf.d/xbuddy-origin.conf | head -1)
-
-   ./deploy/nginx/install.sh
-
-   # Platzhalter ersetzen (sed-Fill-Schritt, STOP-DEPLOY-WARNUNG in conf):
-   sudo sed -i "s/__XBUDDY_TAILSCALE_FQDN__/${FQDN}/g" \
-       /etc/nginx/conf.d/xbuddy-origin.conf
-
-   sudo nginx -t && sudo systemctl reload nginx
+   # Erst-Installation: FQDN mitgeben. Bei Updates liest install.sh ihn
+   # aus der laufenden Conf und füllt den Platzhalter selbst — VOR `nginx -t`.
+   XBUDDY_TAILSCALE_FQDN="buddyboard.<tailscale-id>.ts.net" ./deploy/nginx/install.sh
    ```
 
    Das Skript ist explizit, idempotent und reload-sicher:
