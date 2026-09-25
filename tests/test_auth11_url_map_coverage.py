@@ -492,6 +492,7 @@ def test_parser_auth11_tabelle_kardinalitaet_und_stichproben():
     # Stichproben ueber die Klassen der Tabelle.
     for route in (
         "/auth/pair",
+        "/auth/telegram",
         "/shell/<panel_id>/manifest.json",
         "/controller/_shared/<path:asset>",
         "/api/v1/init-data/validate",
@@ -533,7 +534,7 @@ def test_parser_verwirft_ueberholte_tabellenzeile():
 def test_parser_auth6_schuldstand_kardinalitaet_und_stichproben():
     """Der AUTH-6-Parser liest alle Fence-Bloecke des Abschnitts.
 
-    Ist-Stand 2026-08-13: 15 literale Eintraege. Zuvor 21 — #1865 hat sechs
+    Ist-Stand 2026-09-25: 13 literale Eintraege (#1946: zwei MAU-Zeilen entfallen). Zuvor 21 — #1865 hat sechs
     erledigte Posten ENTFERNT (drei tote Routen aus dem RAT-31-Router-Tod,
     drei mit am 2026-08-12 gefeuertem Trigger). Die Schwelle folgt der Spec
     nach unten: sie soll einen stillen Parse-Verlust fangen, nicht einen
@@ -541,11 +542,10 @@ def test_parser_auth6_schuldstand_kardinalitaet_und_stichproben():
     """
     schuld = auth6_schuldstand()
     assert len(schuld) >= 13, (
-        "Nur %d AUTH-6-Schuldstand-Eintraege geparst (erwartet >=13, Ist: 15)"
+        "Nur %d AUTH-6-Schuldstand-Eintraege geparst (erwartet >=13, Ist: 13)"
         % len(schuld)
     )
     for route in (
-        "/api/v1/seiten/mini-app-uebersicht",           # V1-Stand-Fence
         "/seiten/essen/einkauf",                        # Telegram-Shell-Fence (#1859)
         "/seiten/essen/einkauf/",                       # Trailing-Slash-Variante
         "/seiten/hoerspiel/<kind_id>/eltern",

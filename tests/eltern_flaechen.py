@@ -48,7 +48,7 @@ Betriebs-Laders und meldet jeden uebersprungenen Eintrag **sichtbar**
 Warum die per-Manifest-Naht und nicht das ebenfalls oeffentliche
 `aggregator.manifest_eintraege()`: letzteres ueberspringt Mini-App-Views, wenn
 die Bot-ENV nicht gesetzt ist (SREG-14/SREG-13). Das waere ein
-**umgebungsabhaengiger blinder Fleck** — `seiten/mini-app-uebersicht`
+**umgebungsabhaengiger blinder Fleck** — jede `typ: "mini-app"`-Ansicht
 verschwaende im CI aus der Liste. Die per-Manifest-Ebene traegt genau die
 Skip-Semantik des Betriebs, ohne die ENV-Abhaengigkeit.
 `lade_views_mit_per_view_resilienz` ist dafuer mit #1822 als oeffentliche Naht
@@ -170,21 +170,7 @@ class Ausnahme:
 
 
 AUSNAHMEN: tuple[Ausnahme, ...] = (
-    # ── Achse `mantel` ───────────────────────────────────────────────────────
-    Ausnahme(
-        kennung="seiten/mini-app-uebersicht",
-        achse=ACHSE_MANTEL,
-        sorte=SORTE_AUSNAHME,
-        begruendung=(
-            "Telegram-Mini-App (SREG-14, `typ: \"mini-app\"`): sie laeuft im "
-            "Telegram-WebView und wird nie auf einen Home-Screen installiert. "
-            "Ihr Registry-Eintrag traegt deshalb bewusst NUR den "
-            "Zwischenspeicher-Schluessel (`build_id_source_set`) und weder "
-            "Manifest- noch Service-Worker-Daten — ein halber Mantel ist hier "
-            "die Entscheidung, nicht das Versehen."
-        ),
-        quelle="seiten/pwa_mantel.py:421 (Kommentar 'Mini-Apps ohne installierbaren Mantel')",
-    ),
+    # ── Achse `mantel`: keine Ausnahme mehr (die Mini-App-Übersicht ist mit #1946 entfallen) ──
     # ── Achse `anschluss` ────────────────────────────────────────────────────
     Ausnahme(
         kennung="kibuddy",
@@ -582,9 +568,8 @@ def gegenrichtung_befunde(root: str = REPO_ROOT) -> list[Befund]:
     gehoert benannt, nicht in einen Docstring versteckt.
 
     Schluessel OHNE `start_url` bleiben hier aussen vor — sie sind auf gar
-    keine Flaeche abbildbar und werden auf der Mantel-Achse gefuehrt
-    (`seiten/mini-app-uebersicht`); ein zweiter Eintrag fuer denselben
-    Sachverhalt waere Rauschen.
+    keine Flaeche abbildbar und werden auf der Mantel-Achse gefuehrt; ein
+    zweiter Eintrag fuer denselben Sachverhalt waere Rauschen.
     """
     pwa_mantel = importlib.import_module("seiten.pwa_mantel")
     app = _seiten_app()

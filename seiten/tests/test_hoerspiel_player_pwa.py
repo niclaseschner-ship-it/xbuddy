@@ -63,9 +63,9 @@ def client():
 
 def test_player_ist_siebter_registry_eintrag():
     """AC1: hoerspiel-player ist in pwa_mantel.REGISTRY (8. Eintrag nach T1681 / hoerspiel-eltern;
-    seit #1940 zehn Eintraege mit der Uebersicht)."""
+    seit #1940 zehn Eintraege mit der Uebersicht; #1946 streicht mini-app-uebersicht → neun)."""
     assert _COMPONENT in pwa_mantel.REGISTRY
-    assert len(pwa_mantel.REGISTRY) == 10
+    assert len(pwa_mantel.REGISTRY) == 9
     cfg = pwa_mantel.REGISTRY[_COMPONENT]
     assert cfg.build_id_source_set  # PWML-3
 

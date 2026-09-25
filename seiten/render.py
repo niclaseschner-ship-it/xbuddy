@@ -74,7 +74,7 @@ TYP_MINI_APP = "mini-app"
 # Oberflaeche sie rendert. Abweichende Sichten FILTERN deklarativ ueber dieses
 # Feld — sie forken NICHT die Ableitung (kein zweiter Gruppierungs-Code je View).
 AUDIENCE_UEBERSICHT = "uebersicht"          # server-gerenderte Grossbild-Uebersicht
-AUDIENCE_MINI_APP = "mini-app-uebersicht"   # Telegram-Mini-App-Uebersicht
+AUDIENCE_MINI_APP = "mini-app-uebersicht"   # Telegram-Mini-App-Uebersicht (Flaeche seit #1946 entfallen; Feld bleibt SREG-16-Kontrakt)
 _ALLE_AUDIENCES = (AUDIENCE_UEBERSICHT, AUDIENCE_MINI_APP)
 
 # SREG-12 Icon-Fallback je Sorte. Pfade unter /api/v1/seiten/static/icons/

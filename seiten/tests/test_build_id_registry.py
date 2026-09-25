@@ -48,7 +48,8 @@ def client():
 # ── AC1 — Registry-Vollstaendigkeit + build_id_for-Logik ─────────────────────
 
 def test_mini_app_build_id_routing_tabelle_vollstaendig():
-    """AC1: Alle vier Mini-App-Komponenten sind in pwa_mantel.REGISTRY eingetragen.
+    """AC1: Alle drei Mini-App-Komponenten sind in pwa_mantel.REGISTRY eingetragen
+    (#1946: mini-app-uebersicht entfallen).
 
     T1284-S2: _mini_app_build_id-Adapter retired; _MINI_APP_JS_TO_COMPONENT entfernt.
     Pruefung jetzt direkt auf REGISTRY (Single-Source). PWAM-5-Konvention.
@@ -56,7 +57,6 @@ def test_mini_app_build_id_routing_tabelle_vollstaendig():
     expected_components = {
         "einkauf":              "essen-einkauf.js",
         "plan":                 "plan-einstellungen.js",
-        "mini-app-uebersicht":  "mini-app-uebersicht.js",
         "routine":              "routine-anpassen.js",
     }
     for component, primary_js in expected_components.items():

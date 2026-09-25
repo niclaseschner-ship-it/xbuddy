@@ -1,5 +1,5 @@
 """Seiten-Übersicht als Aufgaben-Katalog-Aufgabe — specs/platform/seiten-registry.md
-SREG-5 (Pivot), specs/platform/mini-app-uebersicht.md MAU-1 und
+SREG-5 (Pivot), SREG-12 (die eine Übersicht, #1946) und
 eltern-chat.md EC-8/EC-9/EC-29.
 
 Diese Aufgabe ist der Adapter der trigger-agnostischen Funktion
@@ -13,9 +13,12 @@ die Übersichtsseite (SREG-12) listet je Panel-Instanz den Editor-Link.
 Trigger: "Kachel entfernen", "Kachel hinzufügen", "Kachel umsortieren",
 "Panel bearbeiten", "Kacheln ändern", "Panel-Editor öffnen".
 
-**SREG-5 Pivot:** Statt eines Text-Links liefert der Skill jetzt einen
-Inline-Button auf die Mini-App-Übersicht (MAU). SREG-5b (zweistufiges
-KI-Matching via aktion="inventar"/"match") ist deprecated und inaktiv.
+**SREG-5 Pivot:** Statt eines Text-Links liefert der Skill einen
+Inline-Button. Seit #1946 (Nic 2026-09-25) öffnet er dieselbe Übersicht wie
+der Browser (`/api/v1/seiten/uebersicht`); die eigene Mini-App-Übersicht (MAU)
+ist entfallen — die Übersicht meldet sich im Telegram-WebView selbst an.
+SREG-5b (zweistufiges KI-Matching via aktion="inventar"/"match") ist
+deprecated und inaktiv.
 
 Eine **lesende** Aufgabe (EC-9): verändert keine Familien-Daten.
 
@@ -28,8 +31,8 @@ RAT-16: Adapter-Disziplin — diese Datei koordiniert NICHT mehr Telegram-
 Senden; der Telegram-Aufruf liegt vollständig beim Framework.
 
 Mini-App-URL-Konfig: kommt aus `mini_app_base_url`-Konstruktor-Parameter
-(von build_catalog befüllt) + Pfad `/api/v1/seiten/mini-app-uebersicht`
-(MAU-1). Leer → Skill zeigt Fehler-Text ohne Button.
+(von build_catalog befüllt) + Pfad `/api/v1/seiten/uebersicht`
+(SREG-12, #1946). Leer → Skill zeigt Fehler-Text ohne Button.
 """
 
 import logging
@@ -40,8 +43,8 @@ from skills import seiten_uebersicht as su_mod
 
 logger = logging.getLogger(__name__)
 
-# MAU-1: Pfad der Mini-App-Übersicht (analog _MAU_APP_PATH im Skill).
-_MAU_APP_PATH = "/api/v1/seiten/mini-app-uebersicht"
+# #1946: der Knopf öffnet die EINE Übersicht (SREG-12) — dieselbe wie im Browser.
+_UEBERSICHT_PATH = "/api/v1/seiten/uebersicht"
 
 
 class SeitenUebersichtTask(ReadTask):
@@ -59,13 +62,13 @@ class SeitenUebersichtTask(ReadTask):
         super().__init__(
             name="seiten_uebersicht",
             description=(
-                "Öffnet die Mini-App-Übersicht — alle Mini Apps und Buddy-Seiten "
+                "Öffnet die Übersicht — alle Mini Apps und Buddy-Seiten "
                 "auf einen Blick. Sofort aufrufen, NICHT erst fragen. "
                 "Trigger: \"Übersicht\", \"alle Apps\", \"was gibt's\", "
                 "\"Mini Apps\", \"alle Seiten\", \"Apps öffnen\", "
                 "\"welche Apps gibt es\", \"zeig mir alles\", "
                 "\"was kann ich aufrufen\", \"Startseite\", \"Home\". "
-                "Sendet einen Button, der die Mini-App-Übersicht öffnet. "
+                "Sendet einen Button, der die Übersicht öffnet. "
                 "Auch ohne Aktions-Verb sofort aufrufen, wenn die Eltern-Nachricht "
                 "eine Aktion (settings/einstellungen/anpassen/bearbeiten/ändern/"
                 "öffnen/zeigen/schicken/geben/app/mini-app/löschen/umsortieren/"
@@ -97,9 +100,9 @@ class SeitenUebersichtTask(ReadTask):
                 "required": [],
             })
         self._is_member_fn = is_member_fn
-        # MAU-1: Mini-App-URL aus mini_app_base_url + Pfad
+        # #1946: Übersichts-URL aus mini_app_base_url + Pfad
         self._mini_app_url = (
-            mini_app_url.rstrip("/") + _MAU_APP_PATH
+            mini_app_url.rstrip("/") + _UEBERSICHT_PATH
             if mini_app_url
             else ""
         )

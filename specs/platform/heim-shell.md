@@ -310,6 +310,10 @@ muss `curl https://<funnel-fqdn>/shell/<panel_id>` **mit** gültigem Cookie
 ## 5. Registrierung & Schnittstelle
 
 ### SHELL-10 — Shell-URL in der Eltern-Seiten-Übersicht
+
+> **#1946 (2026-09-25):** Die MAU-Mini-App ist entfallen; Telegram öffnet
+> dieselbe HTML-Übersicht (`/api/v1/seiten/uebersicht`). Die MAU-Absätze
+> unten sind Geschichte, der MAU-Test-Anker existiert nicht mehr.
 Die Shell-URL ist in der Eltern-Seiten-Übersicht auffindbar — primär in der
 **MAU-Mini-App** (`/api/v1/seiten/mini-app-uebersicht`, Eltern öffnen sie als
 Telegram-Mini-App), zusätzlich in der HTML-Seite (`/api/v1/seiten/uebersicht`,

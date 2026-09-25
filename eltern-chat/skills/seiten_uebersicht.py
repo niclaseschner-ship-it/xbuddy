@@ -1,14 +1,15 @@
 """Seiten-Übersicht — specs/platform/seiten-registry.md (SREG-5/SREG-5b)
-und specs/platform/mini-app-uebersicht.md (MAU-1).
+und SREG-12 (die eine Übersicht, #1946).
 
-**SREG-5 Pivot (2026-06-15):** Dieser Skill ist jetzt ein Klasse-B
+**SREG-5 Pivot (2026-06-15):** Dieser Skill ist ein Klasse-B
 web_app-Launcher (analog routine_anpassen_oeffnen / hoerspiel_oeffnen).
-Er öffnet die Mini-App-Übersicht (MAU) per Inline-Button statt einen
-Text-Link zu liefern.
+Er öffnet die Übersicht per Inline-Button statt einen Text-Link zu liefern.
+Seit #1946 (Nic 2026-09-25) ist das dieselbe Übersicht wie im Browser; die
+eigene Mini-App-Übersicht (MAU) ist entfallen.
 
 **SREG-5b deprecated:** Der zweistufige KI-Matching-Pfad
 (aktion="inventar" / aktion="match") ist inaktiv — er ist durch die
-MAU-Kachel-Suche abgelöst (MAU-2: Volltextsuche auf der Mini-App-Seite).
+Volltextsuche auf der Übersicht abgelöst.
 
 TASK-10c Form (b): der Skill returnt `{text, presentation}` — der Task
 reicht das Dict direkt weiter; das Framework (agent.py + render_form_b)
@@ -23,7 +24,7 @@ eltern-chat-skills.md).
   - `chat_id`         — Telegram-Chat (nur für Logging).
   - `from_user_id`    — Telegram-User-ID des Aufrufers (Berechtigung SREG-6).
   - `is_member_fn`    — Callable `(user_id) -> bool` (SREG-6, EC-2).
-  - `mini_app_url`    — Basis-URL der MAU (MAU-1). Leer → Fehler-Text (kein Button).
+  - `mini_app_url`    — volle URL der Übersicht. Leer → Fehler-Text (kein Button).
 
 **Ausgang:** Form-(b)-Dict `{text, presentation}`:
   - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
@@ -41,22 +42,22 @@ from skills._errors import BerechtigungError
 
 logger = logging.getLogger(__name__)
 
-# MAU-1: Pfad der Mini-App-Übersicht (stabil, URL-4-Konsistenz).
-_MAU_APP_PATH = "/api/v1/seiten/mini-app-uebersicht"
+# #1946: Pfad der einen Übersicht (SREG-12, URL-4-Konsistenz).
+_UEBERSICHT_PATH = "/api/v1/seiten/uebersicht"
 
 # Button-Label (kurz, ein-Wort-Phrase per Leitplanken).
 _BUTTON_LABEL = "🏠 xbuddy öffnen"
 
-# Intro-Text für die MAU-Ankündigung.
+# Intro-Text für die Übersichts-Ankündigung.
 _INTRO_TEXT = "Hier siehst du alle Mini Apps und Seiten:"
 
 
 def seiten_uebersicht(chat_id, from_user_id, is_member_fn, mini_app_url):
-    """Seiten-Übersicht — aufrufbare Funktion (SREG-5 Pivot, MAU-1, EC-29).
+    """Seiten-Übersicht — aufrufbare Funktion (SREG-5 Pivot, #1946, EC-29).
 
-    Baut einen Inline-Button auf die Mini-App-Übersicht (MAU). Keine
-    Backend-Abfrage — die MAU-Seite liefert das Inventar selbst
-    (MAU-2: Volltextsuche, SREG-5b abgelöst).
+    Baut einen Inline-Button auf die Übersicht (SREG-12). Keine
+    Backend-Abfrage — die Übersicht liefert das Inventar selbst
+    (Volltextsuche, SREG-5b abgelöst).
 
     Returnt ein Form-(b)-Dict `{text, presentation}` (TASK-10c):
       - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
@@ -80,8 +81,8 @@ def seiten_uebersicht(chat_id, from_user_id, is_member_fn, mini_app_url):
             "presentation": {},
         }
 
-    # mini_app_url ist bereits die volle URL inkl. /api/v1/seiten/mini-app-uebersicht
-    # (Task-Konstruktor hängt _MAU_APP_PATH an — analog RAO). Nicht nochmal anhängen.
+    # mini_app_url ist bereits die volle URL inkl. /api/v1/seiten/uebersicht
+    # (Task-Konstruktor hängt _UEBERSICHT_PATH an — analog RAO). Nicht nochmal anhängen.
     presentation = {
         "inline_button": {
             "label": _BUTTON_LABEL,
@@ -91,7 +92,7 @@ def seiten_uebersicht(chat_id, from_user_id, is_member_fn, mini_app_url):
 
     button_count = 1
     logger.info(
-        "seiten_uebersicht: MAU-Button für Chat %s, Buttons=%d",
+        "seiten_uebersicht: Übersichts-Button für Chat %s, Buttons=%d",
         chat_id, button_count,
     )
     return {"text": _INTRO_TEXT, "presentation": presentation}

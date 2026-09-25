@@ -374,6 +374,12 @@ _DUAL_GATE_401_HTML = (
     "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
     "<p>Frag den Familien-Chatbot einfach nach einem neuen Cookie für dein "
     "Gerät — dann geht es wieder. Oder pair im Chat ein neues Gerät.</p>"
+    # #1946: im Telegram-WebView (Knopf im Familien-Chat) meldet sich die
+    # Seite selbst an — das Skript tauscht die signierte initData einmal
+    # gegen das Cookie (POST /auth/telegram) und lädt neu. Außerhalb von
+    # Telegram tut es nichts; dann gilt der Text oben.
+    "<script src=\"/api/v1/seiten/static/telegram-anmeldung.js\" "
+    "data-tauschen></script>"
     "</body></html>"
 )
 
@@ -452,9 +458,8 @@ def _get_init_data_config():
 # Inventar, Layout-Kontrakt, Icon-Suche) — im Gegensatz zu require_dual_gate
 # (7b-Browser-Flaechen, nur Cookie) deckt require_init_data zusaetzlich den
 # AUTH-5-Loopback-Bypass (interne Server-Aufrufe) und den tma-Header (MAD-7,
-# Telegram-Mini-App-JS, z. B. routine-anpassen.js bei /api/v1/icons/suche und
-# mini-app-uebersicht.js bei /api/v1/seiten/layout — beide senden
-# `Authorization: tma <initData>`). Kein `mode`-Parameter (anders als
+# Telegram-Mini-App-JS, z. B. routine-anpassen.js bei /api/v1/icons/suche —
+# sendet `Authorization: tma <initData>`). Kein `mode`-Parameter (anders als
 # require_dual_gate): die Factory ist immer HART, wie bei essen/kibuddy/photo/
 # plan/routine/hoerspiel — keine Observe-Stufe fuer AUTH-3-Datenrouten.
 # auth_401 teilt sich den bestehenden `_dual_auth_401`-Renderer (D1: EIN
@@ -515,10 +520,17 @@ def get_seiten_uebersicht():
     # Schmerz beim same-origin-Umbau). Immer frisch rendern.
     # #1940: PWA-Mantel — build_id (Cache-Buster fürs CSS) + SW-Scope aus der
     # Registry (pwa_mantel.REGISTRY['uebersicht']).
+    # #1946: ohne gültiges Cookie (observe-Modus lässt die Seite trotzdem
+    # durch) meldet sich die Übersicht im Telegram-WebView selbst an —
+    # telegram-anmeldung.js tauscht einmal initData gegen das Cookie.
+    bot_token = _get_bot_token()
+    angemeldet = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
+        request.cookies.get(_session_cookie.COOKIE_NAME), bot_token)
     resp = make_response(render_template(
         "uebersicht.html",
         build_id=_uebersicht_build_id(),
         sw_scope=pwa_mantel.REGISTRY["uebersicht"].sw_scope,
+        telegram_tauschen=not angemeldet,
         **layout,
     ))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -603,18 +615,15 @@ def get_seiten_layout():
     """#1210 (Daten-SSoT): der EINE angereicherte Layout-Kontrakt als JSON.
 
     Liefert exakt `render.baue_layout(...)` — dieselbe Ableitung, die der
-    Jinja-Pfad `/uebersicht` rendert. So konsumieren ALLE familienseitigen
-    Uebersichts-/Registry-Oberflaechen (Grossbild + Mini-App) EINE Quelle;
-    keine Oberflaeche re-derived Gruppierung/Anreicherung lokal (SREG-15).
+    Jinja-Pfad `/uebersicht` rendert (SREG-16). Seit #1946 gibt es nur noch
+    diese eine Uebersicht (die Mini-App-Uebersicht ist entfallen); der
+    Endpunkt bleibt als Daten-Kontrakt fuer JSON-Konsumenten stehen.
 
     Das ist ein DATEN-Endpunkt (kein View) — Geschwister zu `GET /api/v1/seiten`
     (SREG-3). Er listet sich darum NICHT in views.json (siehe die Ausnahme in
     test_views_manifest_eigentest.py, analog zum Inventar-Endpunkt selbst).
 
-    Auth (AUTH-11, #1832): require_init_data — mini-app-uebersicht.js ruft
-    diese Route mit `Authorization: tma <initData>` (Telegram-Mini-App-Pfad,
-    seiten/static/mini-app-uebersicht.js:294f); ausserhalb Telegram ohne
-    initData greift der Cookie-Zweig (kein Header gesetzt). Der Kontrakt
+    Auth (AUTH-11, #1832): require_init_data — Cookie- oder tma-Pfad. Der Kontrakt
     traegt keine Geheimnisse (nur Labels/Pfade/URLs aus dem Inventar), aber
     AUTH-11 kennt keine Inhalts-Ausnahme.
     """
@@ -783,6 +792,58 @@ def auth_pair():
     return resp
 
 
+# ============================================================
+#  #1946 — Telegram-Anmeldung: initData → xbuddy_session-Cookie
+# ============================================================
+#
+# Nic 2026-09-25: EINE Übersicht für Browser und Telegram. Der Telegram-Knopf
+# öffnet dieselbe Übersicht wie der Browser; hat der WebView noch kein Cookie,
+# tauscht `seiten/static/telegram-anmeldung.js` die signierte initData hier
+# einmal gegen dasselbe `xbuddy_session`-Cookie, das `/auth/pair` setzt, und
+# lädt neu. Prüfung = die bestehende initData-Prüfung (`_validate_mini_app_request`:
+# HMAC + Altersgrenze von auth_date aus init_data.json). Wer ein Cookie
+# bekommt, entscheidet dieselbe Regel wie beim Nachschicken eines
+# Pairing-Links (auth.md AUTH-2.a, CNS-2): nur Erwachsene der Familie,
+# fail-closed, weil das Cookie ein Credential ist.
+
+
+@app.route("/auth/telegram", methods=["POST"])
+def auth_telegram():
+    """#1946: `POST /auth/telegram` mit `Authorization: tma <initData>` → Cookie.
+
+    - initData gültig (HMAC) und frisch (auth_date innerhalb max_age_seconds)
+      UND Absender ist Erwachsener der Familie → 200 + Set-Cookie
+      `xbuddy_session` (Subjekt = Telegram-user_id, Attribute wie `/auth/pair`).
+    - initData fehlt, manipuliert oder zu alt → 401, kein Cookie.
+    - gültig, aber kein Erwachsener → 403, kein Cookie.
+    - Familie-Service nicht erreichbar → 503, kein Cookie (fail-closed).
+    - Bot-Token fehlt → 500.
+    """
+    init_data, err = _validate_mini_app_request()
+    if err is not None:
+        return err
+
+    erwachsene = _get_familie_client().get_erwachsene_telegram_ids()
+    if erwachsene is None:
+        logging.warning("#1946: Familie-Service nicht erreichbar — "
+                        "Telegram-Anmeldung abgelehnt (fail-closed)")
+        return jsonify({"error": "Familie-Service nicht erreichbar"}), 503
+    if init_data.user_id not in erwachsene:
+        logging.warning("#1946: user_id %s ist kein Erwachsener → 403",
+                        init_data.user_id)
+        return jsonify({"error": "Nur für Erwachsene der Familie"}), 403
+
+    bot_token = _get_bot_token()
+    resp = make_response(jsonify({"angemeldet": True}), 200)
+    resp.headers["Cache-Control"] = "no-store"
+    resp.set_cookie(
+        _session_cookie.COOKIE_NAME,
+        _session_cookie.sign_session(init_data.user_id, bot_token),
+        **_session_cookie.session_cookie_kwargs(),
+    )
+    return resp
+
+
 @app.route("/seiten/essen/einkauf/", methods=["GET"])
 # AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859):
 # der echte Entry-Point ist ein Telegram-web_app-Button
@@ -820,7 +881,7 @@ def essen_einkauf_view():
     401/403 sperrt UI. Daten-Schutz auf API-Routen (essen/main.py) bleibt scharf.
 
     Cache-Buster: build_id aus mtime der JS-Datei (Telegram-WebView cached
-    Mini-App-Assets sonst aggressiv — Pattern analog routine/MAU/hoerspiel).
+    Mini-App-Assets sonst aggressiv — Pattern analog routine/hoerspiel).
 
     ESSEN-33: HTML bindet manifest.json + sw.js ein (PWA-Mantel). Asset-Routen
     leben unter /seiten/essen/einkauf/<asset> — siehe einkauf_asset_view.
@@ -1051,8 +1112,8 @@ def _plan_einst_build_id():
 @app.route("/seiten/plan/einstellungen/", methods=["GET"])
 # AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): die
 # Flaeche ist in plan/views.json als typ:"pwa"/zielgruppe:"eltern" gelistet
-# und wird ueber die Mini-App-Uebersicht (mini_app_uebersicht_view, aggregiert
-# aus /api/v1/seiten) als Telegram-web_app-Kachel angeboten — derselbe
+# und wurde bis #1946 ueber die Mini-App-Uebersicht als Telegram-web_app-Kachel
+# angeboten — derselbe
 # WebView-Entry-Mechanismus wie einkauf/routine/wetter (siehe Kommentar an
 # essen_einkauf_view_trailing_slash fuer die volle Begruendung: require_dual_gate
 # ist cookie-only ohne tma-Zweig, MAD-11 belegt fehlenden Authorization-Header
@@ -1257,43 +1318,6 @@ def connector_sw_view():
     resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
     resp.headers["Service-Worker-Allowed"] = scope
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return resp
-
-
-@app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): der
-# echte Entry-Point ist ein Telegram-web_app-Button
-# (eltern-chat/skills/seiten_uebersicht.py:88, web_app_url). require_dual_gate
-# ist seit RAT-32 cookie-only OHNE tma-Zweig
-# (tools/initdata/auth_gate.py:284); MAD-11 haelt als ratifizierten
-# Live-Befund fest, dass die Telegram-WebView beim HTML-Initial-Load KEINEN
-# Authorization-Header sendet — ob sie den xbuddy_session-Cookie traegt,
-# behauptet kein Spec-Ort. Ein Gate haette das JS nie starten lassen, das
-# seinerseits initData/tma fuer /api/v1/seiten/layout liefert (require_init_data,
-# s. dort). Offene Nic-Probe wie bei den anderen fuenf Flaechen.
-def mini_app_uebersicht_view():
-    """MAU-1: Telegram-Mini-App-Uebersichts-View — HTML fuer den Familien-Bot.
-
-    Auth (MAD-7 / MAU-3): Authorization: tma <initData>-Header Pflicht.
-    Fehlender oder ungueliger Header → 401. Nicht-Familienmitglied → 403.
-
-    JS laedt das Inventar bei Boot via:
-      GET /api/v1/seiten  (SREG-3, aggregiertes Inventar)
-    und rendert zwei Accordion-Sektionen (MAU-4, RAT-31 E3 #1496 — Geraete-Paare entfernt):
-      1. Mini Telegram Apps (typ: mini-app)
-      2. Buddy-Seiten (typ: eltern)
-
-    Cache-Buster (Mini-App-Cache-Buster-Pattern): build_id aus mtime der JS-Datei
-    haengt am CSS+JS als ?v=... — Telegram cached Mini-App-Assets sonst aggressiv.
-    Response-Header no-store zusaetzlich, damit jeder Open das HTML neu holt.
-    """
-    # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth (Telegram-WebView
-    # sendet beim Initial-Load keinen Header). JS macht platform.ensureAuth().
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    build_id = pwa_mantel.build_id_for("mini-app-uebersicht", static_dir)
-    resp = make_response(render_template("mini-app-uebersicht.html", build_id=build_id))
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    resp.headers["Pragma"] = "no-cache"
     return resp
 
 
@@ -1604,9 +1628,8 @@ def _hoerspiel_eltern_build_id():
 @app.route("/seiten/hoerspiel/<kind_id>/eltern", methods=["GET"])
 # AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): die
 # Flaeche ist in hoerspiel/views.json als typ:"pwa"/auth:"tma"/
-# zielgruppe:"eltern" gelistet und wird ueber die Mini-App-Uebersicht
-# (mini_app_uebersicht_view, aggregiert aus /api/v1/seiten) als
-# Telegram-web_app-Kachel angeboten — derselbe WebView-Entry-Mechanismus wie
+# zielgruppe:"eltern" gelistet und wurde bis #1946 ueber die Mini-App-Uebersicht
+# als Telegram-web_app-Kachel angeboten — derselbe WebView-Entry-Mechanismus wie
 # einkauf/routine/wetter (siehe Kommentar an essen_einkauf_view_trailing_slash
 # fuer die volle Begruendung: require_dual_gate ist cookie-only ohne
 # tma-Zweig, MAD-11 belegt fehlenden Authorization-Header beim Initial-Load,
