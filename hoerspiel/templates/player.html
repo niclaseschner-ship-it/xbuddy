@@ -17,8 +17,11 @@
 <link rel="stylesheet" href="/seiten/hoerspiel/player/player.css?v={{ build_id }}">
 
 {# HSP-55: PWA-Install — Manifest + Icons über die seiten-Player-Route (PWML-1).
-   build_manifest liefert display:standalone; Icons kommen aus hoerspiel/static/. #}
-<link rel="manifest" href="/seiten/hoerspiel/player/manifest.json">
+   build_manifest liefert display:standalone; Icons kommen aus hoerspiel/static/.
+   #1953: crossorigin="use-credentials" ist load-bearing — der Player gatet ALLE
+   Assets per Cookie (HSP-47), Chrome holt das Manifest aber ohne Credentials,
+   bekam 401 und meldete "manifest-parsing-or-network-error" (CDP-Beleg im PR). #}
+<link rel="manifest" href="/seiten/hoerspiel/player/manifest.json" crossorigin="use-credentials">
 <link rel="apple-touch-icon" href="/seiten/hoerspiel/player/icon-192.png">
 
 {# HSP-49: Instanz-Liste server-seitig injiziert (Track A2 rendert instanzen_json).

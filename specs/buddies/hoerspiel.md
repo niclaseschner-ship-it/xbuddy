@@ -1759,6 +1759,19 @@ der Umschalter tauscht nur den **Inhalts-Kontext** (`<kind_id>`).
 *Test-Implikation:* Manifest `display:standalone`, Service-Worker + Cache-Buster
 über die Lib (PWML); ohne gültigen Cookie 401, kein Render.
 
+*#1953:* Weil auch das Manifest cookie-gegatet ist, lädt `player.html` es mit
+`crossorigin="use-credentials"` — Chrome holt Manifeste sonst ohne Cookie,
+bekam 401 und meldete den Player als nicht installierbar
+(`manifest-parsing-or-network-error`, CDP-Beleg in PR #1954).
+
+*#1953 — Übersicht:* Die per-Kind-Einträge `alben-<kind>` sind aus
+`hoerspiel/views.json` entfernt; auf der Übersicht steht der Player (für alle
+Kinder, HSP-49). Die Tablet-`alben`-View selbst bleibt unverändert (Panels
+bekommen ihre Hörspiel-Kacheln aus der Instanz-Liste, INST-1). Der
+Eltern-Eintrag ist generisch: `/seiten/hoerspiel/alle/eltern` leitet zur
+Laufzeit auf die erste Instanz der Registry (`instanzen.json`) um — kein
+Kindername im Repo.
+
 ### HSP-48 — Startfläche „Regal" + Mini-Player + voller Player (Gate-B-Wahl B)
 Zwei Player-Ebenen, kein Tab-Chrome, kein Menü auf der Startfläche (HSP-3-Prinzip
 „statisches Dashboard" für Kind-Frontends):

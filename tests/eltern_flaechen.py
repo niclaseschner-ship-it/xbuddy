@@ -37,8 +37,8 @@ Es gibt zwei, und sie verhalten sich bei einer fehlerhaften Datei
   (`seiten.aggregator.lade_views_mit_per_view_resilienz`, SREG-3/DCOMP-3)
   ueberspringt **nur den kaputten Eintrag**.
 
-Real relevant: `hoerspiel/views.json:42` traegt `zielgruppe: "erwachsen"` —
-kein erlaubter Wert. Mit dem strengen Lader verschwaenden **alle**
+Real relevant war bis #1953 `hoerspiel/views.json` mit `zielgruppe:
+"erwachsen"` — kein erlaubter Wert. Mit dem strengen Lader verschwaenden **alle**
 Hoerspiel-Ansichten aus dieser Pruefung, inklusive `hoerspiel-eltern` — genau
 der Flaeche, um die es geht. Der Test waere gruen und haette sein Ziel
 verfehlt. Deshalb laeuft die Ableitung ueber die Ueberspringen-Semantik des
@@ -67,7 +67,7 @@ Tragfaehig ist nur die Start-Adresse — und die auch nur normalisiert:
 2. Die normalisierte Adresse gegen die `url_map` des `seiten`-Dienstes
    aufloesen und die **Regel** als Schluessel nehmen. Das haelt auch
    instanz-parametrische Flaechen zusammen:
-   `hoerspiel/views.json` deklariert `/seiten/hoerspiel/mia/eltern`, das
+   `hoerspiel/views.json` deklariert `/seiten/hoerspiel/alle/eltern`, das
    Mantel-Register bildet seine `start_url` aus der Instanzen-Registry
    (`_hoerspiel_primary_slug()`) — ohne `instanzen.json` steht dort `kind1`.
    Ein reiner String-Vergleich waere hier umgebungsabhaengig falsch; beide
@@ -288,28 +288,9 @@ AUSNAHMEN: tuple[Ausnahme, ...] = (
             "ratifizierte Ausnahme — beides loescht diese Zeile."
         ),
     ),
-    # ── Achse `lader` ────────────────────────────────────────────────────────
-    Ausnahme(
-        kennung="hoerspiel/alben-emil",
-        achse=ACHSE_LADER,
-        sorte=SORTE_SCHULDSTAND,
-        begruendung=(
-            "Der Eintrag traegt `zielgruppe: \"erwachsen\"`; erlaubt sind nur "
-            "'kind' und 'eltern' (tools/views_manifest.py:52). Der "
-            "Betriebs-Lader ueberspringt genau diesen einen Eintrag, der "
-            "strenge Lader liesse die GANZE Datei fallen — und damit auch "
-            "`hoerspiel-eltern`, die Flaeche, die #1822 schliesst. Der Test "
-            "meldet den Fund, er repariert ihn nicht: Registry-Daten sind ein "
-            "eigener Vorgang."
-        ),
-        quelle="hoerspiel/views.json:42",
-        trigger=(
-            "Sobald hoerspiel/views.json:42 auf einen erlaubten Wert korrigiert "
-            "ist ODER 'erwachsen' in tools/views_manifest.py:52 "
-            "(ERLAUBTE_ZIELGRUPPEN) aufgenommen wird, laedt der Eintrag sauber "
-            "und diese Zeile faellt weg."
-        ),
-    ),
+    # ── Achse `lader`: keine Ausnahme mehr — der Eintrag `alben-emil`
+    #    (zielgruppe "erwachsen") ist mit #1953 samt den übrigen Kind-Alben
+    #    aus hoerspiel/views.json entfallen (der Hörspiel-Player löst sie ab). ──
     # ── Achse `pfad`: keine Ausnahme mehr — die zwei 404-Unterfelder der
     #    Plan-Einstellungen sind mit #1906 in plan/views.json korrigiert. ──
     # ── Achse `chat` (#1906) ─────────────────────────────────────────────────
@@ -679,7 +660,7 @@ def route_befunde(root: str = REPO_ROOT, app=None) -> list[Befund]:
     blind, fuer den sie da ist.
 
     Der Verbund laeuft ueber dieselbe Normalisierung wie die Mantel-Achse:
-    `hoerspiel/views.json:6` deklariert `/seiten/hoerspiel/mia/eltern`,
+    `hoerspiel/views.json:6` deklariert `/seiten/hoerspiel/alle/eltern`,
     ausgeliefert wird `/seiten/hoerspiel/<kind_id>/eltern` — ein String-
     Vergleich waere hier umgebungsabhaengig falsch, die aufgeloeste Regel
     traegt. `app` ist die Naht fuer die Fehlerpfad-Probe
@@ -787,7 +768,7 @@ def chat_befunde(root: str = REPO_ROOT, skills_dir: str | None = None,
     Eltern trotzdem zum Weitergeben. Verglichen wird normalisiert (Query und
     abschliessender Schraegstrich weg) und, wo der seiten-Dienst die Adresse
     bedient, zusaetzlich ueber die aufgeloeste Flask-Regel — so traegt auch
-    ein parametrischer Eintrag (`/seiten/hoerspiel/mia/eltern`).
+    ein parametrischer Eintrag (`/seiten/hoerspiel/alle/eltern`).
     """
     app = app if app is not None else _seiten_app()
 

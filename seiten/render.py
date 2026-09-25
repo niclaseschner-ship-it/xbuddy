@@ -32,6 +32,8 @@ SREG-12-Anker:
 import logging
 from urllib.parse import urlencode
 
+from seiten import logos
+
 logger = logging.getLogger(__name__)
 
 
@@ -256,6 +258,82 @@ def _mini_apps(eintraege, heim_origin, tailscale_origin, funnel_origin=""):
 
 
 # ============================================================
+#  Übersicht nach Buddy (#1953, Nic 2026-09-25)
+# ============================================================
+
+# Die Übersicht selbst steht im Inventar (SREG-2, Chat-Suche), listet sich auf
+# der eigenen Seite aber nicht (Nic 2026-09-25).
+UEBERSICHT_PFAD = "/api/v1/seiten/uebersicht"
+
+# Zielgruppen-Etikett je Sorte — statt eigener Sektionen (Nic 2026-09-25).
+_ETIKETT = {
+    TYP_DISPLAY: "Kinder-Display",
+    TYP_ELTERN: "Eltern",
+    TYP_MINI_APP: "Eltern",
+    TYP_CONTROLLER: "Controller",
+}
+
+EINSTELLUNGEN = "einstellungen"
+
+
+def _zeile(karte, buddy):
+    """Eine Seite in der Buddy-Gruppe: Name, Satz, Etikett, Logo, Kopier-Link.
+
+    Keine sichtbare Adresse — `pfad` ist das Tap-Ziel, `kopier_url` die volle
+    Adresse für „Link kopieren" (Funnel vor Heim; leer → der Browser setzt
+    location.origin davor)."""
+    urls = karte.get("urls") or {}
+    return {
+        "key": karte["key"],
+        "label": karte["label"],
+        "zeigt": karte["zeigt"],
+        "pfad": karte["pfad"],
+        "typ": karte["typ"],
+        "etikett": _ETIKETT.get(karte["typ"], "Eltern"),
+        "buddy": buddy,
+        "logo": logos.logo_url(buddy) or karte["icon"],
+        "kopier_url": urls.get("funnel") or urls.get("heim") or "",
+        "suchtext": " ".join([karte["label"], karte["zeigt"],
+                              " ".join(karte.get("synonyme") or []),
+                              logos.name(buddy)]),
+        "variante": bool(karte.get("variante")),
+    }
+
+
+def _uebersicht_gruppen(eintraege, heim_origin, funnel_origin=""):
+    """Gruppen der Übersicht: je Buddy eine, alphabetisch nach Anzeigename;
+    Plattform-Dinge (logos.json `einstellungen`) als Gruppe „Einstellungen"
+    am Ende. Jede Gruppe trägt Logo + Namen ihres Buddys (seiten/logos.json)."""
+    gruppen = {}
+    for e in eintraege:
+        if (e.get("pfad") or "").split("?")[0].rstrip("/") == UEBERSICHT_PFAD:
+            continue
+        app = e.get("app") or ""
+        if not app:
+            continue
+        buddy = logos.buddy_fuer(e.get("key"), app)
+        gruppe_id = EINSTELLUNGEN if logos.ist_einstellung(buddy) else buddy
+        karten = [_karte_basis(e, heim_origin, "", funnel_origin)]
+        karten += _varianten_karten(e, heim_origin, "", funnel_origin)
+        gruppen.setdefault(gruppe_id, []).extend(_zeile(k, buddy) for k in karten)
+
+    def _gruppe(gid, zeilen):
+        if gid == EINSTELLUNGEN:
+            return {"id": gid, "name": logos.lade()["einstellungen"]["name"],
+                    "logo": None, "zeilen": zeilen}
+        return {"id": gid, "name": logos.name(gid),
+                "logo": logos.logo_url(gid) or _FALLBACK_ICON[TYP_ELTERN],
+                "zeilen": zeilen}
+
+    buddies = sorted((g for g in gruppen if g != EINSTELLUNGEN),
+                     key=lambda g: logos.name(g).casefold())
+    ergebnis = [_gruppe(g, gruppen[g]) for g in buddies]
+    if EINSTELLUNGEN in gruppen:
+        ergebnis.append(_gruppe(EINSTELLUNGEN, gruppen[EINSTELLUNGEN]))
+    return ergebnis
+
+
+# ============================================================
 #  Layout-Aufbau (V2)
 # ============================================================
 
@@ -295,6 +373,9 @@ def baue_layout(inventar, heim_origin, tailscale_origin, funnel_origin=""):
         # fuer Rueckwaertskompatibilitaet (Mini-App-JS liest das Feld).
         "hero_paare": [],
         "buddy_gruppen": buddies,
+        # #1953: die Sicht der Übersichts-Seite — nach Buddy gruppiert, mit
+        # Logo, ohne Selbst-Eintrag, „Einstellungen" am Ende.
+        "gruppen": _uebersicht_gruppen(eintraege, heim_origin, funnel_origin),
         # SREG-14 / #1210: dedizierte Mini-App-Sektion (additiv — Jinja liest sie
         # nicht; die Mini-App-Uebersicht rendert sie mit Telegram-Deep-Link).
         "mini_apps": _mini_apps(eintraege, heim_origin, tailscale_origin, funnel_origin),

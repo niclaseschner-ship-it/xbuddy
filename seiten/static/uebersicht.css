@@ -1,198 +1,188 @@
-/* uebersicht.css — Stil der EINEN Übersicht (SREG-12, #1940).
+/* uebersicht.css — Stil der EINEN Übersicht (SREG-12, #1940, #1953).
    Ausgelagert aus uebersicht.html, damit der PWA-Mantel (pwa_mantel.REGISTRY
-   ['uebersicht']) seine build_id daran festmachen kann. */
-/* SREG-12: Eltern am Handy. Daumen-bedienbar, hoher Kontrast,
-   großzügige Tap-Targets (min 44px). */
+   ['uebersicht']) seine build_id daran festmachen kann; kacheln.html teilt es.
+
+   #1953 (Nic 2026-09-25): ein ruhiger, einheitlicher Look aus den Mantel-
+   Farben — Olivgrün #47503C (theme_color), Sand #F5F1E8 (background_color),
+   Orange #D87A3E als einziger Akzent. Eine Kartenform, eine Logo-Größe,
+   ein Abstandsraster (4/8/12/16 px). Mobile first, hell und dunkel. */
 :root {
-  --bg: #f4f5f7;
+  --oliv: #47503C;
+  --sand: #F5F1E8;
+  --orange: #D87A3E;
+  --bg: var(--sand);
   --card: #ffffff;
-  --ink: #1a1a1a;
-  --ink-soft: #555;
-  --rule: #d8d8d8;
-  --accent: #2d62d8;
+  --ink: #23271E;
+  --ink-soft: #5E6554;
+  --rule: #E2DCCD;
+  --accent: var(--oliv);
+  --etikett-bg: #ECE7DA;
+  --etikett-kind-bg: #F8E3D3;
+  --etikett-kind-ink: #8A4518;
+  --radius: 14px;
   --warn-bg: #fff4d6;
   --warn-rule: #e0b900;
-  --variante-rule: #b07cd6;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1B1D17;
+    --card: #262920;
+    --ink: #EEEBE2;
+    --ink-soft: #B3B6A6;
+    --rule: #3A3E33;
+    --accent: #C9D3B5;
+    --etikett-bg: #34382C;
+    --etikett-kind-bg: #4A3222;
+    --etikett-kind-ink: #F2C7A5;
+    --warn-bg: #3b3420;
+    --warn-rule: #8a7a2c;
+  }
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
 }
 header.page {
-  padding: 16px 14px 8px;
-  background: var(--card);
+  padding: 12px 16px;
+  background: var(--bg);
   border-bottom: 1px solid var(--rule);
   position: sticky;
   top: 0;
   z-index: 10;
 }
-h1 { font-size: 1.3rem; margin: 0 0 10px; }
-.banner-tailscale {
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-rule);
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin: 0 14px 10px;
-  font-size: 0.9rem;
+.kopf { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.kopf-logo { width: 40px; height: 40px; border-radius: 10px; }
+h1 { font-size: 1.35rem; margin: 0; color: var(--accent); letter-spacing: 0.01em; }
+input.suche {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  min-height: 44px;
 }
+input.suche:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .banner-snapshot {
   background: var(--warn-bg);
   border: 1px solid var(--warn-rule);
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin: 0 14px 10px;
-  font-size: 0.9rem;
-}
-input.suche {
-  width: 100%;
-  padding: 10px 12px;
-  font-size: 1rem;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  min-height: 44px;
-}
-.typ-chips {
-  display: flex;
-  gap: 6px;
-  padding: 8px 14px 12px;
-  overflow-x: auto;
-  background: var(--card);
-  border-bottom: 1px solid var(--rule);
-  -webkit-overflow-scrolling: touch;
-}
-.typ-chip {
-  flex: 0 0 auto;
-  padding: 6px 12px;
-  border: 1px solid var(--rule);
-  background: var(--card);
-  border-radius: 999px;
-  font-size: 0.9rem;
-  cursor: pointer;
-  min-height: 36px;
-}
-.typ-chip[aria-pressed="true"] {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-main { padding: 12px 14px 80px; }
-section.sektion { margin: 18px 0; }
-section.sektion > h2 {
-  font-size: 1.05rem;
-  margin: 0 0 10px;
-  color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
-}
-.karte {
-  background: var(--card);
-  border: 1px solid var(--rule);
   border-radius: 8px;
-  padding: 10px 12px;
-}
-.karte.variante {
-  border-style: dashed;
-  border-color: var(--variante-rule);
-}
-.karte > header {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 4px;
-}
-.karte .icon {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-  flex: 0 0 32px;
-}
-.karte .label { font-weight: 600; font-size: 1rem; }
-.karte .typ-badge {
-  display: inline-block;
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--rule);
-  color: var(--ink-soft);
-  margin-left: auto;
-  text-transform: uppercase;
-}
-.karte .zeigt {
-  color: var(--ink-soft);
+  padding: 8px 12px;
+  margin: 12px 16px 0;
   font-size: 0.9rem;
-  margin: 0 0 8px;
 }
-.urls {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+main { padding: 16px 16px 96px; max-width: 760px; margin: 0 auto; }
+
+/* ── Installieren (#1953) ───────────────────────────────────────────── */
+.installieren {
+  margin: 16px 16px 0;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--orange);
+  border-radius: var(--radius);
+  max-width: 728px;
 }
-.url-row {
-  display: flex;
-  gap: 6px;
+@media (min-width: 792px) { .installieren { margin: 16px auto 0; } }
+.installieren p { margin: 0 0 8px; }
+.installieren .klein { font-size: 0.85rem; color: var(--ink-soft); margin: 8px 0 0; }
+.knopf {
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }
-.url-label {
-  flex: 0 0 70px;
-  font-size: 0.8rem;
+.knopf-voll { background: var(--oliv); border-color: var(--oliv); color: #fff; width: 100%; }
+
+/* ── Buddy-Gruppen ──────────────────────────────────────────────────── */
+.gruppe {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  margin: 0 0 16px;
+  overflow: hidden;
+}
+.gruppe-kopf {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.gruppe-kopf .logo { width: 48px; height: 48px; border-radius: 12px; flex: 0 0 48px; }
+.gruppe-kopf h2 { margin: 0; font-size: 1.1rem; color: var(--accent); }
+.gruppe-einstellungen .gruppe-kopf { padding: 12px 16px; }
+.gruppe-einstellungen .gruppe-kopf h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--ink-soft);
 }
-.url-link {
-  flex: 1;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: 0.82rem;
-  color: var(--accent);
-  text-decoration: underline;
-  overflow-wrap: anywhere;
-  /* SREG-12: Long-Press am Handy fuer Browser-Pfad "Link kopieren" muss
-     funktionieren — daher KEINE Klick-/Selektion-Blockaden auf Link-Inhalten. */
+.zeilen { list-style: none; margin: 0; padding: 0; }
+.zeile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 0;
+  border-top: 1px solid var(--rule);
 }
-.copy-btn {
+.zeile:first-child { border-top: 0; }
+.zeile-link {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 0 8px 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.zeile-link:active { opacity: 0.7; }
+.zeile-logo { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 40px; }
+.zeile-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zeile-titel { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.zeile .label { font-weight: 600; font-size: 1rem; }
+.zeile .zeigt { font-size: 0.88rem; color: var(--ink-soft); }
+.etikett {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--etikett-bg);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.etikett-display { background: var(--etikett-kind-bg); color: var(--etikett-kind-ink); }
+.kopieren {
   flex: 0 0 auto;
+  min-height: 44px;
   padding: 6px 10px;
   border: 1px solid var(--rule);
-  background: var(--card);
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  min-height: 32px;
-  min-width: 44px;
-}
-.copy-btn[data-copied="1"] { background: #d4f4dd; border-color: #6abf83; }
-.buddy-gruppe {
-  background: var(--card);
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  padding: 14px;
-  margin-bottom: 14px;
-}
-.buddy-gruppe > header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 10px;
-}
-.buddy-gruppe > header .app-slug {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-weight: 600;
-}
-.buddy-gruppe > header .anzahl {
-  font-size: 0.85rem;
+  border-radius: 999px;
+  background: transparent;
   color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
 }
-.karten-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-@media (min-width: 720px) {
-  .karten-grid { grid-template-columns: 1fr 1fr; }
-}
+.kopieren[data-copied="1"] { border-color: var(--oliv); color: var(--accent); }
+
 .leer-hinweis {
   text-align: center;
   padding: 20px;
@@ -201,46 +191,57 @@ section.sektion > h2 {
 }
 .toast {
   position: fixed;
-  bottom: 30px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--ink);
-  color: white;
+  max-width: calc(100% - 32px);
+  overflow-wrap: anywhere;
+  background: var(--oliv);
+  color: #fff;
   padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 0.9rem;
   opacity: 0;
   transition: opacity 0.2s;
   pointer-events: none;
   z-index: 20;
 }
-.toast.visible { opacity: 0.95; }
-/* SREG-12 Filter: "hidden" Karten/Gruppen */
+.toast.visible { opacity: 0.97; pointer-events: auto; user-select: all; }
 [hidden] { display: none !important; }
 
-/* #1906 — Auswahl-Seite "Kacheln bearbeiten" (teilt sich dieses Stylesheet
-   mit der Übersicht, siehe kacheln.html / pwa_mantel.REGISTRY['uebersicht']). */
+/* ── #1906: Auswahl-Seite "Kacheln bearbeiten" (teilt dieses Stylesheet,
+   siehe kacheln.html / pwa_mantel.REGISTRY['uebersicht']). ─────────── */
+section.sektion { margin: 0 0 16px; }
+.karten-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 720px) { .karten-grid { grid-template-columns: 1fr 1fr; } }
+.karte {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.karte > header { display: flex; gap: 12px; align-items: center; margin-bottom: 4px; }
+.karte .label { font-weight: 600; font-size: 1rem; }
+.karte .zeigt { color: var(--ink-soft); font-size: 0.9rem; margin: 0 0 8px; }
+.urls { display: flex; flex-direction: column; gap: 8px; }
+.url-row { display: flex; gap: 8px; align-items: center; }
 .zurueck-link {
   display: inline-block;
   color: var(--accent);
   text-decoration: none;
   font-size: 0.9rem;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
-.kopf-hinweis {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.9rem;
-}
+.kopf-hinweis { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
 .panel-karte .label { font-size: 1.05rem; }
 .panel-bearbeiten-link {
   display: inline-block;
-  padding: 8px 14px;
+  padding: 8px 16px;
   min-height: 44px;
   line-height: 28px;
-  border-radius: 6px;
-  background: var(--accent);
-  color: white !important;
+  border-radius: 999px;
+  background: var(--oliv);
+  color: #fff !important;
   text-decoration: none;
   font-weight: 600;
 }

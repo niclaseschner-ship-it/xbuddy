@@ -1,0 +1,37 @@
+{
+  "_doc": "Buddy-Logos (#1953) — die EINE Wahrheit: je Buddy genau ein ARASAAC-Piktogramm. Daraus erzeugt seiten/static/logos/_make_logos.py die PWA-Icons (192/512/maskable) unter seiten/static/logos/<buddy>/ und kopiert sie in die Icon-Ordner aller Mäntel dieses Buddys. Die Übersicht zeigt dasselbe Logo auf den Karten. Lizenz: ARASAAC, CC BY-NC-SA 4.0 (specs/platform/icons.md ICONS-6, seiten/static/logos/SOURCES.md).",
+  "buddies": {
+    "essen":     {"name": "Essen",            "arasaac": 28339, "wort": "obst"},
+    "hoerspiel": {"name": "Hörspiel",         "arasaac": 5915,  "wort": "kopfhörer"},
+    "kibuddy":   {"name": "KIBuddy",          "arasaac": 37404, "wort": "mikrofon"},
+    "photo":     {"name": "Fotos",            "arasaac": 3281,  "wort": "bilderrahmen"},
+    "plan":      {"name": "Wochenplan",       "arasaac": 32488, "wort": "kalender"},
+    "routine":   {"name": "Routine",          "arasaac": 30207, "wort": "liste"},
+    "wetter":    {"name": "Wetter",           "arasaac": 24721, "wort": "wetter"},
+    "seiten":    {"name": "Übersicht",        "arasaac": 2317,  "wort": "haus"},
+    "connector": {"name": "KI-Anbieter",      "arasaac": 2373,  "wort": "stecker"}
+  },
+  "einstellungen": {
+    "_doc": "Plattform-Dinge stehen auf der Übersicht als eigene Gruppe am Ende (Nic 2026-09-25).",
+    "name": "Einstellungen",
+    "buddies": ["seiten", "connector"]
+  },
+  "zuordnung": {
+    "_doc": "Inventar-Schlüssel, deren Buddy nicht der Manifest-Ordner ist (vom seiten-Service gehostet, gehören aber einem Buddy).",
+    "seiten-hoerspiel-player": "hoerspiel",
+    "seiten-connector": "connector"
+  },
+  "maentel": {
+    "_doc": "Mantel (pwa_mantel.REGISTRY bzw. Display-Manifest) -> Buddy + Icon-Ordner (relativ zur Repo-Wurzel) + Dateien.",
+    "einkauf":          {"buddy": "essen",     "ordner": "seiten/static/einkauf"},
+    "plan":             {"buddy": "plan",      "ordner": "seiten/static/plan"},
+    "routine":          {"buddy": "routine",   "ordner": "seiten/static/routine"},
+    "wetter-regeln":    {"buddy": "wetter",    "ordner": "seiten/static/wetter"},
+    "hoerspiel-eltern": {"buddy": "hoerspiel", "ordner": "hoerspiel/static"},
+    "hoerspiel-player": {"buddy": "hoerspiel", "ordner": "hoerspiel/static"},
+    "connector":        {"buddy": "connector", "ordner": "seiten/static/connector"},
+    "shell":            {"buddy": "seiten",    "ordner": "seiten/static/shell"},
+    "uebersicht":       {"buddy": "seiten",    "ordner": "seiten/static/uebersicht"},
+    "kibuddy-frage":    {"buddy": "kibuddy",   "ordner": "kibuddy/static/icons", "dateien": ["icon-192.png", "icon-512.png"]}
+  }
+}

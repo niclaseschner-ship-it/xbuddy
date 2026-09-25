@@ -16,6 +16,10 @@
  *
  * Links (#1946 Punkt 5): Links auf derselben Origin öffnen im WebView; Links
  * auf eine andere Origin gehen über Telegram.WebApp.openLink in den Browser.
+ *
+ * #1953: `window.xbuddyTelegram = {imTelegram, imBrowserOeffnen(url)}` — die
+ * Übersicht fragt darüber, ob sie im WebView läuft, und öffnet sich zum
+ * Installieren im externen Browser.
  */
 (function () {
   "use strict";
@@ -105,8 +109,27 @@
     });
   }
 
+  // #1953: im Telegram-WebView lässt sich nichts installieren. Die Übersicht
+  // bietet darum „im Browser öffnen" an — über Telegram.WebApp.openLink, das
+  // die Adresse im externen Browser öffnet. Lädt das SDK noch, wird nach dem
+  // Laden geöffnet; ohne SDK bleibt window.open.
+  function imBrowserOeffnen(url) {
+    var wa = webApp();
+    if (wa && typeof wa.openLink === "function") { wa.openLink(url); return; }
+    var s = document.createElement("script");
+    s.src = SDK_URL;
+    s.onload = function () {
+      var w = webApp();
+      if (w && typeof w.openLink === "function") { w.openLink(url); } else { window.open(url, "_blank"); }
+    };
+    s.onerror = function () { window.open(url, "_blank"); };
+    document.head.appendChild(s);
+  }
+
   var skript = document.currentScript;
   var sollTauschen = !!(skript && skript.hasAttribute("data-tauschen"));
+
+  window.xbuddyTelegram = { imTelegram: imTelegram(), imBrowserOeffnen: imBrowserOeffnen };
 
   if (!imTelegram()) return;
 

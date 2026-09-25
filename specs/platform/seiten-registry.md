@@ -216,7 +216,16 @@ trägt; der Skill bleibt ein dünner Launcher.
 > (`auth.md` AUTH-2.b, `POST /auth/telegram`). Wo oben „MAU" steht, ist
 > jetzt diese Übersicht gemeint.
 
-*Tickets:* #467 (SREG-12), #551, #678 (Pivot), #1946
+> **#1953 (Nic 2026-09-25) — zweiter Knopf „Im Browser öffnen".** Im
+> Telegram-WebView lässt sich die Übersicht nicht als App installieren, und
+> eine Adresse sieht man dort nicht. Die Antwort trägt darum zwei Knöpfe
+> (`presentation.inline_buttons`): den `web_app`-Knopf „🏠 xbuddy öffnen" und
+> einen normalen `url`-Knopf „🌐 Im Browser öffnen (als App installieren)" auf
+> dieselbe volle Übersichts-Adresse — Telegram öffnet `url`-Knöpfe im externen
+> Browser. Der Link ist **kein** Credential: ist der Browser noch nicht
+> angemeldet, gilt der Pairing-Weg (`auth.md` AUTH-2.a, „Cookie nachschicken").
+
+*Tickets:* #467 (SREG-12), #551, #678 (Pivot), #1946, #1953
 
 ## SREG-5b — Opt-in-Direktantwort (Sekundärpfad nach SREG-5)
 
@@ -536,6 +545,39 @@ Buddy/App gruppiert, mit kopierbaren URLs. Volltextsuche filtert live.
   `apple-touch-icon`. Der SW arbeitet **network-first** (die HTML ist
   `no-store`), `start_url` = Scope = `/api/v1/seiten/uebersicht`. Die Wurzel
   `/` des Hubs leitet per `302` hierher (`deploy/nginx/xbuddy-origin.conf`).
+
+> **#1953 (Nic 2026-09-25) — Layout nach Buddy, ohne sichtbare Adressen.**
+> Überholt die Layout-, Karten- und Kopier-Pflichten weiter unten, wo sie
+> widersprechen (Nic hat am 25.09. entschieden):
+> - **Einheitlich nach Buddy gruppiert.** Je Buddy eine Gruppe mit **Logo
+>   und Namen** aus `seiten/logos.json` (ein eindeutiges ARASAAC-Logo je
+>   Buddy — dasselbe ist das PWA-Icon aller Mäntel dieses Buddys). Darin seine
+>   Seiten, jede mit einem **Zielgruppen-Etikett** („Eltern" /
+>   „Kinder-Display") statt eigener Sektionen oder Typ-Filter-Chips. Der Buddy
+>   eines Eintrags ist sein Manifest-Ordner; Ausnahmen (vom seiten-Service
+>   gehostet, gehören aber einem Buddy, z. B. der Hörspiel-Player) stehen in
+>   `logos.json` → `zuordnung`.
+> - **Reihenfolge:** Buddy-Gruppen alphabetisch nach Anzeigenamen; die
+>   Plattform-Dinge (`logos.json` → `einstellungen`: Kacheln bearbeiten,
+>   KI-Anbieter/Connector) als Gruppe **„Einstellungen" am Ende**, dort mit
+>   Logo je Zeile.
+> - **Keine URLs sichtbar.** Eine Zeile zeigt Name, Etikett und einen Satz
+>   (`zeigt`); Tap öffnet die Seite (same-origin `pfad`). Die volle Adresse
+>   liefert nur der Knopf **„📋 Link kopieren"** (Funnel vor Heim, sonst die
+>   Origin der Seite) mit kurzem „Kopiert"-Feedback; scheitert die
+>   Zwischenablage (Telegram-WebView), steht die Adresse zum Abschreiben im
+>   Hinweis. Das Tailscale-Banner entfällt mit den sichtbaren Adressen.
+> - **Kein Selbst-Eintrag.** Der Eintrag `uebersicht` bleibt im Inventar
+>   (SREG-2-Eigentest, Chat-Suche), die Übersichts-Seite zeigt ihn nicht.
+> - **Installieren:** im Telegram-WebView ein Hinweis mit Knopf „Als App
+>   installieren → im Browser öffnen" (`Telegram.WebApp.openLink`); im
+>   Browser ein „App installieren"-Knopf, sobald `beforeinstallprompt` kommt;
+>   auf dem iPhone der Hinweis „Teilen → Zum Home-Bildschirm".
+> - **Aussehen:** eine Palette aus den Mantel-Tokens (Oliv `#47503C`, Sand
+>   `#F5F1E8`, Orange `#D87A3E` als einziger Akzent), eine Kartenform, eine
+>   Logo-Größe; mobile first, hell und dunkel (`prefers-color-scheme`).
+> - Layout-Kontrakt: `baue_layout()` trägt dafür zusätzlich `gruppen`;
+>   `buddy_gruppen` bleibt für bestehende Konsumenten (SREG-16) unverändert.
 
 **Layout (RAT-31 E3, #1496 — manifest-only):**
 

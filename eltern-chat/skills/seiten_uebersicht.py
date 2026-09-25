@@ -27,7 +27,8 @@ eltern-chat-skills.md).
   - `mini_app_url`    — volle URL der Übersicht. Leer → Fehler-Text (kein Button).
 
 **Ausgang:** Form-(b)-Dict `{text, presentation}`:
-  - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+  - Mit Knöpfen: `presentation: {inline_buttons: [{label, web_app_url},
+    {label, url}]}` — Mini-App-Knopf + Browser-Knopf (#1953).
   - Ohne Button (Konfig-Fehler): `presentation: {}`.
 
 Wirft `BerechtigungError` bei SREG-6-Verletzung.
@@ -48,6 +49,9 @@ _UEBERSICHT_PATH = "/api/v1/seiten/uebersicht"
 # Button-Label (kurz, ein-Wort-Phrase per Leitplanken).
 _BUTTON_LABEL = "🏠 xbuddy öffnen"
 
+# #1953: zweiter Knopf — öffnet die Übersicht im Browser (installierbar).
+_BROWSER_LABEL = "🌐 Im Browser öffnen (als App installieren)"
+
 # Intro-Text für die Übersichts-Ankündigung.
 _INTRO_TEXT = "Hier siehst du alle Mini Apps und Seiten:"
 
@@ -60,7 +64,8 @@ def seiten_uebersicht(chat_id, from_user_id, is_member_fn, mini_app_url):
     (Volltextsuche, SREG-5b abgelöst).
 
     Returnt ein Form-(b)-Dict `{text, presentation}` (TASK-10c):
-      - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+      - Mit Knöpfen: `presentation: {inline_buttons: [web_app-Knopf,
+        url-Knopf „Im Browser öffnen"]}` (#1953).
       - Ohne Button (mini_app_url leer): `presentation: {}` + Fehler-Text.
 
     Wirft `BerechtigungError` bei SREG-6-Verletzung.
@@ -83,14 +88,19 @@ def seiten_uebersicht(chat_id, from_user_id, is_member_fn, mini_app_url):
 
     # mini_app_url ist bereits die volle URL inkl. /api/v1/seiten/uebersicht
     # (Task-Konstruktor hängt _UEBERSICHT_PATH an — analog RAO). Nicht nochmal anhängen.
+    # #1953 (Nic 2026-09-25): im Telegram-WebView lässt sich die Übersicht
+    # nicht installieren, und eine Adresse sieht man dort nicht. Darum ein
+    # zweiter, normaler URL-Knopf — Telegram öffnet url-Knöpfe im externen
+    # Browser, wo die Übersicht als App installierbar ist. Dieselbe Adresse,
+    # kein Credential im Link (Anmeldung im Browser: Pairing-Link, AUTH-2.a).
     presentation = {
-        "inline_button": {
-            "label": _BUTTON_LABEL,
-            "web_app_url": mini_app_url,
-        }
+        "inline_buttons": [
+            {"label": _BUTTON_LABEL, "web_app_url": mini_app_url},
+            {"label": _BROWSER_LABEL, "url": mini_app_url},
+        ]
     }
 
-    button_count = 1
+    button_count = len(presentation["inline_buttons"])
     logger.info(
         "seiten_uebersicht: Übersichts-Button für Chat %s, Buttons=%d",
         chat_id, button_count,

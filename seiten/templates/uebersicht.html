@@ -1,7 +1,9 @@
 <!DOCTYPE html>
-{# SREG-12 V2-Layout: Buddy-Gruppen mit kopierbaren URLs.
-   RAT-31 E3 (#1496): Hero-Paar-Sektion entfernt (Sorten d/e weg).
-   Reine Präsentations-Schicht; Daten kommen aus render.baue_layout(). #}
+{# SREG-12: die EINE Übersicht — je Buddy eine Gruppe mit Logo und Namen,
+   darin seine Seiten mit Zielgruppen-Etikett; Plattform-Dinge als
+   „Einstellungen" am Ende. Keine sichtbaren Adressen: Tap öffnet, „Link
+   kopieren" liefert die volle Adresse (#1953, Nic 2026-09-25).
+   Reine Präsentations-Schicht; Daten kommen aus render.baue_layout()["gruppen"]. #}
 <html lang="de">
 <head>
   <meta charset="utf-8">
@@ -25,15 +27,31 @@
 </head>
 <body>
   <header class="page">
-    <h1>Übersicht</h1>
-    <input type="search" class="suche" placeholder="Suche (Label, Synonym, Beschreibung) …" aria-label="Volltextsuche">
+    <div class="kopf">
+      <img class="kopf-logo" src="/api/v1/seiten/uebersicht/icon-192.png" alt="" width="40" height="40">
+      <h1>XBuddy</h1>
+    </div>
+    <input type="search" class="suche" placeholder="Suchen …" aria-label="Seiten durchsuchen">
   </header>
 
-  {% if tailscale_banner %}
-    <p class="banner-tailscale" role="status">
-      Nur Heim-URL verfügbar (kein Tailscale-Origin konfiguriert).
-    </p>
-  {% endif %}
+  {# #1953: Installieren. Im Telegram-WebView geht das nicht — dort ein
+     Knopf, der die Übersicht im Browser öffnet. Im Browser zeigt der Knopf
+     den Installations-Dialog (beforeinstallprompt), auf dem iPhone ein Hinweis.
+     Alles startet versteckt; das Skript unten blendet das Passende ein. #}
+  <section class="installieren" id="installieren" hidden aria-label="Als App installieren">
+    <div class="installieren-telegram" hidden>
+      <p><strong>Als App installieren?</strong> In Telegram geht das nicht — öffne die Übersicht im Browser und installiere sie dort.</p>
+      <button type="button" class="knopf knopf-voll" id="im-browser-oeffnen">Als App installieren → im Browser öffnen</button>
+      <p class="klein">Ist das Gerät im Browser noch nicht angemeldet, frag den Familien-Bot nach einem Anmelde-Link.</p>
+    </div>
+    <div class="installieren-browser" hidden>
+      <p><strong>XBuddy als App</strong> — mit eigenem Symbol auf dem Startbildschirm.</p>
+      <button type="button" class="knopf knopf-voll" id="app-installieren">App installieren</button>
+    </div>
+    <div class="installieren-ios" hidden>
+      <p><strong>Als App installieren:</strong> unten auf <em>Teilen</em> tippen, dann <em>Zum Home-Bildschirm</em>.</p>
+    </div>
+  </section>
 
   {% if snapshot_pending %}
     <p class="banner-snapshot" role="status">
@@ -42,98 +60,46 @@
     </p>
   {% endif %}
 
-  <nav class="typ-chips" aria-label="Typ-Filter">
-    <button type="button" class="typ-chip" data-typ="alle" aria-pressed="true">Alle</button>
-    <button type="button" class="typ-chip" data-typ="display" aria-pressed="false">Anzeigen</button>
-    <button type="button" class="typ-chip" data-typ="eltern" aria-pressed="false">Eltern</button>
-    <button type="button" class="typ-chip" data-typ="controller" aria-pressed="false">Controller</button>
-  </nav>
-
-  {# Macros für Karten — Jinja2 (vor erster Verwendung definiert) #}
-  {% macro kartensuchtext(k) %}{{ (k.label or "") }} {{ (k.zeigt or "") }} {{ (k.synonyme|join(" ") if k.synonyme else "") }} {{ (k.app or "") }}{% endmacro %}
-
-  {% macro render_karte(k, kompakt=false) %}
-    <div class="karte{% if k.variante %} variante{% endif %}"
-         data-karten-typ="{{ k.typ }}"
-         data-suchtext="{{ kartensuchtext(k) }}">
-      <header>
-        <img class="icon" src="{{ k.icon }}" alt="" loading="lazy">
-        <span class="label">{{ k.label }}{% if k.variante %} <em>(Variante)</em>{% endif %}</span>
-        <span class="typ-badge">{{ k.typ }}</span>
-      </header>
-      {% if k.zeigt and not kompakt %}
-        <p class="zeigt">{{ k.zeigt }}</p>
-      {% endif %}
-      <div class="urls">
-        {# Nic-Setzung 2026-07-31: der primäre klickbare Link ist SAME-ORIGIN
-           (relativer Pfad, wie die heim-shell SHELL-3) — er bleibt auf dem
-           Origin, von dem die Übersicht geladen wurde (Public-Funnel), und
-           funktioniert damit von überall ohne hartkodierte Origin. Die
-           absoluten Origin-Zeilen darunter bleiben als kopierbare/teilbare
-           Links (in Produktion nur Funnel, da heim/tailscale leer). #}
-        <div class="url-row">
-          <span class="url-label">Öffnen:</span>
-          <a class="url-link" href="{{ k.pfad }}">hier öffnen</a>
-        </div>
-        {% if k.urls.heim %}
-          <div class="url-row">
-            <span class="url-label">Heim:</span>
-            <a class="url-link" href="{{ k.urls.heim }}">{{ k.urls.heim }}</a>
-            <button type="button" class="copy-btn" data-copy="{{ k.urls.heim }}">📋</button>
-          </div>
-        {% endif %}
-        {% if k.urls.tailscale %}
-          <div class="url-row">
-            <span class="url-label">Tailscale:</span>
-            <a class="url-link" href="{{ k.urls.tailscale }}">{{ k.urls.tailscale }}</a>
-            <button type="button" class="copy-btn" data-copy="{{ k.urls.tailscale }}">📋</button>
-          </div>
-        {% endif %}
-        {# SREG-7 dritte Origin (RAT-27): Funnel-URL fuer externe User-Geraete.
-           Nur sichtbar wenn gesetzt — kein Banner, leer = Spalte weggelassen. #}
-        {% if k.urls.funnel %}
-          <div class="url-row">
-            <span class="url-label">Funnel:</span>
-            <a class="url-link" href="{{ k.urls.funnel }}">{{ k.urls.funnel }}</a>
-            <button type="button" class="copy-btn" data-copy="{{ k.urls.funnel }}">📋</button>
-          </div>
-        {% endif %}
-      </div>
-    </div>
-  {% endmacro %}
-
   <main>
-    {# Sekundäre Sektion „Andere Seiten" — Buddy-Gruppen #}
-    <section class="sektion" data-sektion="buddy">
-      <h2>Andere Seiten</h2>
-      {% for gruppe in buddy_gruppen %}
-        <article class="buddy-gruppe" data-app="{{ gruppe.app }}">
-          <header>
-            <span class="app-slug">/{{ gruppe.app }}</span>
-            <span class="anzahl">{{ gruppe.anzahl }} View{% if gruppe.anzahl != 1 %}s{% endif %}</span>
-          </header>
-          <div class="karten-grid">
-            {% for karte in gruppe.karten %}
-              {{ render_karte(karte) }}
-            {% endfor %}
-          </div>
-        </article>
-      {% endfor %}
-    </section>
+    {% for gruppe in gruppen %}
+      <section class="gruppe{% if gruppe.id == 'einstellungen' %} gruppe-einstellungen{% endif %}"
+               data-gruppe="{{ gruppe.id }}">
+        <header class="gruppe-kopf">
+          {% if gruppe.logo %}<img class="logo" src="{{ gruppe.logo }}" alt="" width="48" height="48">{% endif %}
+          <h2>{{ gruppe.name }}</h2>
+        </header>
+        <ul class="zeilen">
+          {% for z in gruppe.zeilen %}
+            <li class="zeile" data-buddy="{{ z.buddy }}" data-karten-typ="{{ z.typ }}"
+                data-suchtext="{{ z.suchtext }}">
+              <a class="zeile-link" href="{{ z.pfad }}">
+                {% if not gruppe.logo %}<img class="zeile-logo" src="{{ z.logo }}" alt="" width="40" height="40">{% endif %}
+                <span class="zeile-text">
+                  <span class="zeile-titel">
+                    <span class="label">{{ z.label }}</span>
+                    <span class="etikett etikett-{{ z.typ }}">{{ z.etikett }}</span>
+                  </span>
+                  {% if z.zeigt %}<span class="zeigt">{{ z.zeigt }}</span>{% endif %}
+                </span>
+              </a>
+              <button type="button" class="kopieren" data-pfad="{{ z.pfad }}"
+                      {% if z.kopier_url %}data-url="{{ z.kopier_url }}"{% endif %}
+                      aria-label="Link zu „{{ z.label }}“ kopieren">📋 Link kopieren</button>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+    <p class="leer-hinweis" id="nichts-gefunden" hidden>Nichts gefunden.</p>
   </main>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
-    // SREG-12 clientseitige Volltextsuche + Typ-Filter.
-    // Karten tragen data-karten-typ und data-suchtext; Buddy-Gruppen data-app.
-    // RAT-31 E3 (#1496): Hero-Paar-Boxen entfernt — nur noch Buddy-Gruppen.
-    // Buddy-Gruppe expandiert komplett, wenn data-app dem Suchterm matched.
-
+    // SREG-12 clientseitige Volltextsuche (Name, Satz, Synonyme, Buddy).
     const sucheInput = document.querySelector(".suche");
-    const typChips = document.querySelectorAll(".typ-chip");
     const toast = document.getElementById("toast");
-    let aktiverTyp = "alle";
+    const nichts = document.getElementById("nichts-gefunden");
 
     function normalize(s) {
       return (s || "").toString().toLowerCase().trim();
@@ -141,72 +107,103 @@
 
     function filter() {
       const q = normalize(sucheInput.value);
-      // Karten einzeln
-      const karten = document.querySelectorAll(".karte");
-      karten.forEach(k => {
-        const typMatch = aktiverTyp === "alle" || k.dataset.kartenTyp === aktiverTyp;
-        const textMatch = !q || normalize(k.dataset.suchtext).includes(q);
-        const visible = typMatch && textMatch;
-        k.hidden = !visible;
+      let sichtbar = 0;
+      document.querySelectorAll(".gruppe").forEach(g => {
+        let n = 0;
+        g.querySelectorAll(".zeile").forEach(z => {
+          const zeigen = !q || normalize(z.dataset.suchtext).includes(q);
+          z.hidden = !zeigen;
+          if (zeigen) n += 1;
+        });
+        g.hidden = n === 0;
+        sichtbar += n;
       });
+      nichts.hidden = sichtbar > 0;
+    }
+    sucheInput.addEventListener("input", filter);
 
-      // Buddy-Gruppen: app-Slug-Match → alle Karten sichtbar machen; sonst per-Karten-Filter
-      document.querySelectorAll(".buddy-gruppe").forEach(g => {
-        const app = normalize(g.dataset.app);
-        const appMatch = q && app && app.includes(q);
-        if (appMatch) {
-          g.querySelectorAll(".karte").forEach(k => {
-            const typMatch = aktiverTyp === "alle" || k.dataset.kartenTyp === aktiverTyp;
-            k.hidden = !typMatch;
-          });
-        }
-        const hat = g.querySelectorAll(".karte:not([hidden])").length;
-        g.hidden = hat === 0;
-      });
+    function zeigeToast(text, lang) {
+      toast.textContent = text;
+      toast.classList.add("visible");
+      clearTimeout(zeigeToast.t);
+      zeigeToast.t = setTimeout(() => toast.classList.remove("visible"), lang ? 6000 : 1600);
     }
 
-    sucheInput.addEventListener("input", filter);
-    typChips.forEach(c => {
-      c.addEventListener("click", () => {
-        typChips.forEach(o => o.setAttribute("aria-pressed", "false"));
-        c.setAttribute("aria-pressed", "true");
-        aktiverTyp = c.dataset.typ;
-        filter();
+    // #1953: „Link kopieren" — die volle Adresse (Funnel/Heim vom Server,
+    // sonst die Origin, von der die Übersicht geladen wurde). Im
+    // Telegram-WebView fehlt oft die Clipboard-API: dann execCommand, und
+    // wenn auch das scheitert, steht die Adresse zum Abschreiben im Hinweis.
+    async function kopieren(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (e) { /* weiter mit dem Fallback */ }
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", "");
+      ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      return ok;
+    }
+
+    document.querySelectorAll(".kopieren").forEach(b => {
+      b.addEventListener("click", async () => {
+        const url = b.dataset.url || new URL(b.dataset.pfad, window.location.href).href;
+        if (await kopieren(url)) {
+          b.dataset.copied = "1";
+          b.textContent = "✓ Kopiert";
+          zeigeToast("Link kopiert");
+          setTimeout(() => {
+            b.removeAttribute("data-copied");
+            b.textContent = "📋 Link kopieren";
+          }, 1600);
+        } else {
+          zeigeToast(url, true);
+        }
       });
     });
 
-    // Copy-Buttons mit Toast + Long-Press bleibt funktional (native Browser-Pfad
-    // greift weiterhin auf <a>-Inhalt, da kein pointer-events:none gesetzt ist).
-    document.querySelectorAll(".copy-btn").forEach(b => {
-      b.addEventListener("click", async () => {
-        const url = b.dataset.copy;
-        let ok = false;
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(url);
-            ok = true;
-          }
-        } catch (e) { /* fallthrough zu execCommand */ }
-        if (!ok) {
-          // Fallback fuer aeltere Browser
-          const ta = document.createElement("textarea");
-          ta.value = url; ta.style.position = "fixed"; ta.style.opacity = "0";
-          document.body.appendChild(ta);
-          ta.select();
-          try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
-          document.body.removeChild(ta);
-        }
-        if (ok) {
-          b.dataset.copied = "1";
-          toast.textContent = "Link kopiert";
-          toast.classList.add("visible");
-          setTimeout(() => {
-            b.removeAttribute("data-copied");
-            toast.classList.remove("visible");
-          }, 1600);
-        }
+    // #1953: Installieren — Telegram-WebView, Browser mit Install-Dialog, iPhone.
+    (function () {
+      const box = document.getElementById("installieren");
+      const standalone = window.matchMedia("(display-mode: standalone)").matches
+        || window.navigator.standalone === true;
+      if (standalone) return;
+      const tg = window.xbuddyTelegram;
+      const zeige = (klasse) => {
+        box.hidden = false;
+        box.querySelector(klasse).hidden = false;
+      };
+      if (tg && tg.imTelegram) {
+        zeige(".installieren-telegram");
+        document.getElementById("im-browser-oeffnen").addEventListener("click", () => {
+          tg.imBrowserOeffnen(new URL("/api/v1/seiten/uebersicht", window.location.href).href);
+        });
+        return;
+      }
+      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
+        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      if (ios) { zeige(".installieren-ios"); return; }
+      let aufschub = null;
+      window.addEventListener("beforeinstallprompt", (ev) => {
+        ev.preventDefault();
+        aufschub = ev;
+        zeige(".installieren-browser");
       });
-    });
+      document.getElementById("app-installieren").addEventListener("click", async () => {
+        if (!aufschub) return;
+        aufschub.prompt();
+        await aufschub.userChoice.catch(() => null);
+        aufschub = null;
+        box.hidden = true;
+      });
+      window.addEventListener("appinstalled", () => { box.hidden = true; });
+    })();
 
     // #1940: PWA-Mantel — Service-Worker registrieren (best-effort, PWA-3:
     // fehlt die API oder scheitert die Registrierung, läuft die Seite weiter).
