@@ -6,10 +6,10 @@ signierte initData einmal gegen dasselbe Cookie, das `/auth/pair` setzt
 (auth.md AUTH-2.b).
 
 Abgedeckt (Abnahme #1946):
-  - gültig + Erwachsener → 200 + Cookie (verifizierbar, Attribute wie /auth/pair)
+  - gültig + Familienmitglied (Erwachsener ODER Kind, #1951) → 200 + Cookie (verifizierbar, Attribute wie /auth/pair)
   - manipuliert → 401, kein Cookie
   - zu alt (auth_date jenseits max_age_seconds) → 401, kein Cookie
-  - Nicht-Erwachsener (Kind) → 403, kein Cookie
+  - Fremder (nicht in der Familie) → 403, kein Cookie
   - Familie-Service weg → 503, kein Cookie (fail-closed)
   - das ausgestellte Cookie öffnet eine hart gegatete seiten-Route
   - Übersicht und 401-Anweisungsseite binden das Tausch-Skript ein
@@ -158,10 +158,11 @@ def test_zu_alte_initdata_401_ohne_cookie(client):
     assert _set_cookie_header(resp) == []
 
 
-def test_kind_bekommt_kein_cookie_403(client):
+def test_kind_bekommt_das_cookie_auch(client):
+    # #1951: das Kinder-Tablet gehört zum Ökosystem, sein Telegram-Konto auch.
     resp = _tausch(client, _init_data(KIND))
-    assert resp.status_code == 403
-    assert _set_cookie_header(resp) == []
+    assert resp.status_code == 200
+    assert sc.verify_session(_cookie_wert(resp), BOT_TOKEN) == str(KIND)
 
 
 def test_fremder_bekommt_kein_cookie_403(client):

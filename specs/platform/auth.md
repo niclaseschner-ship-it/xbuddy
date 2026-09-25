@@ -182,21 +182,24 @@ signierte Telegram-initData gegen das Cookie:
 - `POST /auth/telegram` mit `Authorization: tma <initData>` prüft die
   initData mit der bestehenden Prüfung (HMAC mit dem Bot-Token, Altersgrenze
   von `auth_date` aus `init_data.json`).
-- **Nur Erwachsene der Familie** (`art=erwachsene`, live vom Familie-Service)
-  bekommen ein Cookie — dieselbe Regel wie beim Nachschicken eines
-  Pairing-Links (AUTH-2.a, CNS-2), weil das Cookie ein Credential ist.
-  Familie-Service nicht erreichbar → `503`, fail-closed.
+- **Jede Person der Familie** mit `telegram_id` (Erwachsene **und** Kinder,
+  live vom Familie-Service) bekommt ein Cookie. Jedes Gerät des Ökosystems
+  trägt das Cookie, auch das Kinder-Tablet, auf dem Telegram zum Einrichten
+  läuft (Nic, 25.09.2026, #1951). Anders als CNS-2: dort geht es darum, wer
+  *neue* Geräte in die Familie holt; hier nur darum, dass jemand aus der
+  Familie ein Gerät benutzt. Familie-Service nicht erreichbar → `503`,
+  fail-closed.
 - Erfolg → `200` + `xbuddy_session` (Subjekt = Telegram-`user_id`, Attribute
   wie `/auth/pair`, `Cache-Control: no-store`). Fehlende, manipulierte oder
-  zu alte initData → `401`; kein Erwachsener → `403`; jeweils kein Cookie.
+  zu alte initData → `401`; nicht in der Familie → `403`; jeweils kein Cookie.
 - Das Tausch-Skript (`seiten/static/telegram-anmeldung.js`) hängt an der
   Übersicht und an der AUTH-8-Anweisungsseite von `seiten`. Es läuft nur im
   Telegram-WebView (initData vorhanden), tauscht einmal und lädt neu; im
   Browser tut es nichts.
 
 Das ist kein alternativer Onboarding-Pfad im Sinne von AUTH-10: Telegram
-bleibt Voraussetzung, das Cookie kommt nur zu, wer im Familien-Chat als
-Erwachsener eingetragen ist.
+bleibt Voraussetzung, das Cookie bekommt nur, wer in der Familien-Registry
+eingetragen ist.
 
 *Tickets:* #1946
 

@@ -812,10 +812,11 @@ def auth_telegram():
     """#1946: `POST /auth/telegram` mit `Authorization: tma <initData>` → Cookie.
 
     - initData gültig (HMAC) und frisch (auth_date innerhalb max_age_seconds)
-      UND Absender ist Erwachsener der Familie → 200 + Set-Cookie
+      UND Absender steht in der Familien-Registry (jede Person mit
+      telegram_id, auch Kinder — #1951) → 200 + Set-Cookie
       `xbuddy_session` (Subjekt = Telegram-user_id, Attribute wie `/auth/pair`).
     - initData fehlt, manipuliert oder zu alt → 401, kein Cookie.
-    - gültig, aber kein Erwachsener → 403, kein Cookie.
+    - gültig, aber nicht in der Familie → 403, kein Cookie.
     - Familie-Service nicht erreichbar → 503, kein Cookie (fail-closed).
     - Bot-Token fehlt → 500.
     """
@@ -823,15 +824,17 @@ def auth_telegram():
     if err is not None:
         return err
 
-    erwachsene = _get_familie_client().get_erwachsene_telegram_ids()
-    if erwachsene is None:
+    # #1951: jedes Gerät des Ökosystems trägt das Cookie, auch das
+    # Kinder-Tablet — also jede Person der Familie, nicht nur Erwachsene.
+    familie = _get_familie_client().get_telegram_ids()
+    if familie is None:
         logging.warning("#1946: Familie-Service nicht erreichbar — "
                         "Telegram-Anmeldung abgelehnt (fail-closed)")
         return jsonify({"error": "Familie-Service nicht erreichbar"}), 503
-    if init_data.user_id not in erwachsene:
-        logging.warning("#1946: user_id %s ist kein Erwachsener → 403",
+    if init_data.user_id not in familie:
+        logging.warning("#1951: user_id %s gehört nicht zur Familie → 403",
                         init_data.user_id)
-        return jsonify({"error": "Nur für Erwachsene der Familie"}), 403
+        return jsonify({"error": "Nur für die Familie"}), 403
 
     bot_token = _get_bot_token()
     resp = make_response(jsonify({"angemeldet": True}), 200)
