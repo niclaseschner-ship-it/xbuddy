@@ -170,6 +170,36 @@ erweitert #1401 — Bezug #948]
 
 ## 3. Klassifikation der Routen
 
+#### AUTH-2.b — Telegram-Anmeldung `/auth/telegram` (#1946)
+
+**Nic-Setzung 2026-09-25: eine Übersicht für Browser und Telegram, eine
+Pflege.** Der Telegram-Knopf im Familien-Chat öffnet dieselbe Übersicht
+(`/api/v1/seiten/uebersicht`, SREG-12) wie der Browser; die eigene
+Mini-App-Übersicht (MAU) ist entfallen. Weil im Telegram-WebView nicht
+sicher ein `xbuddy_session`-Cookie liegt, tauscht die Seite einmal die
+signierte Telegram-initData gegen das Cookie:
+
+- `POST /auth/telegram` mit `Authorization: tma <initData>` prüft die
+  initData mit der bestehenden Prüfung (HMAC mit dem Bot-Token, Altersgrenze
+  von `auth_date` aus `init_data.json`).
+- **Nur Erwachsene der Familie** (`art=erwachsene`, live vom Familie-Service)
+  bekommen ein Cookie — dieselbe Regel wie beim Nachschicken eines
+  Pairing-Links (AUTH-2.a, CNS-2), weil das Cookie ein Credential ist.
+  Familie-Service nicht erreichbar → `503`, fail-closed.
+- Erfolg → `200` + `xbuddy_session` (Subjekt = Telegram-`user_id`, Attribute
+  wie `/auth/pair`, `Cache-Control: no-store`). Fehlende, manipulierte oder
+  zu alte initData → `401`; kein Erwachsener → `403`; jeweils kein Cookie.
+- Das Tausch-Skript (`seiten/static/telegram-anmeldung.js`) hängt an der
+  Übersicht und an der AUTH-8-Anweisungsseite von `seiten`. Es läuft nur im
+  Telegram-WebView (initData vorhanden), tauscht einmal und lädt neu; im
+  Browser tut es nichts.
+
+Das ist kein alternativer Onboarding-Pfad im Sinne von AUTH-10: Telegram
+bleibt Voraussetzung, das Cookie kommt nur zu, wer im Familien-Chat als
+Erwachsener eingetragen ist.
+
+*Tickets:* #1946
+
 ### AUTH-3 — Mini-App-Datenrouten, hart geschützt
 
 Eine Route in der AUTH-3-Liste antwortet `401` bei fehlender oder ungültiger
@@ -595,7 +625,8 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 # gegatet (audio-stream + seiten: AUTH-3 HART via #1833/#1832; seiten/uebersicht:
 # AUTH-7b DUAL via #1832) — Zeilen entfernt, #1863
 # routine/{items,config} + hoerspiel/{config,alben,alben/<id>/manifest,resume,themen,folgen-vorschlag}: Phase-2/3-Trigger 2026-07-30 gefeuert → jetzt in AUTH-3 (Bau #1639/#1640)
-/api/v1/seiten/mini-app-uebersicht            (Trigger: Phase 2/3)
+# seiten/mini-app-uebersicht: Route mit #1946 gelöscht (die eine Übersicht
+# meldet sich im Telegram-WebView selbst an, AUTH-2.b) — Zeile entfernt
 /api/v1/panels/*                              (Trigger: Phase 4 Panel-Mini-App)
 /api/v1/panels/<id>/tiles*                    (Trigger: Phase 4)
 /api/v1/geraete/*                             (Trigger: Geräte-Editor-Mini-App)
@@ -603,9 +634,9 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 # in keiner URL-Map mehr (RAT-31-Router-Tod) — Zeilen entfernt, #1863
 ```
 
-**Zehn ungegatete Telegram-Shell-Routen — Auth-11-Anlass (#1805).** AUTH-11
+**Neun ungegatete Telegram-Shell-Routen — Auth-11-Anlass (#1805).** AUTH-11
 verlangt für jede ungegatete Route entweder einen Decorator oder eine
-namentliche Ausnahme; für diese zehn ist **keins von beiden** angemessen,
+namentliche Ausnahme; für diese neun ist **keins von beiden** angemessen,
 weil `require_dual_gate` cookie-only prüft und unbelegt ist, ob der
 Telegram-WebView beim HTML-Initial-Load überhaupt einen `xbuddy_session`-
 Cookie mitschickt (MAD-11, `conventions/mini-app-design.md`, hält fest: der
@@ -624,12 +655,17 @@ statt Ausnahme, mit eigenem Auflösungs-Trigger:
 /seiten/wetter/regeln                         (Trigger: #1859 Cookie-Probe)
 /seiten/wetter/regeln/                        (Trigger: #1859 Cookie-Probe)
 /seiten/hoerspiel/<kind_id>/eltern            (Trigger: #1859 Cookie-Probe)
-/api/v1/seiten/mini-app-uebersicht            (Trigger: #1859 Cookie-Probe)
 ```
+
+*(#1946, 2026-09-25: die zehnte Zeile `/api/v1/seiten/mini-app-uebersicht`
+ist entfallen — die Route ist gelöscht. Für die Übersicht ist die Probe
+gegenstandslos: sie bleibt AUTH-7b-gegatet und holt sich das Cookie im
+Telegram-WebView selbst über AUTH-2.b. Derselbe Weg steht den neun Flächen
+oben offen; ob sie ihn nehmen, ist eigene Arbeit, nicht Teil von #1946.)*
 
 **Trigger #1859:** Nic tippt den Telegram-Button auf einem gepairten
 Elterngerät an und belegt live, ob der WebView den `xbuddy_session`-Cookie
-mitschickt. Trägt er ihn, wandern alle zehn Routen mit dem Factory-Decorator
+mitschickt. Trägt er ihn, wandern alle neun Routen mit dem Factory-Decorator
 nach AUTH-3 (derselbe same-origin-Cookie-Pfad wie die übrigen
 Eltern-Mini-Apps); trägt er ihn nicht, braucht es eine eigene Auth-Lösung
 für den Telegram-Fall, bevor sie gaten können. Bis dahin sind sie hier
@@ -916,6 +952,7 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 |---|---|
 | `/healthz` (je Service), `/version` | Die Überwachung fragt vor jeder Anmeldung. Nicht per Cookie, sondern am Ingress auf Loopback/Tailnet einschränken. |
 | `/auth/pair` | Die Adresse, an der das Cookie ausgestellt wird. Hinter dem Cookie unerreichbar. |
+| `/auth/telegram` | Nur per POST erreichbar. Zweite Adresse, an der das Cookie ausgestellt wird (AUTH-2.b, #1946): tauscht signierte Telegram-initData gegen `xbuddy_session`. Hinter dem Cookie unerreichbar; sie prüft selbst per HMAC, auth_date-Altersgrenze und Erwachsenen-Liste. |
 | `/shell/<panel_id>/manifest.json` | Ohne öffentliches Manifest installiert sich keine PWA. RAT-32 führt die Manifest-Publicness als Nicht-Verhandelbares. |
 | `/shell/<panel_id>/sw.js` | **[ÜBERHOLT — Code-Gegenprobe]** Keine Ausnahme (mehr): der Endpunkt trägt `@require_dual_gate(mode="hard")` (`seiten/main.py:1955`, Kommentar „sw.js bleibt gated") und ist hart gegated; `test_shell_sw_js_bleibt_gated_ohne_quelle` (`tests/test_dual_gate_7b.py:248`) verriegelt das. Die Begründung „lädt vor Session" trifft auf diese Route nicht zu — sie trifft auf die Zeile unten. |
 | `/api/v1/seiten/static/connector/sw.js` | Der Browser lädt diesen Service-Worker, bevor eine Session existiert — anders als `/shell/<panel_id>/sw.js` oben (dort inzwischen gegated) ist diese Route tatsächlich ungegatet. Eigene Zeile, weil die Klausel Sammel-Einträge ausschließt — auch eine Auslassungs-Ellipse ist keiner. |
@@ -1139,7 +1176,9 @@ Kind-Tablet) durchläuft **exakt einen** Auth-Pfad:
 3. **Danach: Cookie ist die Identität.** Jeder folgende Zugriff auf
    AUTH-3-Routen oder 7b-Renderer-Routen verwendet den `xbuddy_session`-Cookie
    (RAT-32 Cookie-only-hart); `tma`/`initData` bleibt parallel gültig für
-   Telegram-Mini-App-Kontexte (AUTH-2, additiv).
+   Telegram-Mini-App-Kontexte (AUTH-2, additiv). Im Telegram-WebView selbst
+   holt sich die Übersicht das Cookie über AUTH-2.b (#1946) — Telegram
+   bleibt auch dort die Voraussetzung.
 
 **Telegram ist Voraussetzung — kein alternativer Onboarding-Pfad.**
 Kein User-Endgerät erhält Zugang ohne vorherigen Telegram-Pairing-Schritt.

@@ -31,7 +31,7 @@ from seiten import pwa_mantel  # noqa: E402  # isort:skip
 
 @pytest.fixture(autouse=True)
 def reset_runtime(monkeypatch):
-    """Setzt runtime-Dict zurueck (analog test_mini_app_uebersicht.py)."""
+    """Setzt runtime-Dict zurueck."""
     seiten_main.configure(
         root=_REPO_ROOT,
         inventar_path=None,
@@ -57,7 +57,8 @@ def test_ac1_helper_existiert():
     """
     assert callable(pwa_mantel.build_id_for), \
         "pwa_mantel.build_id_for fehlt oder nicht callable (T1229/T1284 AC1)"
-    for component in ["einkauf", "plan", "mini-app-uebersicht", "routine"]:
+    # #1946: mini-app-uebersicht entfallen (eine Uebersicht fuer Browser + Telegram).
+    for component in ["einkauf", "plan", "routine"]:
         assert component in pwa_mantel.REGISTRY, \
             f"Komponente {component!r} fehlt in pwa_mantel.REGISTRY (T1229/T1284 AC1)"
 
@@ -92,7 +93,7 @@ def test_ac1_platform_gewinnt_wenn_neuer(monkeypatch):
     static_dir = os.path.join(_SEITEN_DIR, "static")
 
     def fake_getmtime(path):
-        if path == os.path.join(static_dir, "mini-app-uebersicht.js"):
+        if path == os.path.join(static_dir, "routine-anpassen.js"):
             return primary_mtime
         if path.endswith(".css"):
             return 1.0   # T1813: im Quell-Set, nie das Maximum
@@ -101,7 +102,7 @@ def test_ac1_platform_gewinnt_wenn_neuer(monkeypatch):
         raise OSError(f"unerwarteter Pfad im Test: {path}")
 
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
-    result = pwa_mantel.build_id_for("mini-app-uebersicht", static_dir)
+    result = pwa_mantel.build_id_for("routine", static_dir)
     assert result == str(int(platform_mtime)), \
         f"Erwartet {int(platform_mtime)!r}, erhalten {result!r} — platform.js sollte gewinnen"
 
@@ -173,7 +174,7 @@ def test_ac2_platform_bump_sichtbar_in_route_html(monkeypatch, client):
 
     # platform.js ist der neueste Stand
     def fake_getmtime(path):
-        if path == os.path.join(static_dir, "mini-app-uebersicht.js"):
+        if path == os.path.join(static_dir, "routine-anpassen.js"):
             return 200.0
         if path == os.path.join(static_dir, "platform.js"):
             return 999.0  # platform.js klar neuer
@@ -181,7 +182,7 @@ def test_ac2_platform_bump_sichtbar_in_route_html(monkeypatch, client):
         return 1.0
 
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
-    resp = client.get("/api/v1/seiten/mini-app-uebersicht")
+    resp = client.get("/seiten/routine/anpassen")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "?v=999" in body, \
@@ -205,7 +206,6 @@ def test_ac3_vier_routen_nutzen_helper(monkeypatch, client):
     routes_und_komponenten = [
         ("/seiten/essen/einkauf",              "einkauf"),
         ("/seiten/plan/einstellungen",         "plan"),
-        ("/api/v1/seiten/mini-app-uebersicht", "mini-app-uebersicht"),
         ("/seiten/routine/anpassen",           "routine"),
     ]
 

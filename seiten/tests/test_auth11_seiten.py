@@ -16,9 +16,10 @@ am ersten Durchgang, siehe Kommentare in `seiten/main.py`):
   wortgleiche Kopie -- der Docstring behauptete "geteilt", war es aber nur
   unter den Public-Routen selbst).
 
-  Befund 2 (zurueckgenommen, Ticket #1859): die sechs Telegram-web_app-HTML-
+  Befund 2 (zurueckgenommen, Ticket #1859): die fuenf Telegram-web_app-HTML-
   Shells (essen_einkauf_view, routine_anpassen_view, wetter_regeln_view,
-  mini_app_uebersicht_view, plan_einstellungen_view, hoerspiel_eltern_view +
+  plan_einstellungen_view, hoerspiel_eltern_view (#1946: mini_app_uebersicht_view
+  geloescht) +
   ihre vier Trailing-Slash-Aliase) sind NICHT gegated -- offene Live-Probe,
   ob die Telegram-WebView den `xbuddy_session`-Cookie traegt (kein Spec-Ort
   behauptet es, MAD-11 belegt nur den fehlenden `Authorization`-Header beim
@@ -149,7 +150,7 @@ ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS = [
     "/api/v1/seiten/uebersicht/icon-maskable-512.png",
 ]
 
-# Befund 2 (Watchdog-Fix, Ticket #1859): die sechs Telegram-web_app-HTML-
+# Befund 2 (Watchdog-Fix, Ticket #1859): die fuenf Telegram-web_app-HTML-
 # Shells + ihre vier Trailing-Slash-Aliase -- NICHT gegated, offene Live-
 # Probe (Nic muss auf einem Elterngeraet den Telegram-Button antippen;
 # Cookie-Traegung der WebView ist nicht belegt). NICHT in
@@ -166,7 +167,7 @@ ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE = [
     "/seiten/wetter/regeln/",
     "/seiten/wetter/regeln",
     "/seiten/hoerspiel/mia/eltern",
-    "/api/v1/seiten/mini-app-uebersicht",
+    # #1946: /api/v1/seiten/mini-app-uebersicht ist geloescht (eine Uebersicht).
 ]
 
 # AUTH-11-Ausnahmen fuer seiten -- EXAKTE Teilmenge der Tabelle in
@@ -177,6 +178,7 @@ _AUTH11_AUSNAHMEN = {
     "/version",
     "/healthz",
     "/auth/pair",
+    "/auth/telegram",
     "/shell/<panel_id>/manifest.json",
     "/shell/<panel_id>/<path:asset>",
     "/controller/_shared/<path:asset>",
@@ -370,7 +372,7 @@ def test_pwa_manifest_und_icons_sind_public_auch_hart(hard_client, path):
 
 
 # ---------------------------------------------------------------------------
-# Befund 2 (Watchdog-Fix, Ticket #1859) — die sechs Telegram-web_app-Shells +
+# Befund 2 (Watchdog-Fix, Ticket #1859) — die fuenf Telegram-web_app-Shells +
 # Trailing-Slash-Aliase sind NICHT gegated (offene Live-Probe). Diese Tests
 # pruefen NUR "bleibt erreichbar", nicht "ist gegated" -- das waere die
 # falsche Zusicherung fuer eine bewusst offene Frage.
@@ -442,9 +444,17 @@ def test_healthz_und_version_bleiben_ungegated(hard_client):
 def test_seiten_static_mini_app_js_bleibt_ungegated(hard_client):
     """AUTH-11-Bootstrap-Nachtrag (#1805, 2026-08-11): Mini-App-JS laedt VOR
     jeder Identifikation -- der implizite Flask-Static-Endpoint bleibt public,
-    selbst im hard-Modus."""
-    r = hard_client.get("/api/v1/seiten/static/mini-app-uebersicht.js", headers=EXTERN_HEADERS)
+    selbst im hard-Modus. #1946: dasselbe gilt fuer das Tausch-Skript der
+    Uebersicht, das die 401-Anweisungsseite ohne Cookie laedt."""
+    r = hard_client.get("/api/v1/seiten/static/telegram-anmeldung.js", headers=EXTERN_HEADERS)
     assert r.status_code == 200
+
+
+def test_auth_telegram_bleibt_ungegated_prueft_selbst(hard_client):
+    """AUTH-11-Ausnahme (#1946): /auth/telegram stellt das Cookie aus und
+    prueft selbst -- ohne Header 401 aus der EIGENEN Pruefung, kein Gate."""
+    r = hard_client.post("/auth/telegram", headers=EXTERN_HEADERS)
+    assert r.status_code == 401
 
 
 def test_init_data_validate_bleibt_ungegated_prueft_selbst(hard_client):
@@ -544,5 +554,6 @@ def test_auth11_ausnahmen_hat_die_erwartete_kardinalitaet():
     Tabelle" nachtraegt -- /api/v1/seiten/static/<path:filename> UND
     /api/v1/init-data/validate sind beide neu, macht in Summe elf benannte
     Zeilen trotz der Bezeichnung 'zehn' im Auftrag (woertlich nachgezaehlt
-    gegen `specs/platform/auth.md` AUTH-11-Tabelle, siehe Modul-Docstring)."""
-    assert len(_AUTH11_AUSNAHMEN) == 11
+    gegen `specs/platform/auth.md` AUTH-11-Tabelle, siehe Modul-Docstring).
+    #1946: /auth/telegram kommt als zwoelfte dazu (zweite Cookie-Ausgabe)."""
+    assert len(_AUTH11_AUSNAHMEN) == 12

@@ -177,13 +177,11 @@ def test_keine_komponente_ohne_anschluss_und_ohne_begruendung():
 def test_deklarierte_adressen_liefern_kein_404():
     """Ein Eintrag darf nicht auf eine Adresse zeigen, die es nicht gibt (#1822 AC3).
 
-    Der bekannte Fall sitzt in den PWA-Unterfeldern der Plan-Einstellungen:
-    der Hauptpfad ist in Ordnung (200), aber `plan/views.json:26` und `:28`
-    zeigen auf `/seiten/static/plan/{manifest.json,sw.js}` — beide 404.
-    Ausgeliefert wird unter `/seiten/plan/einstellungen/…`. Beide Befunde
-    stehen als Schuldstand in `tests/eltern_flaechen.py:AUSNAHMEN` und werden
-    von `test_befunde_sind_im_lauf_sichtbar` in jedem Lauf ausgegeben — der
-    Test meldet den Fund, er repariert die Registry-Datei nicht.
+    Der Fall, an dem die Achse gebaut wurde, sass in den PWA-Unterfeldern der
+    Plan-Einstellungen: `plan/views.json:26`/`:28` zeigten auf
+    `/seiten/static/plan/{manifest.json,sw.js}` — beide 404. Mit #1906 zeigen
+    sie auf `/seiten/plan/einstellungen/…`, wo ausgeliefert wird; die zwei
+    Schuldstand-Zeilen sind entfallen.
 
     Gemessen wird ueber den Flask-Test-Client des ausliefernden Dienstes: kein
     Live-HTTP, also auch kein stilles Gruen, wenn kein Dienst laeuft. Gatete
@@ -273,6 +271,53 @@ def test_waechter_wird_rot_wenn_eine_neue_seiten_route_kein_verzeichnis_hat():
         "die Achse nicht die Routen-Tabelle, die man ihr gibt. Gefunden: %r"
         % ohne_route
     )
+
+
+# ── #1906 — Chat-Verweis→Verzeichnis: der Knopf verspricht, die Registry schweigt
+
+def test_jeder_chat_verweis_hat_einen_verzeichnis_eintrag():
+    """Ein Chat-Knopf auf eine Adresse ohne Verzeichnis-Eintrag macht rot (#1906).
+
+    Die Seiten-Achsen gehen vom Verzeichnis aus; ein Chat, der auf eine
+    Flaeche zeigt, die dort fehlt, war fuer sie unsichtbar. Genau so blieb
+    der Weg zum Kachel-Editor tot, ohne dass eine Pruefung anschlug.
+    """
+    offen = ef.chat_luecken()
+    assert not offen, (
+        "Chat-Verweise ohne Eintrag im Ansichts-Verzeichnis (#1906):\n"
+        + "\n".join("  - %s" % b.text for b in offen)
+        + "\n\nFix: den Chat auf eine eingetragene Flaeche zeigen lassen oder "
+        "die Flaeche in ihr views.json eintragen. Ist der Bruch bekannt und "
+        "noch offen, gehoert er als 'schuldstand' mit Trigger in "
+        "tests/eltern_flaechen.py:AUSNAHMEN (Achse 'chat')."
+    )
+
+
+def test_die_gemessene_chat_verweis_menge_ist_nicht_leer():
+    """Ohne gefundene Verweise waere die Achse gegenstandslos gruen."""
+    pfade = {v.pfad for v in ef.chat_verweise()}
+    assert "/api/v1/seiten/uebersicht" in pfade, (
+        "Der Knopf auf die Uebersicht (seiten_uebersicht_task) wird nicht als "
+        "Chat-Verweis erkannt — die Achse misst ins Leere. Gefunden: %r" % sorted(pfade)
+    )
+
+
+def test_waechter_wird_rot_wenn_ein_chat_verweis_kein_verzeichnis_hat(tmp_path):
+    """Fehlerpfad-Probe (#1906): diese Achse KANN rot werden — vorgefuehrt an
+    genau dem Fall, den #1946 gerade entfernt hat: ein Knopf auf die
+    Mini-App-Uebersicht, die kein Verzeichnis mehr kennt."""
+    skill = tmp_path / "probe_task.py"
+    skill.write_text(
+        '_PROBE_APP_PATH = "/api/v1/seiten/mini-app-uebersicht"\n'
+        '_OK_APP_PATH = "/api/v1/seiten/uebersicht"\n',
+        encoding="utf-8",
+    )
+    befunde = ef.chat_befunde(skills_dir=str(tmp_path))
+    kennungen = [b.kennung for b in befunde]
+    assert kennungen == ["/api/v1/seiten/mini-app-uebersicht"], (
+        "Erwartet genau den Verweis ohne Eintrag, gefunden: %r" % kennungen
+    )
+    assert "probe_task.py:1" in befunde[0].text
 
 
 # ── Achse `lader` — kaputte Eintraege werden Befund, nicht blinder Fleck ─────
@@ -394,6 +439,7 @@ def test_ausnahmen_sind_noch_real():
         },
         ef.ACHSE_GEGENRICHTUNG: {b.kennung for b in ef.gegenrichtung_befunde()},
         ef.ACHSE_ROUTE: {b.kennung for b in ef.route_befunde()},
+        ef.ACHSE_CHAT: {b.kennung for b in ef.chat_befunde()},
     }
     veraltet = [
         "%s/%s (%s)" % (e.achse, e.kennung, e.quelle)
@@ -433,9 +479,9 @@ def test_befunde_sind_im_lauf_sichtbar(capsys):
     print("\n".join(zeilen))
 
     ausgabe = capsys.readouterr().out
-    assert "plan/views.json:26" in ausgabe, (
-        "Der 404-Fund bei den Plan-Einstellungen muss im Lauf benannt werden "
-        "(#1822 AC3) — sonst ist er wieder unsichtbar."
+    assert "wetter_regeln_oeffnen_task.py:38" in ausgabe, (
+        "Der tote Chat-Weg zum Garderoben-Editor muss im Lauf benannt werden "
+        "(#1906) — sonst ist er wieder unsichtbar."
     )
     assert schuldstaende >= 1, "Kein Schuldstand ausgegeben — Sichtbarkeit ungeprueft."
 
@@ -449,8 +495,8 @@ def test_ohne_die_ausnahme_liste_bleiben_genau_diese_befunde_offen(monkeypatch):
     einen NEUEN Fehler derselben Kennung stillschweigend abdeckte).
 
     Das ist zugleich die zweite Fehlerpfad-Probe: sie loest jeden
-    dokumentierten Befund echt aus, statt seine Existenz zu behaupten. Fuenf
-    der sechs Achsen machen einen offenen Befund rot; die Achse
+    dokumentierten Befund echt aus, statt seine Existenz zu behaupten. Sechs
+    der sieben Achsen machen einen offenen Befund rot; die Achse
     `gegenrichtung` verlangt nur seine Benennung (#1822 klammert ihren Bau
     aus) — offen ist er in beiden Faellen. Die Achse `route` (#1890) faehrt
     mit, obwohl sie heute keinen dokumentierten Befund traegt: sonst bliebe
@@ -462,6 +508,7 @@ def test_ohne_die_ausnahme_liste_bleiben_genau_diese_befunde_offen(monkeypatch):
     offen = set()
     for befund in (ef.mantel_luecken() + ef.anschluss_luecken()
                    + ef.gegenrichtung_luecken() + ef.route_luecken()
+                   + ef.chat_luecken()
                    + [b for b in ef.pfad_befunde() if b.ausnahme is None]
                    + [b for b in ef.lader_befunde() if b.ausnahme is None]):
         offen.add((befund.achse, befund.kennung))

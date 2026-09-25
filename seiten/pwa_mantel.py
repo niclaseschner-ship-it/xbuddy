@@ -63,7 +63,7 @@ class MantelConfig:
     AKTIV konsumiert in Track #1266:
       - `build_id_source_set` (PWAM-4): über `build_id_for()` der Cache-Buster
         für die SW-/HTML-Auslieferung. Bei einkauf/plan/connector/shell treibt
-        es direkt die jeweilige Route; mau/routine tragen es als Daten für die
+        es direkt die jeweilige Route; routine trägt es als Daten für die
         generische Mini-App-HTML-Route + den Folgetrack.
 
     Alle übrigen Felder tragen den vollen PWAM-5-Bauplan (Manifest PWAM-2 +
@@ -427,7 +427,7 @@ REGISTRY: dict[str, MantelConfig] = {
     #    der SW unter …/uebersicht/sw.js braucht darum Service-Worker-Allowed.
     #    Auth: HTML cookie-gegatet (AUTH-7b DUAL, #1832) wie bisher.
     "uebersicht": MantelConfig(
-        build_id_source_set=("uebersicht.css",),
+        build_id_source_set=("uebersicht.css", "telegram-anmeldung.js"),
         template_source_set=("uebersicht.html",),
         name="Übersicht · XBuddy",
         short_name="XBuddy",
@@ -441,12 +441,8 @@ REGISTRY: dict[str, MantelConfig] = {
         sw_script_route="/api/v1/seiten/uebersicht/sw.js",
         sw_scope="/api/v1/seiten/uebersicht",
     ),
-    # ── Mini-Apps ohne installierbaren Mantel (kein manifest.json/sw.js auf
-    #    Platte). Sie tragen NUR build_id_source_set (HTML-Cache-Buster, T1229);
-    #    Manifest-/SW-Felder bleiben None — kein Fork, keine Vorrats-Route. ──
-    "mini-app-uebersicht": MantelConfig(
-        build_id_source_set=("mini-app-uebersicht.js", "mini-app-uebersicht.css", "platform.js"),
-    ),
+    # #1946: der Eintrag "mini-app-uebersicht" ist entfallen — Telegram öffnet
+    # dieselbe Übersicht wie der Browser (REGISTRY['uebersicht']).
     # ── ROUTINE-20/23 (T1665) — vollstaendiger Voll-Mantel via Lib (PWAM-5) ──
     #    Manifest via build_manifest(), sw.js via render_sw() — kein manifest.json/
     #    sw.js auf Platte. Icons aus seiten/static/routine/ (V1-Platzhalter aus plan,

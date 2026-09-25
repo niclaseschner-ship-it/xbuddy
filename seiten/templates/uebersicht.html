@@ -18,6 +18,10 @@
   <meta name="apple-mobile-web-app-title" content="XBuddy">
 
   <link rel="stylesheet" href="/api/v1/seiten/static/uebersicht.css?v={{ build_id }}">
+  <!-- #1946: dieselbe Übersicht für Browser und Telegram. Im Telegram-WebView
+       ohne Cookie tauscht das Skript die initData einmal gegen das Cookie und
+       lädt neu; fremde Links öffnet es über Telegram. Im Browser tut es nichts. -->
+  <script src="/api/v1/seiten/static/telegram-anmeldung.js?v={{ build_id }}"{% if telegram_tauschen %} data-tauschen{% endif %}></script>
 </head>
 <body>
   <header class="page">

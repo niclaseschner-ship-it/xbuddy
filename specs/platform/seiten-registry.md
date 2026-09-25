@@ -209,7 +209,14 @@ Editier-Wege denselben einen Tap-Knopf-Stil im Chat. Die Komplexität wandert
 aus dem Skill in die Mini-App-Übersicht (MAU), die das Inventar visuell
 trägt; der Skill bleibt ein dünner Launcher.
 
-*Tickets:* #467 (SREG-12), #551, #678 (Pivot)
+> **#1946 (Nic 2026-09-25) — Knopf öffnet die eine Übersicht.** Die
+> Mini-App-Übersicht (MAU) ist entfallen. Der Inline-Button zeigt auf
+> `/api/v1/seiten/uebersicht` (SREG-12) — dieselbe Seite wie im Browser.
+> Ohne Cookie im Telegram-WebView meldet sie sich selbst an
+> (`auth.md` AUTH-2.b, `POST /auth/telegram`). Wo oben „MAU" steht, ist
+> jetzt diese Übersicht gemeint.
+
+*Tickets:* #467 (SREG-12), #551, #678 (Pivot), #1946
 
 ## SREG-5b — Opt-in-Direktantwort (Sekundärpfad nach SREG-5)
 
@@ -857,9 +864,9 @@ müssen.
   "zeigt": "Default-Verantwortlichkeiten je Slot und Wochentag setzen.",
   "zielgruppe": "eltern",
   "pwa": {
-    "manifest": "/seiten/static/plan/manifest.json",
+    "manifest": "/seiten/plan/einstellungen/manifest.json",
     "start_url": "/seiten/plan/einstellungen",
-    "service_worker": "/seiten/static/plan/sw.js"
+    "service_worker": "/seiten/plan/einstellungen/sw.js"
   },
   "auth": "public"
 }
@@ -927,7 +934,13 @@ Buddy-Gruppen, die dedizierte Mini-App-Sektion (SREG-14), die Origin-URLs
 `GET /api/v1/seiten` (SREG-3). Er listet sich darum **nicht** in `views.json`
 (Ausnahme im Manifest-Eigentest, analog zum Inventar-Endpunkt selbst).
 
-**Durchsetzung:** registry-abgeleiteter Paritäts-Guard (`test_render_parity.py`
+> **#1946 (2026-09-25):** Die Mini-App-Übersicht als zweiter Renderer ist
+> entfallen; es gibt nur noch die Jinja-Übersicht. Der Paritäts-Guard unten
+> ist mit ihr gelöscht — ohne zweiten Renderer gibt es keinen Drift, den er
+> fangen könnte. Die Regel selbst (eine Ableitung `baue_layout`, `/layout`
+> als Daten-Endpunkt, `audience`-Feld) bleibt stehen.
+
+**Durchsetzung (bis #1946):** registry-abgeleiteter Paritäts-Guard (`test_render_parity.py`
 + `render_parity_dom.test.js`). Die erwartete Typ-Menge wird aus den
 `TYP_*`-Konstanten des Aggregators (SREG-4/14) **aufgezählt**, nicht
 handgepflegt — ein neuer Eintrags-Typ, der nur in einem Render-Pfad landet, wird

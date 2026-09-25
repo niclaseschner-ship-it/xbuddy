@@ -839,3 +839,19 @@ def test_1940_wurzel_leitet_auf_uebersicht():
     )
     # Relativer Redirect (Funnel 443 vs. LAN 8443, #1459).
     assert "absolute_redirect off;" in text
+
+
+# ============================================================
+#  #1946 — Telegram-Anmeldung /auth/telegram
+# ============================================================
+
+
+def test_1946_auth_telegram_geht_an_seiten():
+    """POST /auth/telegram (initData → Cookie) muss wie /auth/pair beim
+    seiten-Upstream landen — sonst fängt der Catch-all 404 den Tausch ab."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s*=\s*/auth/telegram\s*\{\s*proxy_pass\s+http://xbuddy_seiten;\s*\}",
+        text,
+    )
+    assert match is not None, "location = /auth/telegram → xbuddy_seiten fehlt (#1946)"

@@ -308,7 +308,7 @@ def test_byte_diff_gate_served_gleich_committed_modulo_build_id(
 # sicherte ihn mit einem KOMPONENTEN-SPEZIFISCHEN Test ab
 # (test_connector.py::test_pwam4_build_id_bumpt_bei_style_css_aenderung). Der
 # Fehler kam daraufhin in vier weiteren Komponenten wieder — einkauf, plan,
-# mini-app-uebersicht, routine trugen ihre CSS nicht im Quell-Set. Deshalb hier
+# mini-app-uebersicht (seit #1946 entfallen), routine trugen ihre CSS nicht im Quell-Set. Deshalb hier
 # die Invariante ueber die GANZE Registry statt eines fuenften Einzelfalls.
 #
 # Warum das unsichtbar bleibt: der Buster kippt nur dann nicht, wenn eine
@@ -343,13 +343,15 @@ def test_pwam4_jede_komponente_traegt_ihre_css_im_quell_set():
     )
 
 
-def test_pwam4_build_id_bumpt_bei_css_aenderung_der_uebersicht(tmp_path):
+def test_pwam4_build_id_bumpt_bei_css_aenderung_einer_mini_app(tmp_path):
     """PWAM-4 (T1813): der konkrete Fall, an dem der Defekt aufgefallen ist —
-    eine reine CSS-Aenderung an der Mini-App-Uebersicht MUSS die build_id
-    bewegen. Ohne die CSS im Quell-Set bleibt sie auf der JS-mtime stehen."""
-    quell_set = pwa_mantel.REGISTRY["mini-app-uebersicht"].build_id_source_set
-    assert "mini-app-uebersicht.css" in quell_set, (
-        "Vorbedingung: mini-app-uebersicht.css muss im build_id_source_set sein (T1813)"
+    eine reine CSS-Aenderung an einer Mini-App MUSS die build_id bewegen. Ohne
+    die CSS im Quell-Set bleibt sie auf der JS-mtime stehen. (Aufgefallen war
+    er an der Mini-App-Uebersicht, die mit #1946 entfallen ist; die Probe laeuft
+    jetzt an routine, das dieselbe Form hat.)"""
+    quell_set = pwa_mantel.REGISTRY["routine"].build_id_source_set
+    assert "routine-anpassen.css" in quell_set, (
+        "Vorbedingung: routine-anpassen.css muss im build_id_source_set sein (T1813)"
     )
     basis = 1_700_000_000.0
     for name in quell_set:
@@ -357,11 +359,11 @@ def test_pwam4_build_id_bumpt_bei_css_aenderung_der_uebersicht(tmp_path):
         pfad.parent.mkdir(parents=True, exist_ok=True)
         pfad.write_bytes(b"stub")
         os.utime(str(pfad), (basis, basis))
-    vorher = pwa_mantel.build_id_for("mini-app-uebersicht", str(tmp_path))
+    vorher = pwa_mantel.build_id_for("routine", str(tmp_path))
     assert vorher == str(int(basis))
     neu = basis + 1000.0
-    os.utime(str(tmp_path / "mini-app-uebersicht.css"), (neu, neu))
-    nachher = pwa_mantel.build_id_for("mini-app-uebersicht", str(tmp_path))
+    os.utime(str(tmp_path / "routine-anpassen.css"), (neu, neu))
+    nachher = pwa_mantel.build_id_for("routine", str(tmp_path))
     assert nachher != vorher, (
         "PWAM-4: build_id hat sich NICHT geaendert nach CSS-mtime-Update — "
         "genau der Defekt aus T1813"

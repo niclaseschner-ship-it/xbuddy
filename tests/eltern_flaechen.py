@@ -48,7 +48,7 @@ Betriebs-Laders und meldet jeden uebersprungenen Eintrag **sichtbar**
 Warum die per-Manifest-Naht und nicht das ebenfalls oeffentliche
 `aggregator.manifest_eintraege()`: letzteres ueberspringt Mini-App-Views, wenn
 die Bot-ENV nicht gesetzt ist (SREG-14/SREG-13). Das waere ein
-**umgebungsabhaengiger blinder Fleck** — `seiten/mini-app-uebersicht`
+**umgebungsabhaengiger blinder Fleck** — jede `typ: "mini-app"`-Ansicht
 verschwaende im CI aus der Liste. Die per-Manifest-Ebene traegt genau die
 Skip-Semantik des Betriebs, ohne die ENV-Abhaengigkeit.
 `lade_views_mit_per_view_resilienz` ist dafuer mit #1822 als oeffentliche Naht
@@ -115,9 +115,11 @@ Schuldstand wird bei JEDEM Testlauf als Warnung ausgegeben.
 
 from __future__ import annotations
 
+import ast
 import importlib
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -139,6 +141,7 @@ ACHSE_ANSCHLUSS = "anschluss"  # Komponente ohne Uebereinstimmungs-Pruefung
 ACHSE_PFAD = "pfad"            # deklarierte Adresse liefert 404
 ACHSE_LADER = "lader"          # Eintrag, den der Betriebs-Lader ueberspringt
 ACHSE_ROUTE = "route"          # Seiten-Route ohne Eintrag im Ansichts-Verzeichnis
+ACHSE_CHAT = "chat"            # Chat-Verweis auf eine Adresse ohne Verzeichnis-Eintrag (#1906)
 # Gegenrichtung: Mantel-Schluessel OHNE eltern-facing Ansicht. #1822 klammert
 # den Bau dieser Richtung ausdruecklich aus (er haette eine Produkt-Folge: die
 # Heim-Shell erschiene in der Seiten-Uebersicht). Sie wird deshalb nur GEMESSEN
@@ -146,7 +149,7 @@ ACHSE_ROUTE = "route"          # Seiten-Route ohne Eintrag im Ansichts-Verzeichn
 ACHSE_GEGENRICHTUNG = "gegenrichtung"
 
 ACHSEN = (ACHSE_MANTEL, ACHSE_ANSCHLUSS, ACHSE_PFAD, ACHSE_LADER,
-          ACHSE_GEGENRICHTUNG, ACHSE_ROUTE)
+          ACHSE_GEGENRICHTUNG, ACHSE_ROUTE, ACHSE_CHAT)
 
 
 @dataclass(frozen=True)
@@ -170,21 +173,7 @@ class Ausnahme:
 
 
 AUSNAHMEN: tuple[Ausnahme, ...] = (
-    # ── Achse `mantel` ───────────────────────────────────────────────────────
-    Ausnahme(
-        kennung="seiten/mini-app-uebersicht",
-        achse=ACHSE_MANTEL,
-        sorte=SORTE_AUSNAHME,
-        begruendung=(
-            "Telegram-Mini-App (SREG-14, `typ: \"mini-app\"`): sie laeuft im "
-            "Telegram-WebView und wird nie auf einen Home-Screen installiert. "
-            "Ihr Registry-Eintrag traegt deshalb bewusst NUR den "
-            "Zwischenspeicher-Schluessel (`build_id_source_set`) und weder "
-            "Manifest- noch Service-Worker-Daten — ein halber Mantel ist hier "
-            "die Entscheidung, nicht das Versehen."
-        ),
-        quelle="seiten/pwa_mantel.py:421 (Kommentar 'Mini-Apps ohne installierbaren Mantel')",
-    ),
+    # ── Achse `mantel`: keine Ausnahme mehr (die Mini-App-Übersicht ist mit #1946 entfallen) ──
     # ── Achse `anschluss` ────────────────────────────────────────────────────
     Ausnahme(
         kennung="kibuddy",
@@ -300,43 +289,31 @@ AUSNAHMEN: tuple[Ausnahme, ...] = (
             "und diese Zeile faellt weg."
         ),
     ),
-    # ── Achse `pfad` ─────────────────────────────────────────────────────────
+    # ── Achse `pfad`: keine Ausnahme mehr — die zwei 404-Unterfelder der
+    #    Plan-Einstellungen sind mit #1906 in plan/views.json korrigiert. ──
+    # ── Achse `chat` (#1906) ─────────────────────────────────────────────────
     Ausnahme(
-        kennung="plan/einstellungen:pwa.manifest",
-        achse=ACHSE_PFAD,
+        kennung="/display/wetter/regeln",
+        achse=ACHSE_CHAT,
         sorte=SORTE_SCHULDSTAND,
         begruendung=(
-            "Live gemessen: der Hauptpfad /seiten/plan/einstellungen ist in "
-            "Ordnung (200), aber das PWA-Unterfeld zeigt auf "
-            "/seiten/static/plan/manifest.json — 404. Ausgeliefert wird das "
-            "Manifest unter /seiten/plan/einstellungen/manifest.json "
-            "(seiten/main.py:1013). Der Fehler sitzt im Unterfeld, nicht im "
-            "Hauptpfad — genau die Sorte Auslassung, die bisher niemandem "
-            "auffiel. Der Test meldet ihn; die Registry-Datei zu korrigieren "
-            "ist ein eigener Vorgang."
+            "Der Garderoben-Knopf im Chat (wetter_regeln_oeffnen) oeffnet "
+            "wetter_origin_url + /display/wetter/regeln. Diese Adresse gibt es "
+            "seit #1715 nicht mehr: der Editor ist nach /seiten/wetter/regeln "
+            "gezogen (wetter/views.json:21, wetter/main.py:361), die alte Route "
+            "ist geloescht. Der Knopf endet damit im 404 — genau die Sorte "
+            "toter Chat-Weg, fuer die diese Achse gebaut ist. Der Fix ist "
+            "mehr als ein Pfad-String: die Basis-URL ist die Wetter-Origin "
+            "(eltern-chat/config.py:82, Port 5030), die neue Flaeche liefert "
+            "aber der seiten-Dienst aus; Pfad und Origin muessen zusammen "
+            "wandern, und das beruehrt die Instanz-Konfiguration."
         ),
-        quelle="plan/views.json:26",
+        quelle="eltern-chat/skills/wetter_regeln_oeffnen_task.py:38 (_WRO_APP_PATH)",
         trigger=(
-            "Sobald plan/views.json:26 auf /seiten/plan/einstellungen/manifest.json "
-            "zeigt, antwortet die Adresse mit 200 und diese Zeile faellt weg "
-            "(test_ausnahmen_sind_noch_real erzwingt das)."
-        ),
-    ),
-    Ausnahme(
-        kennung="plan/einstellungen:pwa.service_worker",
-        achse=ACHSE_PFAD,
-        sorte=SORTE_SCHULDSTAND,
-        begruendung=(
-            "Zweites PWA-Unterfeld derselben Ansicht: /seiten/static/plan/sw.js "
-            "— 404. Ausgeliefert wird der Service-Worker unter "
-            "/seiten/plan/einstellungen/sw.js (seiten/main.py:985). Eigene "
-            "Zeile statt Sammel-Eintrag, damit das Verschwinden des einen "
-            "Befunds nicht den anderen mit abraeumt."
-        ),
-        quelle="plan/views.json:28",
-        trigger=(
-            "Sobald plan/views.json:28 auf /seiten/plan/einstellungen/sw.js "
-            "zeigt, antwortet die Adresse mit 200 und diese Zeile faellt weg."
+            "Sobald der Knopf auf /seiten/wetter/regeln zeigt (Pfad in "
+            "wetter_regeln_oeffnen_task.py plus eine Basis-URL, unter der der "
+            "seiten-Dienst antwortet), hat der Verweis einen Verzeichnis-Eintrag "
+            "und diese Zeile faellt weg (test_ausnahmen_sind_noch_real)."
         ),
     ),
 )
@@ -582,9 +559,8 @@ def gegenrichtung_befunde(root: str = REPO_ROOT) -> list[Befund]:
     gehoert benannt, nicht in einen Docstring versteckt.
 
     Schluessel OHNE `start_url` bleiben hier aussen vor — sie sind auf gar
-    keine Flaeche abbildbar und werden auf der Mantel-Achse gefuehrt
-    (`seiten/mini-app-uebersicht`); ein zweiter Eintrag fuer denselben
-    Sachverhalt waere Rauschen.
+    keine Flaeche abbildbar und werden auf der Mantel-Achse gefuehrt; ein
+    zweiter Eintrag fuer denselben Sachverhalt waere Rauschen.
     """
     pwa_mantel = importlib.import_module("seiten.pwa_mantel")
     app = _seiten_app()
@@ -729,6 +705,106 @@ def routentabelle_mit_zusatz(pfad: str, app=None):
     regeln = [regel.empty() for regel in app.url_map.iter_rules()]
     regeln.append(Rule(pfad, endpoint="erfundene.probe", methods=["GET"]))
     return SimpleNamespace(url_map=Map(regeln))
+
+
+# ── Achse `chat` — Chat-Verweis→Verzeichnis (#1906) ─────────────────────────
+
+#: Wo die Chat-Knoepfe entstehen. Nur die Skills, nicht deren Tests. Gelesen
+#: wird nur der Quelltext (ast), importiert wird nichts — MOD-6 bleibt gewahrt.
+CHAT_SKILLS = os.path.normpath("eltern-chat/skills")
+
+#: Was als Verweis auf eine Flaeche zaehlt: ein String-Literal, das GANZ aus
+#: einem Pfad unter einem der Flaechen-Praefixe besteht. Docstrings und
+#: Log-Texte enthalten Leerzeichen und fallen damit von selbst heraus; der
+#: Daten-Endpunkt `/api/v1/seiten` (SREG-3, seiten_client) hat keinen
+#: Abschnitt dahinter und ist damit auch keiner.
+_CHAT_VERWEIS = re.compile(r"^/(?:seiten|api/v1/seiten|display|shell|controller)/[^\s]+$")
+
+
+@dataclass(frozen=True)
+class ChatVerweis:
+    pfad: str
+    quelle: str
+
+
+def chat_verweise(skills_dir: str | None = None) -> list[ChatVerweis]:
+    """Jede Flaechen-Adresse, die ein Chat-Skill als Literal traegt.
+
+    Gelesen wird der Syntaxbaum, nicht der Text: so zaehlen nur echte
+    String-Konstanten (`_UEBERSICHT_PATH = "/api/v1/seiten/uebersicht"`),
+    keine Kommentare. Die Knoepfe setzen sich aus Basis-URL + genau so einer
+    Konstante zusammen (seiten_uebersicht_task, routine_anpassen_oeffnen_task,
+    hoerspiel_oeffnen_task, wetter_regeln_oeffnen_task).
+    """
+    verzeichnis = skills_dir or os.path.join(REPO_ROOT, CHAT_SKILLS)
+    verweise = []
+    for name in sorted(os.listdir(verzeichnis)):
+        if not name.endswith(".py"):
+            continue
+        pfad = os.path.join(verzeichnis, name)
+        with open(pfad, encoding="utf-8") as fh:
+            baum = ast.parse(fh.read(), filename=pfad)
+        quelle_basis = os.path.relpath(pfad, REPO_ROOT) if skills_dir is None else name
+        for knoten in ast.walk(baum):
+            if (isinstance(knoten, ast.Constant) and isinstance(knoten.value, str)
+                    and _CHAT_VERWEIS.match(knoten.value)):
+                verweise.append(ChatVerweis(
+                    knoten.value, "%s:%d" % (quelle_basis, knoten.lineno)))
+    return verweise
+
+
+def chat_befunde(root: str = REPO_ROOT, skills_dir: str | None = None,
+                 app=None) -> list[Befund]:
+    """Jeder Chat-Verweis auf eine Adresse OHNE Eintrag in einem Verzeichnis.
+
+    Der Fall aus #1906: der Chat verspricht eine Flaeche, die Registry kennt
+    sie nicht — der Knopf fuehrt ins Leere, und keine der Seiten-Achsen sieht
+    es, weil sie vom Verzeichnis ausgehen, nicht vom Chat.
+
+    Gefragt wird nach einem Eintrag **ueberhaupt** (wie die Achse `route`):
+    der Hoerspiel-Player ist `zielgruppe: "kind"`, der Chat schickt ihn den
+    Eltern trotzdem zum Weitergeben. Verglichen wird normalisiert (Query und
+    abschliessender Schraegstrich weg) und, wo der seiten-Dienst die Adresse
+    bedient, zusaetzlich ueber die aufgeloeste Flask-Regel — so traegt auch
+    ein parametrischer Eintrag (`/seiten/hoerspiel/mia/eltern`).
+    """
+    app = app if app is not None else _seiten_app()
+
+    def _norm(adresse):
+        return adresse.split("?")[0].rstrip("/") or "/"
+
+    deklariert_pfade = set()
+    deklariert_regeln = set()
+    for ansicht in durchlauf(root).alle_ansichten:
+        deklariert_pfade.add(_norm(ansicht.pfad))
+        regel = kanonische_regel(ansicht.pfad, app)
+        if regel:
+            deklariert_regeln.add(regel)
+
+    befunde = []
+    gesehen = set()
+    for verweis in chat_verweise(skills_dir):
+        kennung = _norm(verweis.pfad)
+        if kennung in gesehen:
+            continue
+        if kennung in deklariert_pfade:
+            continue
+        regel = kanonische_regel(verweis.pfad, app)
+        if regel and regel in deklariert_regeln:
+            continue
+        gesehen.add(kennung)
+        befunde.append(Befund(
+            ACHSE_CHAT, kennung,
+            "%s verweist im Chat auf %s, aber KEIN Ansichts-Verzeichnis traegt "
+            "einen Eintrag darauf — der Knopf verspricht eine Flaeche, die die "
+            "Registry nicht kennt (Seiten-Uebersicht, Mantel, 404-Pruefung "
+            "sehen sie nicht)" % (verweis.quelle, verweis.pfad)))
+    return befunde
+
+
+def chat_luecken(root: str = REPO_ROOT) -> list[Befund]:
+    """Nur die UNdokumentierten Chat-Befunde — das ist, was rot macht."""
+    return [b for b in chat_befunde(root) if b.ausnahme is None]
 
 
 # ── Achse `lader` ────────────────────────────────────────────────────────────

@@ -1,5 +1,16 @@
 # Mini-App-Übersicht — Spec     (ID-Präfix: MAU)
 
+> **ÜBERHOLT 2026-09-25 durch #1946 (Nic-Setzung: eine Übersicht für Browser
+> und Telegram, eine Pflege, alles als PWA).** Die Mini-App-Übersicht ist
+> gelöscht — Route `/api/v1/seiten/mini-app-uebersicht`, Template, JS, CSS,
+> Mantel-Registry-Eintrag, Karte in `seiten/views.json` und der
+> Paritätswächter #1210. Der Telegram-Knopf (`seiten_uebersicht`, SREG-5)
+> öffnet dieselbe Übersicht wie der Browser (`/api/v1/seiten/uebersicht`,
+> SREG-12); im Telegram-WebView ohne Cookie holt sie sich das
+> `xbuddy_session`-Cookie selbst über `POST /auth/telegram`
+> (`specs/platform/auth.md` AUTH-2.b). Diese Datei bleibt als
+> Entscheidungs-Geschichte stehen; keine MAU-Klausel ist mehr bindend.
+
 > Status: V1 · Refs #678 (Werft-Sammler, Funktion 3 „Übersicht"), RAT-16,
 > `conventions/mini-app-design.md` (MAD-1..10 ratifiziert 2026-06-15 / #708-Folge),
 > SREG-12 (Vorgänger-View im Browser), SREG-14 (Mini-App-Sorte im Manifest), #708
