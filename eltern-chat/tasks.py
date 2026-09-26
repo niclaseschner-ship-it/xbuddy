@@ -455,8 +455,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   mini_app_base_url=None,
                   hoerspiel_url_origin=None,
                   kibuddy_origin_url=None,
-                  a2_receipt_store=None,
-                  wetter_origin_url=None):
+                  a2_receipt_store=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert — wenn die FAA-Abhängigkeiten vorliegen — die »Familie
@@ -477,11 +476,10 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     Sofort-Schreib-Aufgabe) — wieder hinter dem AND-Guard auf
     `family_group_chat_id_getter` (FSE-2-Berechtigung).
 
-    SREG-6 / #476: Setzt der Aufrufer `seiten_origin_url`, registriert
-    build_catalog zusätzlich die lesende »Seiten-Übersicht«-Aufgabe (EC-9,
-    SREG-5/5b) — hinter dem AND-Guard auf `seiten_origin_url` +
-    `family_group_chat_id_getter` (SREG-6-Berechtigung via EC-2-Mitgliedschaft).
-    `display_url_origin_heim` ist die Heim-Origin (SREG-7) für den Übersichts-Link.
+    EC-46 / #1964: Setzt der Aufrufer `seiten_origin_url` UND
+    `mini_app_base_url`, registriert build_catalog die lesende »App öffnen«-
+    Aufgabe (EC-9), die ihre App-Liste aus dem Registry-Inventar liest —
+    hinter dem AND-Guard auf `family_group_chat_id_getter` (EC-2).
 
     KAQS-6 / #825: Setzt der Aufrufer `kibuddy_origin_url`, registriert
     build_catalog zusätzlich die schreibende »KIBuddy-Aufnahme-Quelle setzen«-
@@ -712,7 +710,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
 
     # SREG-5 Pivot / #882: »Seiten-Übersicht« als Klasse-B-Launcher (EC-9).
     # AND-Guard: mini_app_base_url UND family_group_chat_id_getter müssen
-    # gesetzt sein — analog der RAO-/HOE-Linie. Fehlt eine → Aufgabe nicht im
+    # gesetzt sein — analog der app_oeffnen-Linie. Fehlt eine → Aufgabe nicht im
     # Katalog. mini_app_base_url: Funnel-Domain für web_app.url (MAU-1).
     # SREG-5b deprecated: SeitenClient und display_url_origin_heim werden hier
     # nicht mehr benötigt (der alte Text-Link-Pfad ist inaktiv).
@@ -873,26 +871,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             is_member_fn=_ezg_is_member,
             mini_app_url=mini_app_einkauf_url or ""))
 
-    # RAO-8 / T728-C: »Routine-Anpassen öffnen« als lesende Aufgabe (EC-9).
-    # Dreifacher AND-Guard: routine_origin_url UND mini_app_base_url UND
-    # family_group_chat_id_getter müssen ALLE gesetzt sein — fehlt eine,
-    # erscheint die Aufgabe NICHT im Katalog (RAO-8).
-    # - routine_origin_url: Lese-Naht für GET /api/v1/routine/items (RAO-4).
-    # - mini_app_base_url: Funnel-Domain für web_app.url (RAO-6, EZG-6-Naht).
-    # - family_group_chat_id_getter: Live-Berechtigung gegen die Familien-Gruppe
-    #   (RAO-2). is_member_fn analog der RZS-/EZG-Linie.
-    if routine_origin_url is not None and mini_app_base_url is not None \
-            and family_group_chat_id_getter is not None:
-        from skills.routine_anpassen_oeffnen_task import RoutineAnpassenOeffnenTask
-        from skills.routine_client import RoutineClient as _RaoRoutineClient
-        _rao_routine_client = _RaoRoutineClient(origin_url=routine_origin_url)
-        _rao_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
-        catalog.register(RoutineAnpassenOeffnenTask(
-            tg=tg,
-            routine_client=_rao_routine_client,
-            is_member_fn=_rao_is_member,
-            mini_app_url=mini_app_base_url))
-
     # ONB-11 / #639: »Anbieter wechseln« als async-schreibende Aufgabe.
     # AND-Guard: zd_store_getter UND family_group_chat_id_getter UND
     # avb_sessions UND current_provider_getter müssen gesetzt sein — fehlt
@@ -941,26 +919,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             # durchschleifen, sonst sendet _sende_beifang_button früh-Return
             # (URL leer) und der Settings-Beifang-Button erscheint NIE.
             mini_app_base_url=mini_app_base_url or ""))
-
-    # HOE-8 / #876: »Hörspiel öffnen« als lesende Aufgabe (EC-9, Cluster B / Capability-Karte).
-    # Dreifacher AND-Guard: hoerspiel_url_origin UND mini_app_base_url UND
-    # family_group_chat_id_getter müssen ALLE gesetzt sein — fehlt eine,
-    # erscheint die Aufgabe NICHT im Katalog (HOE-8).
-    # - hoerspiel_url_origin: Lese-Naht für GET /config und GET /alben (HOE-1).
-    # - mini_app_base_url: Funnel-Domain für web_app.url (HOE-5, EZG-6/RAO-6-Naht).
-    # - family_group_chat_id_getter: Live-Berechtigung gegen die Familien-Gruppe
-    #   (HOE-2). is_member_fn analog der RAO-/HFE-Linie.
-    if hoerspiel_url_origin is not None and mini_app_base_url is not None \
-            and family_group_chat_id_getter is not None:
-        from skills.hoerspiel_client import HoerspielClient as _HoeHoerspielClient
-        from skills.hoerspiel_oeffnen_task import HoerspielOeffnenTask
-        _hoe_client = _HoeHoerspielClient(origin_url=hoerspiel_url_origin)
-        _hoe_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
-        catalog.register(HoerspielOeffnenTask(
-            tg=tg,
-            hoerspiel_client=_hoe_client,
-            is_member_fn=_hoe_is_member,
-            mini_app_url=mini_app_base_url))
 
     # T531 / ESSEN-22 V1.2 Pfad 2: »Foto für Essens-Item setzen« als
     # Klasse-C-Skill (propose→confirm, EC-10 zweistufige Variante).
@@ -1045,22 +1003,21 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             tg=tg,
             chat_id_getter=family_group_chat_id_getter))
 
-    # WRO-8 / #1094: »Wetter-Regeln öffnen« als lesende Aufgabe (EC-9, Klasse B).
-    # AND-Guard: wetter_origin_url UND family_group_chat_id_getter müssen BEIDE
-    # gesetzt sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog (WRO-8).
-    # - wetter_origin_url: Wetter-Buddy-Origin; Mini-App-URL = wetter_origin_url +
-    #   /display/wetter/regeln (WRO-5, wetter/views.json slug "regeln").
-    #   Ein Lese-Origin-Guard wie bei RAO entfällt — WRO V1 macht keinen Lese-Call
-    #   (E-WRO-3).
-    # - family_group_chat_id_getter: Live-Berechtigung gegen die Familien-Gruppe
-    #   (WRO-2). is_member_fn analog der RAO-/EZG-Linie.
-    if wetter_origin_url is not None and family_group_chat_id_getter is not None:
-        from skills.wetter_regeln_oeffnen_task import WetterRegelnOeffnenTask
-        _wro_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
-        catalog.register(WetterRegelnOeffnenTask(
-            tg=tg,
-            is_member_fn=_wro_is_member,
-            mini_app_url=wetter_origin_url))
+    # EC-46 / #1964: »App öffnen« — der EINE registry-getriebene Öffnen-Skill
+    # (löst hoerspiel_oeffnen, routine_anpassen_oeffnen, wetter_regeln_oeffnen
+    # ab). Dreifacher AND-Guard: seiten_origin_url (Registry-Inventar,
+    # GET /api/v1/seiten SREG-3) UND mini_app_base_url (Funnel-Origin der
+    # Knöpfe) UND family_group_chat_id_getter (EC-2-Berechtigung).
+    if seiten_origin_url is not None and mini_app_base_url is not None \
+            and family_group_chat_id_getter is not None:
+        from skills.app_oeffnen import AppVerzeichnis
+        from skills.app_oeffnen_task import AppOeffnenTask
+        from skills.seiten_client import SeitenClient
+        _ao_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(AppOeffnenTask(
+            is_member_fn=_ao_is_member,
+            verzeichnis=AppVerzeichnis(SeitenClient(origin_url=seiten_origin_url)),
+            basis_url=mini_app_base_url))
 
     # EC-43 / #1102: »Fähigkeiten zeigen« als lesende Aufgabe (EC-9).
     # Guard: family_group_chat_id_getter muss gesetzt sein — sonst keine

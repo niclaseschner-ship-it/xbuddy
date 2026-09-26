@@ -1201,8 +1201,8 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # FSE-7 / #393: Origin des Photo-Buddys (PHOTO-13/PHOTO-16). Leer ⇒
         # FotoSendenTask wird NICHT registriert (FSE-8 AND-Guard).
         photo_origin_url=cfg.photo_origin_url,
-        # SREG-6 / #453: Origin der Seiten-Registry (SREG-3). Leer ⇒
-        # SeitenUebersichtTask wird NICHT registriert (SREG-6 AND-Guard).
+        # EC-46 / #1964: Origin der Seiten-Registry (SREG-3) — »App öffnen«
+        # liest daraus die App-Liste. Leer ⇒ AppOeffnenTask NICHT im Katalog.
         seiten_origin_url=cfg.seiten_origin_url,
         # WZE-8 / GAN-7 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19). Leer ⇒
         # WuenscheZeigenTask + GerichtAnlegenTask werden NICHT registriert.
@@ -1211,7 +1211,7 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # Leer/None → EinkaufZeigenTask nutzt ENV-Fallback MINI_APP_EINKAUF_URL.
         mini_app_einkauf_url=cfg.mini_app_einkauf_url or None,
         # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
-        # Leer/None → RoutineAnpassenOeffnenTask NICHT im Katalog (RAO-8 Guard).
+        # Leer/None → AppOeffnenTask und SeitenUebersichtTask NICHT im Katalog.
         mini_app_base_url=cfg.mini_app_base_url or None,
         # SREG-7 / #476: Heim-Origin für den Übersichts-Link (SREG-5/SREG-5b).
         display_url_origin_heim=cfg.display_url_origin_heim,
@@ -1251,10 +1251,6 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # EinkaufHinzufuegenTask. None → Skills laufen ohne Receipt-Schreibung
         # (Backward-Compat für Test-Kataloge).
         a2_receipt_store=a2_receipt_store,
-        # WRO-8 / #1094: Origin des Wetter-Buddys (Mini-App-URL = Origin +
-        # /display/wetter/regeln, WRO-5). Leer/None → WetterRegelnOeffnenTask
-        # NICHT im Katalog (AND-Guard in tasks.py).
-        wetter_origin_url=cfg.wetter_origin_url or None,
     )
 
     if cfg.provider_api_key:

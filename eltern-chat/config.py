@@ -74,12 +74,6 @@ DEFAULTS = {
     # ROUTINE-14). Per-Instanz-Wert; Default passt zum Pi-Setup
     # (PORT-2 Routine-Buddy auf 5050).
     "routine_origin_url": "http://127.0.0.1:5050",
-    # WRO-5 / #1094: Origin des Wetter-Buddys, über die der
-    # WetterRegelnOeffnenTask die Mini-App-URL aufbaut
-    # (`/display/wetter/regeln`, WRO-5). Per-Instanz-Wert; Default passt
-    # zum Pi-Setup (PORT-2 Wetter-Buddy auf 5030). Leer ⇒ Aufgabe NICHT
-    # im Katalog (WRO-8 AND-Guard).
-    "wetter_origin_url": "http://127.0.0.1:5030",
     # EC-15 / #443: Origin des Icon-Dienstes, über den der
     # RoutinePunkteSetzenTask die ICONS-7-Stichwort-Suche aufruft
     # (`GET /api/v1/icons/suche` ICONS-7). Per-Instanz-Wert; Default
@@ -94,11 +88,11 @@ DEFAULTS = {
     # passt zum Pi-Setup (PORT-2 Photo-Buddy auf 5051). Leer ⇒ Aufgabe NICHT
     # im Katalog (FSE-8 AND-Guard mit family_group_chat_id_getter).
     "photo_origin_url": "http://127.0.0.1:5051",
-    # SREG-6 / #453: Origin der Seiten-Registry, über die der
-    # SeitenUebersichtTask das aggregierte Seiten-Inventar liest
-    # (`GET /api/v1/seiten` SREG-3). Per-Instanz-Wert; Default passt zum
-    # Pi-Setup (PORT-2 Seiten-Registry auf 5042). Leer ⇒ Aufgabe NICHT im
-    # Katalog (SREG-6 AND-Guard mit family_group_chat_id_getter).
+    # SREG-6 / #453, EC-46 / #1964: Origin der Seiten-Registry, über die der
+    # AppOeffnenTask das aggregierte Seiten-Inventar liest (`GET
+    # /api/v1/seiten` SREG-3). Per-Instanz-Wert; Default passt zum Pi-Setup
+    # (PORT-2 Seiten-Registry auf 5042). Leer ⇒ Aufgabe NICHT im Katalog
+    # (AND-Guard mit mini_app_base_url + family_group_chat_id_getter).
     "seiten_origin_url": "http://127.0.0.1:5042",
     # GAA-3.7: HTTPS-Origin, unter der die ausgelieferten Display-URLs
     # erreichbar sind (z. B. "https://xbuddy-hub.local:8443"). Per-Instanz-
@@ -124,10 +118,10 @@ DEFAULTS = {
     # MINI_APP_EINKAUF_URL (EZG-6) oder zeigt Fehler-Text ohne Button (EZG-7).
     "mini_app_einkauf_url": "",
     # RAO-6 / T728-C: HTTPS-Basis-URL aller Mini-Apps und PWAs (Funnel-Domain).
-    # Leer (Default) → RoutineAnpassenOeffnenTask und HoerspielOeffnenTask
-    # werden NICHT im Katalog registriert (RAO-8 / HOE-8 dreifacher Guard).
-    # HSP-53 (2026-07-03): wird auch für die Hörspiel-Player-PWA genutzt
-    # (mini_app_base_url + /seiten/hoerspiel/player, HOE-5 / HSP-47).
+    # Leer (Default) → AppOeffnenTask und SeitenUebersichtTask werden NICHT
+    # im Katalog registriert. EC-46 / #1964: alle App-Knöpfe des Chats sind
+    # mini_app_base_url + Registry-Pfad (`/seiten/…`, `/api/v1/seiten/…`,
+    # `/display/…` — die Funnel-Origin bedient alle drei).
     # Bot-Menü-Buttons (setChatMenuButton) zeigen künftig auf die PWA (HSP-53).
     # Selbe Domain wie mini_app_einkauf_url-Basis, aber als separater Slot —
     # kein String-Parsing der Einkauf-URL.
@@ -193,8 +187,7 @@ class Config:
                  mini_app_einkauf_url="",
                  mini_app_base_url="",
                  hoerspiel_url_origin="",
-                 kibuddy_origin_url="",
-                 wetter_origin_url=""):
+                 kibuddy_origin_url=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -230,8 +223,6 @@ class Config:
         # keine hoerspiel_url_origin_finn/_emil-Felder mehr.
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-24/25).
         self.kibuddy_origin_url = kibuddy_origin_url      # leer → KAQS NICHT im Katalog
-        # WRO-5 / #1094: Origin des Garderoben-Editors (/display/wetter/regeln)
-        self.wetter_origin_url = wetter_origin_url        # leer → WRO NICHT im Katalog
 
 
 def _family_group_in_file(config_path):
@@ -382,6 +373,4 @@ def resolve(config_path, zd=None):
         hoerspiel_url_origin=str(values["hoerspiel_url_origin"]).strip().rstrip("/"),
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-25).
         kibuddy_origin_url=str(values["kibuddy_origin_url"]).strip().rstrip("/"),
-        # WRO-5 / #1094: Origin des Wetter-Buddys (WRO-8 AND-Guard).
-        wetter_origin_url=str(values["wetter_origin_url"]).strip().rstrip("/"),
     )

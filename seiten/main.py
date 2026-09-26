@@ -1447,7 +1447,7 @@ def connector_sw_view():
 @app.route("/seiten/routine/anpassen/", methods=["GET"])
 # AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): der
 # echte Entry-Point ist ein Telegram-web_app-Button
-# (eltern-chat/skills/routine_anpassen_oeffnen.py:84). Begruendung wortgleich
+# (eltern-chat/skills/app_oeffnen.py, EC-46 seit 1964). Begruendung wortgleich
 # zu essen_einkauf_view_trailing_slash oben (require_dual_gate cookie-only
 # ohne tma-Zweig, MAD-11-Befund fehlender Authorization-Header beim
 # Initial-Load, Cookie-Traegung der WebView unbelegt). Offene Nic-Probe.
@@ -1613,7 +1613,7 @@ def _wetter_regeln_build_id():
 @app.route("/seiten/wetter/regeln/", methods=["GET"])
 # AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): der
 # echte Entry-Point ist ein Telegram-web_app-Button
-# (eltern-chat/skills/wetter_regeln_oeffnen.py:84). Begruendung wortgleich
+# (eltern-chat/skills/app_oeffnen.py, EC-46 seit 1964). Begruendung wortgleich
 # zu essen_einkauf_view_trailing_slash oben (require_dual_gate cookie-only
 # ohne tma-Zweig, MAD-11-Befund fehlender Authorization-Header beim
 # Initial-Load, Cookie-Traegung der WebView unbelegt). Offene Nic-Probe.

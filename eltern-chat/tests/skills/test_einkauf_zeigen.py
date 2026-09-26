@@ -190,8 +190,8 @@ def test_EZG6_inline_buttons_genau_zwei_eintraege():
     assert "inline_buttons" in presentation, (
         "presentation muss inline_buttons (Plural-Liste) enthalten (EZG-5/EZG-6)")
     buttons = presentation["inline_buttons"]
-    assert len(buttons) == 2, (
-        "EZG-5/EZG-6: genau ZWEI Button-Einträge erwartet, got %d" % len(buttons))
+    assert len(buttons) == 3, (
+        "EZG-6 / EC-46: Mini-App, Browser, Installieren erwartet, got %d" % len(buttons))
 
     # Erster Button: web_app_url — Mini App in Telegram-WebView
     btn1 = buttons[0]
@@ -213,11 +213,16 @@ def test_EZG6_inline_buttons_genau_zwei_eintraege():
     assert "essen/einkauf" in btn2.get("url", "")
     assert btn2.get("url", "").endswith("/"), (
         "Trailing-Slash für PWA start_url (ESSEN-34)")
-    assert btn2.get("label") == "Im Browser öffnen"
+    assert btn2.get("label") == "🌐 Im Browser öffnen"
 
     # Identische URL (EZG-6: beide Buttons gleiche URL)
     assert btn1.get("web_app_url") == btn2.get("url"), (
         "EZG-6: beide Buttons tragen identische Mini-App-URL")
+
+    # EC-46 (#1964): Einkaufsliste ist eine PWA → dritter Knopf „⬇ Installieren".
+    btn3 = buttons[2]
+    assert btn3.get("label") == "⬇ Installieren"
+    assert btn3.get("url") == btn2.get("url") + "?installieren=1"
 
 
 def test_EZG2_berechtigung_fehlt():

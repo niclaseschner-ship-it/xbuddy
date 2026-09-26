@@ -2,7 +2,7 @@
 und SREG-12 (die eine Übersicht, #1946).
 
 **SREG-5 Pivot (2026-06-15):** Dieser Skill ist ein Klasse-B
-web_app-Launcher (analog routine_anpassen_oeffnen / hoerspiel_oeffnen).
+web_app-Launcher (analog app_oeffnen, EC-46).
 Er öffnet die Übersicht per Inline-Button statt einen Text-Link zu liefern.
 Seit #1946 (Nic 2026-09-25) ist das dieselbe Übersicht wie im Browser; die
 eigene Mini-App-Übersicht (MAU) ist entfallen.
@@ -16,9 +16,9 @@ reicht das Dict direkt weiter; das Framework (agent.py + render_form_b)
 übersetzt `presentation` in eine Telegram-Nachricht. Der Skill sendet
 NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
-Schwester-Skill von routine_anpassen_oeffnen (RAO) und hoerspiel_oeffnen
-(HOE) — identischer Mini-App-Türöffner-Pattern (Klasse-B-Bauplan,
-eltern-chat-skills.md).
+Schwester-Skill von app_oeffnen (EC-46) — identischer Mini-App-Türöffner-
+Pattern (Klasse-B-Bauplan, eltern-chat-skills.md), dieselbe Knopfreihe aus
+skills/app_knoepfe.py.
 
 **Eingang:**
   - `chat_id`         — Telegram-Chat (nur für Logging).
@@ -40,6 +40,7 @@ Alles Telegram-Spezifische liegt im Adapter (_task.py).
 import logging
 
 from skills._errors import BerechtigungError
+from skills.app_knoepfe import app_knoepfe
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +50,11 @@ _UEBERSICHT_PATH = "/api/v1/seiten/uebersicht"
 # Button-Label (kurz, ein-Wort-Phrase per Leitplanken).
 _BUTTON_LABEL = "🏠 xbuddy öffnen"
 
-# #1953: zweiter Knopf — öffnet die Übersicht im Browser (installierbar).
-_BROWSER_LABEL = "🌐 Im Browser öffnen (als App installieren)"
-
-# Intro-Text für die Übersichts-Ankündigung.
-_INTRO_TEXT = "Hier siehst du alle Mini Apps und Seiten:"
+# Intro-Text für die Übersichts-Ankündigung. #1953: im Browser lässt sich die
+# Übersicht als App installieren — das sagt jetzt der Satz, der Browser-Knopf
+# trägt das einheitliche Label aus dem App-Knopf-Baustein (EC-46, #1964).
+_INTRO_TEXT = ("Hier siehst du alle Mini Apps und Seiten — im Browser lässt "
+               "sich die Übersicht als App installieren.")
 
 
 def seiten_uebersicht(chat_id, from_user_id, is_member_fn, mini_app_url):
@@ -93,12 +94,10 @@ def seiten_uebersicht(chat_id, from_user_id, is_member_fn, mini_app_url):
     # zweiter, normaler URL-Knopf — Telegram öffnet url-Knöpfe im externen
     # Browser, wo die Übersicht als App installierbar ist. Dieselbe Adresse,
     # kein Credential im Link (Anmeldung im Browser: Pairing-Link, AUTH-2.a).
-    presentation = {
-        "inline_buttons": [
-            {"label": _BUTTON_LABEL, "web_app_url": mini_app_url},
-            {"label": _BROWSER_LABEL, "url": mini_app_url},
-        ]
-    }
+    # EC-46 (#1964): Knopfreihe aus dem EINEN App-Knopf-Baustein. Die
+    # Übersicht ist in views.json keine `typ: pwa` — ihr Install-Hinweis
+    # erscheint im Browser immer (data-immer, #1955), darum kein dritter Knopf.
+    presentation = {"inline_buttons": app_knoepfe(mini_app_url, _BUTTON_LABEL)}
 
     button_count = len(presentation["inline_buttons"])
     logger.info(

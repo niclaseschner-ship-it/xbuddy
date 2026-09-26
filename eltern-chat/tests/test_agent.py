@@ -892,113 +892,85 @@ def test_T942_correction_suffix_enthält_klarheit_zur_rueckname():
 
 
 # ============================================================
-#  E-HOE-2 / T1048 — Agent-Integrations-Test: Direkt-Trigger-Pfad
+#  E-HOE-2 / T1048 → EC-46 (#1964) — Agent-Integrations-Test: Direkt-Trigger
 #
-#  Prüft den Live-Pfad "Direkt-Trigger → hoerspiel_oeffnen(tab='einstellungen')
-#  Tool-Call + Agent-Text ohne 'Knopf unten'" via FakeProvider + FakeReadTask.
-#  EC-17: kein echtes LLM nötig — FakeProvider liefert den skriptierten
-#  Tool-Call; die echte run()-Implementierung des Task (mit FakeHoerspielClient)
-#  liefert das echte Form-(b)-Dict zurück.
+#  hoerspiel_oeffnen ist in app_oeffnen aufgegangen. Geprüft wird der Live-
+#  Pfad „Direkt-Trigger → app_oeffnen(apps=[Hörspiel-Player]) + Agent-Text
+#  ohne 'Knopf unten'" via FakeProvider (EC-17 — kein echtes LLM).
 # ============================================================
 
-class _FakeHoerspielClientForAgent:
-    """Minimale HoerspielClient-Doppelung für den Agent-Integrations-Test."""
-
-    def __init__(self):
-        self.alben_calls = 0
-
-    def alben_lesen(self):
-        self.alben_calls += 1
-        return []
+_HOERSPIEL_PLAYER = {
+    "key": "seiten-hoerspiel-player", "typ": "display", "app": "seiten",
+    "pfad": "/seiten/hoerspiel/player", "label": "Hörspiel-Player",
+    "synonyme": ["hörspiel", "hörbuch"], "zeigt": "Hörspiel-Folgen abspielen.",
+    "zielgruppe": "kind", "pwa": True,
+}
 
 
-def test_E_HOE_2_direkt_trigger_agent_ruft_hoerspiel_oeffnen_mit_einstellungen():
-    """E-HOE-2 / T1048 (AC7) — HSP-53 Update (Refs #1294):
-    Tab-Hash-Modell superseded; hoerspiel_oeffnen hat kein tab-Argument mehr.
-    Agent-Tool-Call ohne tab → Task öffnet Player-PWA, alben_lesen() wird aufgerufen.
+class _FesteVerzeichnis:
+    """AppVerzeichnis-Doppelung: liefert feste Einträge, zählt Abrufe."""
 
-    Setup: FakeProvider skriptiert den Tool-Call (EC-17 — kein echtes LLM).
-    """
+    def __init__(self, eintraege):
+        self._eintraege = eintraege
+        self.abrufe = 0
+
+    def eintraege(self):
+        self.abrufe += 1
+        return self._eintraege
+
+
+def _app_oeffnen_task(verzeichnis):
+    from skills.app_oeffnen_task import AppOeffnenTask
+    return AppOeffnenTask(is_member_fn=lambda uid: True, verzeichnis=verzeichnis,
+                          basis_url="https://xbuddy.example.com")
+
+
+def test_E_HOE_2_direkt_trigger_agent_ruft_app_oeffnen_fuer_den_player():
+    """EC-46: „schick mir die Hörbuch settings" → app_oeffnen öffnet den Player;
+    der Knopf geht über render_form_b an Telegram (kein Selbst-Send)."""
     from unittest.mock import MagicMock
 
-    from skills.hoerspiel_oeffnen_task import HoerspielOeffnenTask
-
-    hoerspiel_client = _FakeHoerspielClientForAgent()
+    verzeichnis = _FesteVerzeichnis([_HOERSPIEL_PLAYER])
+    task = _app_oeffnen_task(verzeichnis)
     tg = MagicMock()
-    task = HoerspielOeffnenTask(
-        tg=tg,
-        hoerspiel_client=hoerspiel_client,
-        is_member_fn=lambda uid: True,
-        mini_app_url="https://xbuddy.example.com",
-    )
-
-    # HSP-53: kein tab-Argument mehr; leere arguments
     provider = FakeProvider([
-        task_call_response("hoerspiel_oeffnen",
-                           arguments={},
+        task_call_response("app_oeffnen",
+                           arguments={"apps": ["seiten-hoerspiel-player"]},
                            call_id="c-hoe-1"),
-        text_response("Hier ist der Link zum Hörspiel-Player."),
+        text_response("Hier ist der Hörspiel-Player."),
     ])
     turn = TurnContext(chat_id=42, from_user_id=7)
     result = agent.run_turn(
-        [],
-        _user("schick mir die Hörbuch settings"),
-        provider,
-        _catalog(task),
-        turn,
-    )
+        [], _user("schick mir die Hörbuch settings"), provider,
+        _catalog(task), turn, tg=tg)
 
-    # Task wurde ausgeführt — agent.run_turn liefert ein Ergebnis
     assert result.reply_text is not None
-    # HSP-53: Player-PWA-Pfad immer über alben_lesen() → alben_calls >= 1
-    assert hoerspiel_client.alben_calls >= 1
+    assert verzeichnis.abrufe >= 1
+    knoepfe = tg.send_inline_keyboard.call_args[0][2]
+    assert knoepfe[0]["web_app_url"] == (
+        "https://xbuddy.example.com/seiten/hoerspiel/player")
 
 
 def test_E_HOE_2_direkt_trigger_agent_text_enthaelt_nicht_knopf_unten():
-    """E-HOE-2 / T1048 (AC7): Agent-Text nach Direkt-Trigger enthält NICHT
-    'Knopf unten', 'klick' oder 'Button' (Phantom-Button-Versprechen).
-
-    Der skriptierte LLM-Text wird direkt als reply_text zurückgegeben —
-    Tests prüfen Wortlisten-Drift in der Agent-Antwort.
-    """
-    from unittest.mock import MagicMock
-
-    from skills.hoerspiel_oeffnen_task import HoerspielOeffnenTask
-
-    hoerspiel_client = _FakeHoerspielClientForAgent()
-    tg = MagicMock()
-    task = HoerspielOeffnenTask(
-        tg=tg,
-        hoerspiel_client=hoerspiel_client,
-        is_member_fn=lambda uid: True,
-        mini_app_url="https://xbuddy.example.com",
-    )
-
-    # Skriptierter LLM-Text: so wie ein gut instruiertes Modell antworten würde
-    # HSP-53: kein tab-Argument mehr
+    """E-HOE-2 / EC-41: Agent-Text nach Direkt-Trigger enthält NICHT
+    'Knopf unten', 'klick' oder 'Button' (Phantom-Button-Versprechen)."""
+    task = _app_oeffnen_task(_FesteVerzeichnis([_HOERSPIEL_PLAYER]))
     agent_antwort = "Hier ist der Link zu den Hörspiel-Einstellungen."
     provider = FakeProvider([
-        task_call_response("hoerspiel_oeffnen",
-                           arguments={},
+        task_call_response("app_oeffnen",
+                           arguments={"apps": ["seiten-hoerspiel-player"]},
                            call_id="c-hoe-2"),
         text_response(agent_antwort),
     ])
     turn = TurnContext(chat_id=42, from_user_id=7)
     result = agent.run_turn(
-        [],
-        _user("schick mir die Hörbuch settings"),
-        provider,
-        _catalog(task),
-        turn,
-    )
+        [], _user("schick mir die Hörbuch settings"), provider,
+        _catalog(task), turn)
 
     text = result.reply_text or ""
-    assert "Knopf unten" not in text, (
-        "Agent-Text darf 'Knopf unten' nicht enthalten (Phantom-Button-Versprechen)")
-    assert "klick" not in text.lower(), (
-        "Agent-Text darf 'klick' nicht enthalten")
-    assert "Button" not in text, (
-        "Agent-Text darf 'Button' nicht enthalten (Phantom-Button-Versprechen)")
+    assert "Knopf unten" not in text
+    assert "klick" not in text.lower()
+    assert "Button" not in text
 
 
 # ============================================================
@@ -1046,56 +1018,27 @@ def test_EC40_1105_system_prompt_traegt_negativ_regel():
 
 
 # ============================================================
-#  EC-40 / #1283 — Positiv-Heimat: description trägt Trigger-Vokabular
+#  EC-40 / #1283 → EC-46 (#1964) — Positiv-Heimat des Trigger-Vokabulars
 #
-#  EC-40 Positiv-Norm: die Tool-description von hoerspiel_oeffnen
-#  ist die einzige Heimat des positiven Trigger-Vokabulars.
-#  Dieser Test verankert, dass sie die Kern-Begriffe beider
-#  Trigger-Familien enthält — schlägt beim Editieren der
-#  description fehl, wenn das Vokabular verloren geht.
+#  Die App-Bezeichnungen (Achse B) leben jetzt im Ansichts-Verzeichnis
+#  (`synonyme`); die Werkzeug-Definition von app_oeffnen trägt sie pro Turn
+#  zusammen mit dem Aktions-Vokabular (Achse A).
 # ============================================================
 
 
 def test_EC40_1283_description_traegt_positives_trigger_vokabular():
-    """EC-40 / #1283 (AC1+AC2): Die Tool-description von HoerspielOeffnenTask
-    enthält das Kern-Trigger-Vokabular beider Familien:
+    """EC-40 / EC-46: Die Werkzeug-Definition von app_oeffnen enthält das
+    Aktions-Vokabular ('settings', 'einstellungen') und die App-Bezeichnungen
+    aus dem Verzeichnis ('hörbuch' aus den synonyme des Players) — geprüft an
+    der realen to_def()-Quelle, nicht an einem Duplikat im Test."""
+    task = _app_oeffnen_task(_FesteVerzeichnis([_HOERSPIEL_PLAYER]))
+    desc = task.to_def().description.lower()
 
-    - Folgen-Trigger: 'hörbuch hören' (kanonische Beispiel-Phrase) und 'folge'
-      (Kern-Begriff; deckt 'folge starten', 'folge abspielen', 'folge' ab).
-    - Direkt-Settings-Trigger: 'settings' und 'einstellungen'
-      (beide Schreibweisen aus dem Direkt-Settings-Abschnitt).
-
-    Geprüft an der realen task.description-Quelle — kein hartkodiertes
-    Duplikat der Phrasen-Liste im Test (AC2). Verliert eine spätere
-    description-Änderung das Kern-Vokabular, schlägt dieser Test fehl.
-    """
-    from unittest.mock import MagicMock
-
-    from skills.hoerspiel_oeffnen_task import HoerspielOeffnenTask
-
-    task = HoerspielOeffnenTask(
-        tg=MagicMock(),
-        hoerspiel_client=MagicMock(),
-        is_member_fn=lambda uid: True,
-        mini_app_url="https://xbuddy.example.com",
-    )
-    desc = task.description.lower()
-
-    # Folgen-Trigger-Vokabular (EC-40 Positiv-Heimat, Folgen-Familie)
-    assert "hörbuch hören" in desc, (
-        "EC-40/T1283: Folgen-Trigger 'hörbuch hören' fehlt in description — "
-        "positives Vokabular gehört allein in die Tool-description (eltern-chat.md:1513-1518)")
-    assert "folge" in desc, (
-        "EC-40/T1283: Kern-Begriff 'folge' fehlt in description — "
-        "Folgen-Trigger-Familie muss vertreten sein")
-
-    # Direkt-Settings-Trigger-Vokabular (EC-40 Positiv-Heimat, Settings-Familie)
-    assert "settings" in desc, (
-        "EC-40/T1283: Direkt-Settings-Trigger 'settings' fehlt in description — "
-        "positives Vokabular gehört allein in die Tool-description (eltern-chat.md:1513-1518)")
-    assert "einstellungen" in desc, (
-        "EC-40/T1283: Direkt-Settings-Trigger 'einstellungen' fehlt in description — "
-        "Settings-Trigger-Familie muss beide Schreibweisen tragen")
+    assert "hörbuch hören" in desc
+    assert "hörbuch" in desc
+    assert "seiten-hoerspiel-player" in desc
+    assert "settings" in desc
+    assert "einstellungen" in desc
 
 
 # ============================================================
