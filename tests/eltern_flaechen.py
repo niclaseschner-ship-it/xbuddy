@@ -288,31 +288,9 @@ AUSNAHMEN: tuple[Ausnahme, ...] = (
     #    aus hoerspiel/views.json entfallen (der Hörspiel-Player löst sie ab). ──
     # ── Achse `pfad`: keine Ausnahme mehr — die zwei 404-Unterfelder der
     #    Plan-Einstellungen sind mit #1906 in plan/views.json korrigiert. ──
-    # ── Achse `chat` (#1906) ─────────────────────────────────────────────────
-    Ausnahme(
-        kennung="/display/wetter/regeln",
-        achse=ACHSE_CHAT,
-        sorte=SORTE_SCHULDSTAND,
-        begruendung=(
-            "Der Garderoben-Knopf im Chat (wetter_regeln_oeffnen) oeffnet "
-            "wetter_origin_url + /display/wetter/regeln. Diese Adresse gibt es "
-            "seit #1715 nicht mehr: der Editor ist nach /seiten/wetter/regeln "
-            "gezogen (wetter/views.json:21, wetter/main.py:361), die alte Route "
-            "ist geloescht. Der Knopf endet damit im 404 — genau die Sorte "
-            "toter Chat-Weg, fuer die diese Achse gebaut ist. Der Fix ist "
-            "mehr als ein Pfad-String: die Basis-URL ist die Wetter-Origin "
-            "(eltern-chat/config.py:82, Port 5030), die neue Flaeche liefert "
-            "aber der seiten-Dienst aus; Pfad und Origin muessen zusammen "
-            "wandern, und das beruehrt die Instanz-Konfiguration."
-        ),
-        quelle="eltern-chat/skills/wetter_regeln_oeffnen_task.py:38 (_WRO_APP_PATH)",
-        trigger=(
-            "Sobald der Knopf auf /seiten/wetter/regeln zeigt (Pfad in "
-            "wetter_regeln_oeffnen_task.py plus eine Basis-URL, unter der der "
-            "seiten-Dienst antwortet), hat der Verweis einen Verzeichnis-Eintrag "
-            "und diese Zeile faellt weg (test_ausnahmen_sind_noch_real)."
-        ),
-    ),
+    # ── Achse `chat`: keine Ausnahme mehr — der Garderoben-Knopf zeigt seit
+    #    #1964 auf /seiten/wetter/regeln (app_oeffnen liest die Pfade aus dem
+    #    Verzeichnis selbst; der Einzel-Skill wetter_regeln_oeffnen ist weg). ──
 )
 
 
@@ -728,9 +706,11 @@ def chat_verweise(skills_dir: str | None = None) -> list[ChatVerweis]:
 
     Gelesen wird der Syntaxbaum, nicht der Text: so zaehlen nur echte
     String-Konstanten (`_UEBERSICHT_PATH = "/api/v1/seiten/uebersicht"`),
-    keine Kommentare. Die Knoepfe setzen sich aus Basis-URL + genau so einer
-    Konstante zusammen (seiten_uebersicht_task, routine_anpassen_oeffnen_task,
-    hoerspiel_oeffnen_task, wetter_regeln_oeffnen_task).
+    keine Kommentare. Ein Knopf setzt sich aus Basis-URL + genau so einer
+    Konstante zusammen (heute noch seiten_uebersicht_task). Der
+    registry-getriebene Skill app_oeffnen (#1964) traegt keine Pfad-Literale:
+    er liest die Pfade aus dem Verzeichnis und kann damit gar nicht an ihm
+    vorbeizeigen.
     """
     verzeichnis = skills_dir or os.path.join(REPO_ROOT, CHAT_SKILLS)
     verweise = []

@@ -56,7 +56,7 @@
       "typ": "pwa",
       "pfad": "/seiten/hoerspiel/player",
       "label": "Hörspiel-Player",
-      "synonyme": ["hörspiel", "hoerspiel", "player", "abspielen", "folgen"],
+      "synonyme": ["hörspiel", "hoerspiel", "player", "abspielen", "folgen", "hörbuch", "hörspiel hören", "folge", "geschichte"],
       "zeigt": "Hörspiel-Folgen auswählen und abspielen.",
       "zielgruppe": "kind",
       "pwa": {

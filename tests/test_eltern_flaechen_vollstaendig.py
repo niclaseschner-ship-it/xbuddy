@@ -479,10 +479,10 @@ def test_befunde_sind_im_lauf_sichtbar(capsys):
     print("\n".join(zeilen))
 
     ausgabe = capsys.readouterr().out
-    assert "wetter_regeln_oeffnen_task.py:38" in ausgabe, (
-        "Der tote Chat-Weg zum Garderoben-Editor muss im Lauf benannt werden "
-        "(#1906) — sonst ist er wieder unsichtbar."
-    )
+    for eintrag in ef.AUSNAHMEN:
+        assert eintrag.quelle in ausgabe, (
+            "Jede Ausnahme muss im Lauf mit ihrer Quelle benannt werden "
+            "(#1822 AC4) — sonst ist sie wieder unsichtbar: %s" % eintrag.kennung)
     assert schuldstaende >= 1, "Kein Schuldstand ausgegeben — Sichtbarkeit ungeprueft."
 
 

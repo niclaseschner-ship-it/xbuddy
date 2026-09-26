@@ -54,9 +54,7 @@ zwei Profile mit unterschiedlicher Belegung sind unterschiedliche Skills.
 | `faehigkeiten_zeigen` | nein | — | One-Shot | — | — | String | A |
 | `ca_verteilen` | nein | — | One-Shot | — | — | Anhang + String | B |
 | `einkauf_zeigen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
-| `routine_anpassen_oeffnen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
-| `hoerspiel_oeffnen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
-| `wetter_regeln_oeffnen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
+| `app_oeffnen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
 | `gericht_anlegen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
 | `plan_aktivitaeten_setzen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
 | `routine_punkte_setzen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
@@ -169,7 +167,7 @@ deren Modul man die Cluster-Bauformen am klarsten gebaut sieht.
 | Cluster | Bestehende Skills (Module unter `eltern-chat/skills/`) |
 |---|---|
 | **A** Pure-Read | `faehigkeiten_zeigen`, `termine_erfragen`, `wuensche_zeigen`, `routine_punkte_lesen`, `essen_katalog_lesen` |
-| **B** Read + Aufsatz | `ca_verteilen` (Datei-Anhang), `einkauf_zeigen` (Button-Aufsatz, TASK-10c Form-b), `routine_anpassen_oeffnen` (Türöffner-Skill, TASK-10c Form-b), `seiten_uebersicht` (Button-Aufsatz, TASK-10c Form-b), `hoerspiel_oeffnen` (Button-Aufsatz, TASK-10c Form-b), `wetter_regeln_oeffnen` (Button-Aufsatz, TASK-10c Form-b) |
+| **B** Read + Aufsatz | `ca_verteilen` (Datei-Anhang), `einkauf_zeigen` (Button-Aufsatz, TASK-10c Form-b), `app_oeffnen` (registry-getriebener Türöffner, TASK-10c Form-b, EC-46 — löst `routine_anpassen_oeffnen`/`hoerspiel_oeffnen`/`wetter_regeln_oeffnen` ab), `seiten_uebersicht` (Button-Aufsatz, TASK-10c Form-b); App-Knöpfe aller drei aus `skills/app_knoepfe.py` (EC-46) |
 | **C** zweistufig-Confirm | `routine_punkte_setzen`, `gericht_anlegen`, `plan_aktivitaeten_setzen`, `routine_zeiten_setzen`, `hoerspiel_folge_erzeugen`, `essen_foto_setzen`, `gericht_loeschen`, `kibuddy_aufnahme_quelle_setzen`, `kibuddy_prompt_anpassen` |
 | **D** A2-Sofort-Write | `foto_senden` (Single-Item), `einkauf_hinzufuegen` (Multi-Item — Receipt mit N Zeilen) |
 | **C+E** zweistufig + Auth-Identität | `panel_anlegen` (Confirm + Worker-Identität) |

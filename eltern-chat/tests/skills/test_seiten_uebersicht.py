@@ -395,80 +395,22 @@ def test_AC_GUARD_seiten_origin_url_allein_reicht_nicht_mehr():
 
 
 # ============================================================
-#  AC5 — Panel-Edit-Intent (ESB-3): Trigger-Phrasen in description
+#  AC5 — Panel-Edit-Intent (ESB-3, #1964): „Kacheln bearbeiten" ist seit
+#  #1961 eine eigene App — der Chat öffnet sie über app_oeffnen (EC-46).
 # ============================================================
 
 
-def test_AC5_panel_edit_trigger_phrasen_in_description():
-    """AC5/ESB-3: description enthält Panel-Edit-Trigger-Phrasen (Kachel/Panel-Begriffe).
-
-    Der Chat verweist bei Panel-Edit-Intent auf die Übersichtsseite (ESB-3,
-    conventions/eltern-seite.md) — kein Pro-Panel-Matching (PBE-2).
-    Die Trigger-Phrasen müssen in der Task-description stehen, damit der
-    Agent-LLM sie beim Routing erkennt.
-    """
+def test_AC5_panel_edit_verweist_auf_app_oeffnen():
+    """ESB-3 / EC-46: die description grenzt Kachel-/Panel-Bearbeitung an
+    app_oeffnen ab, statt sie selbst zu beanspruchen."""
     task = SeitenUebersichtTask(
         is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_BASE)
     desc = task.description.lower()
-    panel_trigger_phrasen = [
-        "kachel entfernen",
-        "kachel rausnehmen",
-        "kachel hinzufügen",
-        "kacheln umsortieren",
-        "panel bearbeiten",
-        "panel-editor",
-    ]
-    gefundene = [p for p in panel_trigger_phrasen if p in desc]
-    assert len(gefundene) >= 3, (
-        "Zu wenige Panel-Edit-Trigger-Phrasen in description "
-        "(ESB-3). Gefunden: %r. Description: %r" % (gefundene, task.description))
-
-
-def test_AC5_panel_edit_verweist_auf_uebersichtsseite():
-    """AC5/ESB-3: Panel-Edit-Intent → derselbe Übersichtsseiten-Button (SREG-12).
-
-    Der seiten_uebersicht-Skill liefert bei Panel-Edit-Intent denselben Übersichts-Button
-    wie bei allen anderen Übersichts-Anfragen — kein eigener Editor-Link im Chat
-    (PBE-2: Pro-Panel-Matching liegt auf der Übersichtsseite, nicht im Chat).
-    """
-    from tasks import TurnContext
-    task = SeitenUebersichtTask(
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_BASE)
-    ctx = TurnContext(chat_id=42, from_user_id=7)
-
-    result = task.run({}, ctx)
-
-    # Der Skill gibt den Übersichts-Button zurück — derselbe Pfad wie bei allen anderen Intents
-    assert _web_app_knopf(result)
-    url = _web_app_knopf(result)["web_app_url"]
-    assert _UEBERSICHT_PATH in url, (
-        "Panel-Edit-Intent muss auf die Übersichtsseite verweisen, "
-        "nicht auf einen Panel-spezifischen Editor-Pfad. URL: %r" % url)
-
-
-def test_AC5_panel_edit_description_enthaelt_esb3_hinweis():
-    """AC5/ESB-3: description nennt ESB-3 oder PBE-2 als Anker."""
-    task = SeitenUebersichtTask(
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_BASE)
-    desc = task.description
-    assert "ESB-3" in desc or "PBE-2" in desc, (
-        "description fehlt ESB-3/PBE-2-Anker. Description: %r" % desc)
-
-
-def test_AC5_panel_edit_description_enthaelt_antwort_formulierung():
-    """AC5/ESB-3: description enthält die Antwort-Formulierung für Panel-Edit-Intent."""
-    task = SeitenUebersichtTask(
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_BASE)
-    desc = task.description.lower()
-    # Die Antwort-Formulierung muss Kacheln und Übersichtsseite nennen
-    assert "kacheln" in desc or "kachel" in desc, (
-        "description fehlt Kachel-Begriff. Description: %r" % task.description)
-    assert "übersichtsseite" in desc or "übersicht" in desc, (
-        "description fehlt Übersichtsseiten-Verweis. Description: %r" % task.description)
+    assert "app_oeffnen" in desc
+    assert "kacheln bearbeiten" in desc
+    assert "kachel entfernen" not in desc, (
+        "Panel-Edit-Trigger gehören nicht mehr zur Übersicht (#1964)")
 
 
 # ============================================================
@@ -508,3 +450,14 @@ def test_1953_render_form_b_schickt_beide_knoepfe():
     knoepfe = tg.inline_sent[0]["buttons"]
     assert knoepfe[0]["web_app_url"] == _UEBERSICHT_URL
     assert knoepfe[1]["url"] == _UEBERSICHT_URL
+
+
+def test_1964_knopfreihe_kommt_aus_dem_app_knopf_baustein():
+    """EC-46: dieselbe Knopfreihe wie jede andere App (keine PWA → 2 Knöpfe)."""
+    from skills.app_knoepfe import app_knoepfe
+    result = seiten_uebersicht(
+        chat_id=1, from_user_id=42, is_member_fn=_immer_mitglied,
+        mini_app_url=_UEBERSICHT_URL)
+    assert result["presentation"]["inline_buttons"] == app_knoepfe(
+        _UEBERSICHT_URL, "🏠 xbuddy öffnen")
+    assert "installier" in result["text"]

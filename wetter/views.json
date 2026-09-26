@@ -25,7 +25,11 @@
         "Wetter-Regeln",
         "garderobe bearbeiten",
         "kleidungsregeln",
-        "regeln bearbeiten"
+        "regeln bearbeiten",
+        "garderobe",
+        "kleidung festlegen",
+        "wetter-kleidung",
+        "wetter-einstellungen"
       ],
       "zeigt": "Festlegen, welche Kleidung bei welchem Wetter empfohlen wird.",
       "zielgruppe": "eltern",

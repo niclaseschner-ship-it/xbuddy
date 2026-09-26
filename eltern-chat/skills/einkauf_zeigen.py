@@ -2,7 +2,7 @@
 
 Aufrufbare, trigger-agnostische Funktion (EZG-1, E-EZG-1-Muster): liest
 die Einkaufsliste des Essens-Buddys (ESSEN-15, GET mit abgehakt=false),
-baut eine kompakte Übersichts-Nachricht + ZWEI Inline-Buttons auf die
+baut eine kompakte Übersichts-Nachricht + die App-Knopfreihe (EC-46) auf die
 Mini App (EZG-5/EZG-6) und gibt ein Form-(b)-Dict zurück (TASK-10c).
 
 TASK-10c Form (b): der Skill returnt `{text, presentation}` — der Task
@@ -18,12 +18,10 @@ NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
   - `mini_app_url`   — URL der Einkauf-Mini-App (EZG-6). Leer → kein Button.
 
 **Ausgang:** Form-(b)-Dict `{text, presentation}`:
-  - Mit Buttons: `presentation: {inline_buttons: [
-        {label, web_app_url},  ← Button 1: Mini App in Telegram-WebView
-        {label, url},          ← Button 2: externer Browser (PWA-Install)
-    ]}`.
-    Beide Einträge tragen die identische Mini-App-URL (mit Trailing-Slash
-    für PWA start_url, EZG-6/ESSEN-34).
+  - Mit Buttons: `presentation: {inline_buttons: app_knoepfe(...)}` —
+    Mini App, „🌐 Im Browser öffnen", „⬇ Installieren" (EC-46, #1964).
+    Alle tragen die Mini-App-URL (mit Trailing-Slash für PWA start_url,
+    EZG-6/ESSEN-34); der Installier-Knopf hängt `?installieren=1` an.
   - Ohne Button (Leer- oder Fehlerfall): `presentation: {}`.
 
 Wirft `BerechtigungError` bei EZG-2-Verletzung.
@@ -36,9 +34,13 @@ Adapter (_task.py).
 import logging
 
 from skills._errors import BerechtigungError
+from skills.app_knoepfe import app_knoepfe
 from skills.essen_client import EssenClientError
 
 logger = logging.getLogger(__name__)
+
+# EZG-6: Beschriftung des Mini-App-Knopfs.
+_LABEL_LISTE = "🛒 Liste öffnen"
 
 # EZG-4: Labels auf 24 Zeichen kürzen.
 _MAX_LABEL_LEN = 24
@@ -58,11 +60,10 @@ def _baue_uebersicht(items, mini_app_url):
     `mini_app_url` — URL der Einkauf-Mini-App (EZG-6).
 
     Liefert ein Form-(b)-Dict `{text, presentation}` (TASK-10c):
-      - Standardfall: presentation mit inline_buttons (zwei Einträge):
-          * Button 1: web_app_url — öffnet Mini App in Telegram-WebView.
-          * Button 2: url — öffnet externe URL im Browser (PWA-Install, EZG-6).
-        Beide Einträge tragen die identische URL (mit Trailing-Slash für
-        PWA start_url ESSEN-34).
+      - Standardfall: presentation mit inline_buttons aus `app_knoepfe`
+        (EC-46): Mini App (web_app_url), „🌐 Im Browser öffnen" (url),
+        „⬇ Installieren" (url + ?installieren=1). URL mit Trailing-Slash
+        für PWA start_url (ESSEN-34).
       - Leer-Fall oder fehlende URL: presentation leer (nur Text).
     """
     wunsch_n = sum(1 for i in items if i.get("klasse") == "wunsch")
@@ -108,22 +109,13 @@ def _baue_uebersicht(items, mini_app_url):
     # Doppel-Slash, falls die Konfig bereits einen Slash hat.
     app_url = mini_app_url.rstrip("/") + "/"
 
-    # TASK-10c Form (b): presentation mit inline_buttons-Liste (EZG-5/EZG-6).
-    # Button 1 — web_app: öffnet Mini App in Telegram-WebView (initData).
-    # Button 2 — url: öffnet externe URL im Browser (PWA-Install-Prompt).
+    # TASK-10c Form (b) / EC-46 (#1964): die Knopfreihe kommt aus dem EINEN
+    # App-Knopf-Baustein — Mini-App, „🌐 Im Browser öffnen", und weil die
+    # Einkaufsliste eine PWA ist (essen/views.json `typ: pwa`) „⬇ Installieren".
     return {
         "text": text,
         "presentation": {
-            "inline_buttons": [
-                {
-                    "label": "🛒 Liste öffnen",
-                    "web_app_url": app_url,
-                },
-                {
-                    "label": "Im Browser öffnen",
-                    "url": app_url,
-                },
-            ]
+            "inline_buttons": app_knoepfe(app_url, _LABEL_LISTE, pwa=True),
         },
     }
 
@@ -136,10 +128,7 @@ def einkauf_zeigen(chat_id, from_user_id, essen_client, is_member_fn,
     Hinweis (EZG-5/EZG-6, TASK-10c Form (b)).
 
     Returnt ein Form-(b)-Dict `{text, presentation}`:
-      - Mit Buttons: `presentation: {inline_buttons: [
-            {label, web_app_url},  ← Button 1: Mini App in Telegram-WebView
-            {label, url},          ← Button 2: externer Browser (PWA-Install)
-        ]}`.
+      - Mit Buttons: `presentation: {inline_buttons: app_knoepfe(...)}` (EC-46).
       - Ohne Button (Leer- oder Fehlerfall): `presentation: {}`.
 
     Wirft `BerechtigungError` bei EZG-2-Verletzung.
