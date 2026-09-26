@@ -20,9 +20,11 @@ jobs:
     # (am opened-Event transient null); `!= 0` lässt null/fehlend LAUFEN und
     # nimmt so nie Code aus (RAT-30:36 „Code nie versehentlich ausnehmen").
     if: ${{ github.event.pull_request.changed_files != 0 }}
-    runs-on: [self-hosted, win-wsl]
+    runs-on: ubuntu-latest  # #1959: zurück auf GitHub-Runner (Laptop-Runner blockierte PRs, wenn aus)
     steps:
       - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
 
       - name: ruff check (repo-weit)
         run: uvx ruff@0.15.15 check
