@@ -16,9 +16,13 @@ permissions:
 
 jobs:
   lint-imports:
-    runs-on: [self-hosted, win-wsl]
+    runs-on: ubuntu-latest  # #1959: zurück auf GitHub-Runner (Laptop-Runner blockierte PRs, wenn aus)
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - name: venv + import-linter installieren
         run: |
