@@ -27,7 +27,7 @@ jobs:
   leak-guard:
     # Leere Null-Diff-Claim-Flip-PRs überspringen (RAT-34, wie ruff.yml).
     if: ${{ github.event.pull_request.changed_files != 0 }}
-    runs-on: [self-hosted, win-wsl]
+    runs-on: ubuntu-latest  # #1959: zurück auf GitHub-Runner (Laptop-Runner blockierte PRs, wenn aus)
     steps:
       - uses: actions/checkout@v4
 

@@ -120,6 +120,38 @@ function makeDom() {
       return null;
     };
 
+    // PLAN-1957: fuer plan-einstellungen.js' bindeDelegation(), das den Container
+    // per cloneNode(true) + replaceChild dupliziert, um alte Listener loszuwerden.
+    // Additiv, aendert kein bestehendes Verhalten anderer Tests.
+    el.cloneNode = function(deep) {
+      const clone = makeEl(el._tag);
+      clone.id = el.id;
+      clone.className = el.className;
+      clone._attrs = Object.assign({}, el._attrs);
+      clone._innerHTML = el._innerHTML;
+      if (deep) {
+        clone._children = el._children.map((c) => (
+          typeof c.cloneNode === "function" ? c.cloneNode(true) : c
+        ));
+      }
+      return clone;
+    };
+
+    el.replaceChild = function(newChild, oldChild) {
+      const idx = el._children.indexOf(oldChild);
+      if (idx >= 0) {
+        el._children[idx] = newChild;
+      }
+      newChild.parentNode = el;
+      // Stub-Analogon zu einem Live-DOM-Baum: getElementById() der Attrappe
+      // schaut in einer Registry nach, nicht im Baum — die muss hier
+      // mitgezogen werden, sonst "sieht" getElementById den Ersatz nicht.
+      if (newChild.id) {
+        _elementsById[newChild.id] = newChild;
+      }
+      return oldChild;
+    };
+
     el.focus = function() {};
     el.blur  = function() {};
     el.click = function() {

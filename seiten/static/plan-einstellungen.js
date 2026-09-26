@@ -43,6 +43,20 @@ let _debounceTimer = null;
 /** Aktuell gewahlte Icon-ID im Picker */
 let _pickerIconId = null;
 
+/**
+ * PLAN-1957: Schluessel des Slots, dessen Akkordeon ("Reiter") gerade offen ist.
+ * Jede Aenderung (Icon, Kind, Default-Person, Reorder, Loeschen, Neuanlegen) rendert
+ * die ganze Slot-Liste neu (rendereSlotListe) — ohne diesen Zustand wuerde jedes
+ * Neu-Rendern alle <details> schliessen und der Nutzer muesste den Reiter nach
+ * jeder Aenderung neu waehlen (#1957). Wird beim Rendern als "open"-Attribut
+ * gesetzt und beim ersten Laden aus dem URL-Hash uebernommen; danach vom
+ * "toggle"-Event der <details> nachgefuehrt.
+ */
+let _offenerSlotSchluessel = null;
+
+/** true nach dem ersten Rendern — der Start-Hash wird nur einmal ausgewertet. */
+let _initialHashAusgewertet = false;
+
 const TAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
 // ── XSS-Schutz ───────────────────────────────────────────────────────────────
@@ -54,6 +68,45 @@ function esc(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+// ── Reiter-Zustand in der URL (PLAN-1957) ─────────────────────────────────────
+//
+// Der aktive Reiter (offener Slot) steht zusaetzlich im URL-Hash (#slot-<schluessel>),
+// damit Neuladen und "Zurueck" ebenfalls dort landen, nicht nur ein In-Page-Re-Render.
+
+/** Liest den Slot-Schluessel aus einem Hash-String ("#slot-bring" → "bring"). */
+function slotSchluesselAusHash(hash) {
+  const h = String(hash == null ? "" : hash).replace(/^#/, "");
+  const m = /^slot-(.+)$/.exec(h);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Baut den Hash-String fuer einen Slot-Schluessel ("bring" → "#slot-bring"). */
+function hashFuerSlot(schluessel) {
+  return schluessel ? "#slot-" + encodeURIComponent(schluessel) : "";
+}
+
+/** Liest den aktuellen Hash aus window.location, falls verfuegbar (Test-Umgebung hat kein window). */
+function leseHashSlotSchluessel() {
+  if (typeof window === "undefined" || !window.location) return null;
+  return slotSchluesselAusHash(window.location.hash);
+}
+
+/**
+ * Schreibt den Hash, ohne einen neuen History-Eintrag anzulegen (replaceState) —
+ * ein Klick auf einen Reiter soll den Verlauf nicht mit Eintraegen fluten.
+ */
+function aktualisiereUrlHash(schluessel) {
+  if (typeof window === "undefined" || !window.location) return;
+  const neu = hashFuerSlot(schluessel);
+  if ((window.location.hash || "") === neu) return;
+  if (window.history && typeof window.history.replaceState === "function") {
+    const basis = (window.location.pathname || "") + (window.location.search || "");
+    window.history.replaceState(null, "", basis + neu);
+  } else {
+    window.location.hash = neu;
+  }
 }
 
 // ── API-Calls (kein Auth-Header — PUBLIC, PLAN-35) ────────────────────────────
@@ -184,6 +237,11 @@ function rendereSlotListe() {
   const container = document.getElementById("slots-container");
   if (!container) return;
 
+  // PLAN-1957: Scroll-Position sichern — jede Aenderung rendert die ganze Liste
+  // neu; ohne das springt die Seite bei jedem Klick wieder an den Anfang.
+  const scrollY = (typeof window !== "undefined" && typeof window.scrollY === "number")
+    ? window.scrollY : null;
+
   if (_editSlots.length === 0) {
     container.innerHTML = '<p class="lade-hinweis">Noch keine Slots definiert.</p>';
     return;
@@ -195,9 +253,11 @@ function rendereSlotListe() {
     const hochDisabled = istErste ? " disabled" : "";
     const runterDisabled = istLetzte ? " disabled" : "";
     const anzeigeName = slotLabel(slot);
+    // PLAN-1957: offen halten, wenn dieser Slot der aktive Reiter ist.
+    const offenAttr = slot.schluessel === _offenerSlotSchluessel ? " open" : "";
 
     return (
-      '<details class="slot" id="slot-' + esc(slot.schluessel) + '">' +
+      '<details class="slot" id="slot-' + esc(slot.schluessel) + '"' + offenAttr + '>' +
         '<summary>' +
           '<div class="pfeile">' +
             '<button type="button" class="pfeil pfeil-hoch" data-slot-key="' + esc(slot.schluessel) + '"' +
@@ -213,6 +273,12 @@ function rendereSlotListe() {
       '</details>'
     );
   }).join("");
+
+  // PLAN-1957: Scroll-Position wiederherstellen (innerHTML-Ersatz kann die
+  // Layouthoehe kurz aendern und den Browser sonst nach oben springen lassen).
+  if (scrollY !== null && typeof window.scrollTo === "function") {
+    window.scrollTo(0, scrollY);
+  }
 }
 
 function slotBodyHtml(slot) {
@@ -491,6 +557,11 @@ function loescheSlot(schluessel) {
   _editSlots = _editSlots.filter((s) => s.schluessel !== schluessel);
   // Auch aus Defaults entfernen
   delete _editDefaults[schluessel];
+  // PLAN-1957: geloeschter Slot kann nicht laenger der aktive Reiter sein.
+  if (_offenerSlotSchluessel === schluessel) {
+    _offenerSlotSchluessel = null;
+    aktualisiereUrlHash(null);
+  }
   rendereSlotListe();
   bindeDelegation();
   aktualisiereSpeichernBtn();
@@ -564,15 +635,13 @@ function legeSlotAn(label, art, iconId) {
     reihenfolge: _editSlots.length,
   };
   _editSlots.push(neuerSlot);
+  // PLAN-1957: neuer Slot wird gleich zum aktiven Reiter — rendereSlotListe()
+  // gibt ihm das "open"-Attribut direkt mit, kein nachtraegliches el.open noetig.
+  _offenerSlotSchluessel = key;
+  aktualisiereUrlHash(key);
   rendereSlotListe();
   bindeDelegation();
   aktualisiereSpeichernBtn();
-
-  // Accordion öffnen
-  setTimeout(() => {
-    const el = document.getElementById("slot-" + key);
-    if (el) el.open = true;
-  }, 50);
 }
 
 // ── Speichern ─────────────────────────────────────────────────────────────────
@@ -671,6 +740,25 @@ function bindeDelegation() {
   // Neu binden
   const c = document.getElementById("slots-container");
 
+  // PLAN-1957: "toggle"-Event bubbelt bei <details> nicht — je Slot einzeln
+  // binden, um _offenerSlotSchluessel + URL-Hash mit dem synchron zu halten,
+  // was der Nutzer tatsaechlich offen hat (Klick auf <summary>).
+  if (typeof c.querySelectorAll === "function") {
+    c.querySelectorAll("details.slot").forEach((d) => {
+      d.addEventListener("toggle", () => {
+        const key = String(d.id || "").replace(/^slot-/, "");
+        if (!key) return;
+        if (d.open) {
+          _offenerSlotSchluessel = key;
+          aktualisiereUrlHash(key);
+        } else if (_offenerSlotSchluessel === key) {
+          _offenerSlotSchluessel = null;
+          aktualisiereUrlHash(null);
+        }
+      });
+    });
+  }
+
   // Label-Input: change-Event fuer bestehende Slots (AC3)
   c.addEventListener("change", (e) => {
     const labelInput = e.target.closest(".slot-label-input");
@@ -767,9 +855,26 @@ async function ladeUndRendere() {
     _serverDefaults = JSON.parse(JSON.stringify(defaults));
     _editDefaults = JSON.parse(JSON.stringify(defaults));
 
+    // PLAN-1957: beim allerersten Laden den Reiter aus dem URL-Hash uebernehmen,
+    // damit Neuladen/"Zurueck" wieder beim zuletzt bearbeiteten Slot landet.
+    if (!_initialHashAusgewertet) {
+      _initialHashAusgewertet = true;
+      const hashKey = leseHashSlotSchluessel();
+      if (hashKey && _editSlots.some((s) => s.schluessel === hashKey)) {
+        _offenerSlotSchluessel = hashKey;
+      }
+    }
+
     rendereSlotListe();
     bindeDelegation();
     aktualisiereSpeichernBtn();
+
+    if (_offenerSlotSchluessel) {
+      const offenerEl = document.getElementById("slot-" + _offenerSlotSchluessel);
+      if (offenerEl && typeof offenerEl.scrollIntoView === "function") {
+        setTimeout(() => offenerEl.scrollIntoView({ block: "center" }), 0);
+      }
+    }
   } catch (err) {
     if (container) {
       container.innerHTML = '<p class="fehler-hinweis">Fehler beim Laden: ' + esc(err.message) + '</p>';
@@ -993,3 +1098,42 @@ async function ladeUndRendere() {
   // ── Daten laden ───────────────────────────────────────────────────────────
   await ladeUndRendere();
 })();
+
+// ── Test-Hilfsfunktionen (PLAN-1957) ──────────────────────────────────────────
+// Nur fuer node --test verwendet, um internen Zustand ohne echte Sheet-Klicks
+// zu setzen — Analog zu _testSetPickerSelectedId in routine-anpassen.js.
+
+function _testSetEditSlots(slots) {
+  _editSlots = slots;
+}
+
+function _testSetOffenerSlotSchluessel(schluessel) {
+  _offenerSlotSchluessel = schluessel;
+}
+
+function _testGetOffenerSlotSchluessel() {
+  return _offenerSlotSchluessel;
+}
+
+// ── Exports (für Tests, wenn als Modul geladen) ───────────────────────────────
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    esc,
+    slotLabel,
+    rendereSlotListe,
+    slotSchluesselAusHash,
+    hashFuerSlot,
+    leseHashSlotSchluessel,
+    aktualisiereUrlHash,
+    setzeSlotIcon,
+    setzeSlotKind,
+    setzeDefault,
+    bewegeSlot,
+    loescheSlot,
+    legeSlotAn,
+    _testSetEditSlots,
+    _testSetOffenerSlotSchluessel,
+    _testGetOffenerSlotSchluessel,
+  };
+}
