@@ -29,6 +29,7 @@ global.fetch      = fetchSpy;
 global.setTimeout = () => {};
 global.getPlatform = () => ({
   ready:          async () => {},
+  ensureAuth:     async () => true,
   setMainButton:  () => {},
   hideMainButton: () => {},
   showMainButton: () => {},
@@ -99,6 +100,9 @@ test("ESSEN-31 Quellen-Marker: _marker gibt richtigen Marker zurück", () => {
  * Test 3 — ESSEN-31 Sektion-Header:
  * Format "Kategorie-Label · N + 📖 R + 🧒 W" wenn R/W > 0.
  * Hinweis: essen-einkauf.js nutzt U+202F (narrow no-break space) nach Emoji.
+ * Seit T997 (Erledigte Items in eigenem Block am Listen-Ende) nimmt
+ * sektionHeader nur noch offenItems entgegen — Erledigte zählen nicht mit
+ * (siehe specs/buddies/essen.md ESSEN-31 "Sektion-Header je Kategorie").
  */
 test("ESSEN-31 Sektion-Header: sektionHeader rendert korrekte Zähler", () => {
   const offenItems = [
@@ -106,12 +110,11 @@ test("ESSEN-31 Sektion-Header: sektionHeader rendert korrekte Zähler", () => {
     makeItem({ klasse: "einkauf", aus_gericht: "Lasagne" }),
     makeItem({ klasse: "einkauf" }),
   ];
-  const erledigtItems = [makeItem({ abgehakt: true, klasse: "einkauf" })];
 
-  const html = sektionHeader("sonstiges", offenItems, erledigtItems);
+  const html = sektionHeader("sonstiges", offenItems);
 
   assert.ok(html.includes("Sonstiges"), "Label vorhanden");
-  assert.ok(html.includes("4"),         "Gesamt-Count 4 (3 offen + 1 erledigt)");
+  assert.ok(html.includes("3"),         "Offen-Count 3 (Erledigte zählen nicht mit, T997)");
   // U+202F (narrow no-break space) nach Emoji in essen-einkauf.js-Quelltext
   assert.ok(
     html.includes("\u{1F4D6} 1"),

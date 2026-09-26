@@ -1,0 +1,36 @@
+name: node-tests
+
+# Test-Gate: fährt die Node-DOM-Attrappen-Tests (*.test.js, kein jsdom, kein
+# npm) — bisher lief keiner davon in der CI (#1965). Auto-discover per find,
+# damit eine neue Test-Datei automatisch mitläuft statt unsichtbar-nicht-
+# gelaufen zu bleiben (analog RAT-30/T1310-Gedanke bei pytest.yml).
+# push:[main] bewusst weggelassen — Konsolidierung analog pytest.yml/ruff.yml
+# bleibt main-health.yml vorbehalten, falls dort künftig gebraucht.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node-tests:
+    # Leere Null-Diff-Claim-Flip-PRs überspringen (RAT-34, Amendment RAT-30
+    # Teil 3/4). fail-open `!= 0`, NICHT `> 0` (siehe pytest.yml/ruff.yml).
+    if: ${{ github.event.pull_request.changed_files != 0 }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Node-DOM-Tests (repo-weit, Auto-Discover)
+        run: |
+          set -e
+          files=$(find . -name "*.test.js" -not -path "*/node_modules/*" -not -path "./.claude/*")
+          for f in $files; do
+            echo "=== $f ==="
+            node "$f"
+          done
