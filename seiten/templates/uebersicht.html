@@ -24,6 +24,11 @@
        ohne Cookie tauscht das Skript die initData einmal gegen das Cookie und
        lädt neu; fremde Links öffnet es über Telegram. Im Browser tut es nichts. -->
   <script src="/api/v1/seiten/static/telegram-anmeldung.js?v={{ build_id }}"{% if telegram_tauschen %} data-tauschen{% endif %}></script>
+  <!-- #1955: gemeinsames Install-Skript aller PWA-Mäntel (seiten/static/app-installieren.js).
+       `data-immer`: die Übersicht zeigt den Install-Hinweis wie bisher immer,
+       nicht erst bei ?installieren=1 (das gilt nur für die ANDEREN Mäntel,
+       die man von hier per „Installieren"-Karten-Aktion erreicht). -->
+  <script src="/api/v1/seiten/static/app-installieren.js?v={{ build_id }}" data-immer defer></script>
 </head>
 <body>
   <header class="page">
@@ -33,25 +38,6 @@
     </div>
     <input type="search" class="suche" placeholder="Suchen …" aria-label="Seiten durchsuchen">
   </header>
-
-  {# #1953: Installieren. Im Telegram-WebView geht das nicht — dort ein
-     Knopf, der die Übersicht im Browser öffnet. Im Browser zeigt der Knopf
-     den Installations-Dialog (beforeinstallprompt), auf dem iPhone ein Hinweis.
-     Alles startet versteckt; das Skript unten blendet das Passende ein. #}
-  <section class="installieren" id="installieren" hidden aria-label="Als App installieren">
-    <div class="installieren-telegram" hidden>
-      <p><strong>Als App installieren?</strong> In Telegram geht das nicht — öffne die Übersicht im Browser und installiere sie dort.</p>
-      <button type="button" class="knopf knopf-voll" id="im-browser-oeffnen">Als App installieren → im Browser öffnen</button>
-      <p class="klein">Ist das Gerät im Browser noch nicht angemeldet, frag den Familien-Bot nach einem Anmelde-Link.</p>
-    </div>
-    <div class="installieren-browser" hidden>
-      <p><strong>XBuddy als App</strong> — mit eigenem Symbol auf dem Startbildschirm.</p>
-      <button type="button" class="knopf knopf-voll" id="app-installieren">App installieren</button>
-    </div>
-    <div class="installieren-ios" hidden>
-      <p><strong>Als App installieren:</strong> unten auf <em>Teilen</em> tippen, dann <em>Zum Home-Bildschirm</em>.</p>
-    </div>
-  </section>
 
   {% if snapshot_pending %}
     <p class="banner-snapshot" role="status">
@@ -82,9 +68,22 @@
                   {% if z.zeigt %}<span class="zeigt">{{ z.zeigt }}</span>{% endif %}
                 </span>
               </a>
-              <button type="button" class="kopieren" data-pfad="{{ z.pfad }}"
-                      {% if z.kopier_url %}data-url="{{ z.kopier_url }}"{% endif %}
-                      aria-label="Link zu „{{ z.label }}“ kopieren">📋 Link kopieren</button>
+              {# #1955: drei einheitliche Karten-Aktionen (zwei bei Nicht-PWA-
+                 Zielen — „Installieren" nur, wenn z.ist_pwa aus dem Inventar
+                 kommt, SREG-4/aggregator.py, keine Handliste hier). #}
+              <div class="zeile-aktionen">
+                <button type="button" class="aktion aktion-oeffnen" data-pfad="{{ z.pfad }}"
+                        {% if z.kopier_url %}data-url="{{ z.kopier_url }}"{% endif %}
+                        aria-label="„{{ z.label }}“ im Browser öffnen">↗ Im Browser öffnen</button>
+                {% if z.ist_pwa %}
+                <button type="button" class="aktion aktion-installieren" data-pfad="{{ z.pfad }}"
+                        {% if z.kopier_url %}data-url="{{ z.kopier_url }}"{% endif %}
+                        aria-label="„{{ z.label }}“ installieren">⬇ Installieren</button>
+                {% endif %}
+                <button type="button" class="aktion kopieren" data-pfad="{{ z.pfad }}"
+                        {% if z.kopier_url %}data-url="{{ z.kopier_url }}"{% endif %}
+                        aria-label="Link zu „{{ z.label }}“ kopieren">📋 Link kopieren</button>
+              </div>
             </li>
           {% endfor %}
         </ul>
@@ -168,42 +167,29 @@
       });
     });
 
-    // #1953: Installieren — Telegram-WebView, Browser mit Install-Dialog, iPhone.
-    (function () {
-      const box = document.getElementById("installieren");
-      const standalone = window.matchMedia("(display-mode: standalone)").matches
-        || window.navigator.standalone === true;
-      if (standalone) return;
+    // #1955: „Im Browser öffnen" / „Installieren" — Telegram-WebView per
+    // Telegram.WebApp.openLink (externer Browser), sonst neuer Tab. Die
+    // eigentliche Install-Leiste (beforeinstallprompt/iOS-Hinweis/Telegram-
+    // Hinweis) kommt jetzt aus dem gemeinsamen Skript (app-installieren.js,
+    // data-immer) — hier nur noch das Öffnen der ZIEL-Seite je Karte.
+    function absoluteUrlVon(b) {
+      return b.dataset.url || new URL(b.dataset.pfad, window.location.href).href;
+    }
+    function inBrowserOderExternOeffnen(url) {
       const tg = window.xbuddyTelegram;
-      const zeige = (klasse) => {
-        box.hidden = false;
-        box.querySelector(klasse).hidden = false;
-      };
-      if (tg && tg.imTelegram) {
-        zeige(".installieren-telegram");
-        document.getElementById("im-browser-oeffnen").addEventListener("click", () => {
-          tg.imBrowserOeffnen(new URL("/api/v1/seiten/uebersicht", window.location.href).href);
-        });
-        return;
-      }
-      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
-        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-      if (ios) { zeige(".installieren-ios"); return; }
-      let aufschub = null;
-      window.addEventListener("beforeinstallprompt", (ev) => {
-        ev.preventDefault();
-        aufschub = ev;
-        zeige(".installieren-browser");
+      if (tg && tg.imTelegram) { tg.imBrowserOeffnen(url); return; }
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+    document.querySelectorAll(".aktion-oeffnen").forEach(b => {
+      b.addEventListener("click", () => inBrowserOderExternOeffnen(absoluteUrlVon(b)));
+    });
+    document.querySelectorAll(".aktion-installieren").forEach(b => {
+      b.addEventListener("click", () => {
+        const url = new URL(absoluteUrlVon(b));
+        url.searchParams.set("installieren", "1");
+        inBrowserOderExternOeffnen(url.href);
       });
-      document.getElementById("app-installieren").addEventListener("click", async () => {
-        if (!aufschub) return;
-        aufschub.prompt();
-        await aufschub.userChoice.catch(() => null);
-        aufschub = null;
-        box.hidden = true;
-      });
-      window.addEventListener("appinstalled", () => { box.hidden = true; });
-    })();
+    });
 
     // #1940: PWA-Mantel — Service-Worker registrieren (best-effort, PWA-3:
     // fehlt die API oder scheitert die Registrierung, läuft die Seite weiter).

@@ -65,6 +65,13 @@ TYP_CONTROLLER = "controller"
 # `zielgruppe` abgeleitet (Sonderfall in `_typ_for_view`).
 TYP_MINI_APP = "mini-app"
 
+# #1955: Marker im Manifest-Feld `typ` für einen echten PWA-Mantel
+# (pwa_mantel.REGISTRY-Konsument — manifest.json + sw.js). Getrennt von
+# `typ` (der internen Sorte a/b/c/mini-app): ein View kann `zielgruppe:
+# "eltern"` UND `typ: "pwa"` gleichzeitig tragen — die Übersicht braucht
+# beides (Zielgruppe fürs Etikett, PWA-Marker für die „Installieren"-Aktion).
+TYP_PWA_MARKER = "pwa"
+
 
 # ============================================================
 #  Manifest-Discovery (SREG-2)
@@ -153,6 +160,8 @@ def _eintrag_aus_manifest(app_slug, ist_controller, view, icons_erforderlich=Fal
         "synonyme": list(view["synonyme"]),
         "zeigt": view["zeigt"],
         "zielgruppe": view["zielgruppe"],
+        # #1955: aus dem Manifest-Feld `typ` — keine Handliste in Render/Template.
+        "pwa": view.get("typ") == TYP_PWA_MARKER,
     }
 
     # SREG-14: Mini-App — web_app_url + funnel_url im Aggregator komponieren.

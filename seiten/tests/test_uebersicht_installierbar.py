@@ -108,16 +108,26 @@ def test_player_manifest_nur_mit_cookie_darum_use_credentials(hard_client):
 
 
 def test_uebersicht_bietet_installieren_an():
-    """#1953: Telegram-WebView → im Browser öffnen; Browser → Install-Dialog;
-    iPhone → Hinweis „Zum Home-Bildschirm"."""
+    """#1953/#1955: Telegram-WebView → im Browser öffnen; Browser → Install-Dialog;
+    iPhone → Hinweis „Zum Home-Bildschirm".
+
+    #1955: die Logik wohnt jetzt im gemeinsamen Skript aller PWA-Mäntel
+    (seiten/static/app-installieren.js) — die Übersicht bindet es mit
+    `data-immer` ein (zeigt den Hinweis unverändert IMMER, nicht erst bei
+    ?installieren=1 — das gilt nur für die anderen Mäntel)."""
     with open(os.path.join(_SEITEN_DIR, "templates", "uebersicht.html"), encoding="utf-8") as fh:
         html = fh.read()
-    assert "beforeinstallprompt" in html
-    assert "Als App installieren → im Browser öffnen" in html
-    assert "Zum Home-Bildschirm" in html
-    assert "tg.imBrowserOeffnen(" in html
-    with open(os.path.join(_SEITEN_DIR, "static", "telegram-anmeldung.js"),
+    assert "app-installieren.js" in html
+    assert "data-immer" in html
+    with open(os.path.join(_SEITEN_DIR, "static", "app-installieren.js"),
               encoding="utf-8") as fh:
         js = fh.read()
-    assert "window.xbuddyTelegram" in js
-    assert "openLink(url)" in js
+    assert "beforeinstallprompt" in js
+    assert "Als App installieren → im Browser öffnen" in js
+    assert "Zum Home-Bildschirm" in js
+    assert "imBrowserOeffnen(" in js
+    with open(os.path.join(_SEITEN_DIR, "static", "telegram-anmeldung.js"),
+              encoding="utf-8") as fh:
+        tg_js = fh.read()
+    assert "window.xbuddyTelegram" in tg_js
+    assert "openLink(url)" in tg_js

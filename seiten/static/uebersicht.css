@@ -80,34 +80,9 @@ input.suche:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 main { padding: 16px 16px 96px; max-width: 760px; margin: 0 auto; }
 
-/* ── Installieren (#1953) ───────────────────────────────────────────── */
-.installieren {
-  margin: 16px 16px 0;
-  padding: 12px 16px;
-  background: var(--card);
-  border: 1px solid var(--rule);
-  border-left: 4px solid var(--orange);
-  border-radius: var(--radius);
-  max-width: 728px;
-}
-@media (min-width: 792px) { .installieren { margin: 16px auto 0; } }
-.installieren p { margin: 0 0 8px; }
-.installieren .klein { font-size: 0.85rem; color: var(--ink-soft); margin: 8px 0 0; }
-.knopf {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--rule);
-  background: var(--card);
-  color: var(--ink);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.knopf-voll { background: var(--oliv); border-color: var(--oliv); color: #fff; width: 100%; }
+/* Installieren (#1953): die Leiste selbst kommt seit #1955 aus dem
+   gemeinsamen Skript (seiten/static/app-installieren.js, eigenes <style>) —
+   keine Kopie mehr hier. */
 
 /* ── Buddy-Gruppen ──────────────────────────────────────────────────── */
 .gruppe {
@@ -136,19 +111,18 @@ main { padding: 16px 16px 96px; max-width: 760px; margin: 0 auto; }
 .zeilen { list-style: none; margin: 0; padding: 0; }
 .zeile {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px 4px 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px 8px 0;
   border-top: 1px solid var(--rule);
 }
 .zeile:first-child { border-top: 0; }
 .zeile-link {
-  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 56px;
-  padding: 8px 0 8px 16px;
+  padding: 8px 0 4px 16px;
   color: inherit;
   text-decoration: none;
 }
@@ -168,9 +142,19 @@ main { padding: 16px 16px 96px; max-width: 760px; margin: 0 auto; }
   white-space: nowrap;
 }
 .etikett-display { background: var(--etikett-kind-bg); color: var(--etikett-kind-ink); }
-.kopieren {
+
+/* ── Karten-Aktionen (#1955): „Im Browser öffnen" / „Installieren" /
+   „Link kopieren" — kompakt, gleiche Form, umbrechend statt abgeschnitten
+   (thumb-friendly auch bei 390px). ─────────────────────────────────────── */
+.zeile-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 16px;
+}
+.aktion {
   flex: 0 0 auto;
-  min-height: 44px;
+  min-height: 40px;
   padding: 6px 10px;
   border: 1px solid var(--rule);
   border-radius: 999px;
@@ -181,6 +165,7 @@ main { padding: 16px 16px 96px; max-width: 760px; margin: 0 auto; }
   cursor: pointer;
   white-space: nowrap;
 }
+.aktion:active { opacity: 0.7; }
 .kopieren[data-copied="1"] { border-color: var(--oliv); color: var(--accent); }
 
 .leer-hinweis {

@@ -19,6 +19,8 @@
   <!-- platform.js vor plan-einstellungen.js (RAT-16, auch wenn diese PWA keinen Telegram-Zweig nutzt) -->
   <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
   <script src="/api/v1/seiten/static/plan-einstellungen.js?v={{ build_id }}" defer></script>
+  <!-- #1955: gemeinsames Install-Skript aller PWA-Mäntel — zeigt nur bei ?installieren=1 -->
+  <script src="/api/v1/seiten/static/app-installieren.js?v={{ build_id }}" defer></script>
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
 </head>

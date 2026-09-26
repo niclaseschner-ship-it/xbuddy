@@ -19,6 +19,8 @@
   <link rel="apple-touch-icon" href="/shell/{{ panel_id }}/icon-192.png">
   {# SHELL-3/8: Layout-CSS (Rail 280px, kein Overflow) #}
   <link rel="stylesheet" href="/api/v1/seiten/static/heim-shell.css?v={{ build_id }}">
+  {# #1955: gemeinsames Install-Skript aller PWA-Mäntel — zeigt nur bei ?installieren=1 #}
+  <script src="/api/v1/seiten/static/app-installieren.js?v={{ build_id }}" defer></script>
 </head>
 <body>
   {# SHELL-12: Device-Fit-Scale — 1920×1200-Design auf beliebige Geraetebreite skalieren.
