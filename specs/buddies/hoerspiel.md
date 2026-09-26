@@ -1658,7 +1658,8 @@ Definition-of-Done für „Instanz X existiert":
    aus der Instanz-Liste, HSP-43).
 6. **`hoerspiel_oeffnen`-Launcher** — Instanz ist über den Launcher-Skill
    erreichbar (`specs/platform/hoerspiel-oeffnen.md`), nicht hart auf
-   Mia.
+   Mia. *(#1964: der Launcher ist in `app_oeffnen` aufgegangen — der Chat
+   öffnet den Hörspiel-Player über seinen Verzeichnis-Eintrag, EC-46.)*
 7. **Daten-Bereich** — `xbuddy-data/hoerspiel/<kind_id>/instance.json`
    (+ bible, Shared-Assets) nach HSP-25/HSP-27.
 8. **Tests** — instanz-tragende Tests fixieren nicht `mia`/`finn`

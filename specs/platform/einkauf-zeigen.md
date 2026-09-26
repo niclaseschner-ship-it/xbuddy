@@ -143,6 +143,12 @@ folgt RAO, nicht EZG. Eine geteilte Convention ist heute nicht reif
 
 ## EZG-6 — Mini-App-URL und Inline-Buttons (web_app + url)
 
+> **#1964 (EC-46):** Die Knöpfe kommen aus dem gemeinsamen App-Knopf-Baustein
+> (`eltern-chat/skills/app_knoepfe.py`): „🛒 Liste öffnen" (`web_app`),
+> „🌐 Im Browser öffnen" (`url`) und — weil die Einkaufsliste eine PWA ist —
+> „⬇ Installieren" (`url` + `?installieren=1`). „Genau zwei Buttons" unten ist
+> damit auf drei gewachsen; Button 1 und 2 gelten unverändert.
+
 Beide Inline-Buttons tragen die **identische Mini-App-URL**, aber unter-
 schiedliche Telegram-Felder:
 

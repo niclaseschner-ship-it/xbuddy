@@ -60,10 +60,18 @@ Eltern-Seite ⇒ ihre Datenrouten gehören in AUTH-3.
 ## ESB-3 — Jede Eltern-Seite ist im Eltern-Chat erfragbar
 
 Eine Eltern-Seite trägt einen `views.json`-Eintrag mit `zielgruppe: eltern`,
-damit der Aggregator sie in die SREG-12-Übersichtsseite zieht und der
-`seiten_uebersicht`-Skill (SREG-5) sie surfacen kann. Referenz:
-`specs/platform/seiten-registry.md` SREG-4/5/12. Der Chat verweist auf die
-**Übersichtsseite**, macht **kein** Pro-Panel-Matching (PBE-2-Pivot bleibt).
+damit der Aggregator sie in die SREG-12-Übersichtsseite zieht und der Chat sie
+öffnen kann. Referenz: `specs/platform/seiten-registry.md` SREG-4/5/12.
+
+**#1964 (Nic 2026-09-26, `specs/platform/eltern-chat.md` EC-46):** Erfragbar
+heißt seitdem **direkt**: der Skill `app_oeffnen` liest das Ansichts-Verzeichnis
+und öffnet jede eingetragene Seite per Knopf — kein eigener Chat-Skill, keine
+Handliste. Pflicht für eine neue Seite ist darum nur der `views.json`-Eintrag
+mit `label` und **tragenden `synonyme`** (die Wörter, mit denen Eltern nach ihr
+fragen; sie sind das Routing-Vokabular des Modells). Die Übersicht bleibt der
+Weg zu „allen Apps" (`seiten_uebersicht`). Kacheln bearbeiten ist seit #1961
+eine eigene Seite und wird wie jede andere geöffnet; ein Pro-Panel-Matching im
+Chat gibt es weiterhin nicht (PBE-2-Pivot bleibt).
 
 **Heimat-Sub-Regel (killt den Wildwuchs):** die eltern-Seite eines Buddys wohnt
 in **`<buddy>/views.json`** (nicht zentral in `seiten/views.json`), mit **einem**

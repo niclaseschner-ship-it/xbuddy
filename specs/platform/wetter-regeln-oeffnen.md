@@ -1,5 +1,15 @@
 # Wetter-Regeln öffnen — Spec     (ID-Präfix: WRO)
 
+> **SUPERSEDED 2026-09-26 (#1964, Nic):** `wetter_regeln_oeffnen` ist abgerissen und in den
+> registry-getriebenen Skill `app_oeffnen` aufgegangen (`specs/platform/eltern-chat.md`
+> EC-46). Die App wird über ihren Eintrag im Ansichts-Verzeichnis geöffnet; ihre
+> Trigger-Wörter stehen in den `synonyme` der `views.json`. Antwort und Knöpfe
+> folgen EC-46 (ein Satz + Mini-App / „🌐 Im Browser öffnen" / bei PWA
+> „⬇ Installieren"). Diese Spec bleibt als Entscheidungs-Historie stehen.
+> Der hier beschriebene Pfad `/display/wetter/regeln` existiert seit #1715 nicht
+> mehr; der Knopf zeigt jetzt auf `/seiten/wetter/regeln` (Funnel-Origin),
+> `wetter_origin_url` ist aus der Eltern-Chat-Konfig entfernt.
+
 > Status: V1 · Refs #1094 (EC-40-Familie n=5), RAT-2 (#328, Wetter-Regeln-Editor
 > als eltern-seitige Web-Seite), RAT-16, #719 (Eltern-Chat-UI-Pattern)
 >

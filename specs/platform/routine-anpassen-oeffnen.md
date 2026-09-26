@@ -1,5 +1,12 @@
 # Routine-Anpassen öffnen — Spec     (ID-Präfix: RAO)
 
+> **SUPERSEDED 2026-09-26 (#1964, Nic):** `routine_anpassen_oeffnen` ist abgerissen und in den
+> registry-getriebenen Skill `app_oeffnen` aufgegangen (`specs/platform/eltern-chat.md`
+> EC-46). Die App wird über ihren Eintrag im Ansichts-Verzeichnis geöffnet; ihre
+> Trigger-Wörter stehen in den `synonyme` der `views.json`. Antwort und Knöpfe
+> folgen EC-46 (ein Satz + Mini-App / „🌐 Im Browser öffnen" / bei PWA
+> „⬇ Installieren"). Diese Spec bleibt als Entscheidungs-Historie stehen.
+
 > Status: V1 · Refs #678 (MVP-Sammler, Funktion 2 „Routine-Anpassen"), RAT-16, #719 (Eltern-Chat-UI-Pattern)
 >
 > **Klassen-Einordnung (`conventions/eltern-chat-skills.md`):** RAO ist ein

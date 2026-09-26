@@ -270,6 +270,51 @@ nichts.
 
 *Tickets:* #1919 (Refs #1859 — Nebenbefund der Cookie-Probe)
 
+### EC-46 — Jede App ist im Chat erfragbar: ein Skill aus dem Ansichts-Verzeichnis
+
+**Nic-Entscheid 2026-09-26 (#1964):** „Alle Apps sollen im Chat erfragbar
+sein, so wie die Hörspiele — auch die Eltern-Views — und zwar einheitlich."
+
+**Ein Skill, `app_oeffnen`, registry-getrieben.** Die Liste der Apps steht
+**nicht** im Chat-Code, sondern im Ansichts-Verzeichnis (`<buddy>/views.json`
+→ Seiten-Registry, `GET /api/v1/seiten`, SREG-3/SREG-4). Das Modell bekommt
+pro Turn je Eintrag `key`, `label`, `zielgruppe` und `synonyme` in der
+Werkzeug-Beschreibung (die `keys` zusätzlich als `enum`) und wählt per `key`.
+Das Verzeichnis wird zwischengespeichert (5 min); ist die Registry weg, gilt
+der letzte gute Stand, ohne Stand meldet der Skill es ehrlich (EC-7). Eine
+neue `views.json`-Zeile ist damit ohne Chat-Änderung erfragbar; die
+App-Bezeichnungen (EC-40 Achse B) wohnen in ihren `synonyme`.
+
+**Antwort immer gleich (EC-29).** Ein Satz („„<Label>“: <zeigt>") und je App
+die Knopfreihe aus dem **einen** Knopf-Baustein `skills/app_knoepfe.py`:
+1. Mini-App-Knopf (`web_app_url`, absolute Adresse = `mini_app_base_url` +
+   Registry-`pfad`; die Funnel-Origin bedient `/seiten/…`, `/api/v1/seiten/…`
+   und `/display/…`),
+2. „🌐 Im Browser öffnen" (`url`, dieselbe Adresse, #1953),
+3. „⬇ Installieren" (`url` + `?installieren=1`, #1955) — **nur** bei einer
+   PWA (`views.json` `typ: "pwa"`, Inventar-Feld `pwa`).
+
+Jeder Skill, der App-Knöpfe schickt, nutzt diesen Baustein — auch
+`einkauf_zeigen` (EZG, behält seine Listen-Logik und den EC-45-Wächter) und
+`seiten_uebersicht` (SREG-5).
+
+**Mehrdeutig** (z. B. „Wetter" → Wetter heute und Wetter-Regeln): das Modell
+übergibt alle passenden `keys` (höchstens 3), der Skill schickt beide
+Knopfreihen in **einer** Nachricht („Dazu passen „A“ und „B“."), Browser- und
+Installier-Knopf tragen dann den App-Namen. Keine Rückfrage — der Tap
+beantwortet sie schneller (EC-40 „sofort aufrufen").
+
+**Berechtigung** wie bisher bei allen Öffnen-Skills: Mitglied der
+Familien-Gruppe (EC-2). Kind-Apps schickt der Chat den Eltern zum
+Weitergeben (so tat es schon der Hörspiel-Player-Knopf).
+
+**Abgerissen:** `hoerspiel_oeffnen` (HOE), `routine_anpassen_oeffnen` (RAO),
+`wetter_regeln_oeffnen` (WRO) gehen in `app_oeffnen` auf. Der tote
+Garderoben-Knopf (`/display/wetter/regeln`, seit #1715 weg) zeigt jetzt auf
+`/seiten/wetter/regeln`; `wetter_origin_url` entfällt aus der Konfig.
+
+*Tickets:* #1964
+
 ### EC-23 — Telemetrie an Bot-Antworten
 
 Wenn eine Bot-Antwort durch mindestens einen Provider-Call entstanden ist,
@@ -1484,7 +1529,12 @@ antizipativ).
 **RATIFIZIERT 2026-06-22** (Refs #1075 — Mistral-Routing-Regression nach
 Anbieter-Wechsel zeigte App-spezifische Trigger-Listen als zu eng).
 
-Skills, die eine Mini-App via Telegram-Inline-Button öffnen (heute fünf
+> **#1964 (EC-46):** Die Familie ist seit 2026-09-26 drei Skills groß —
+> `app_oeffnen` (registry-getrieben, löst HOE/RAO/WRO ab), `einkauf_zeigen` EZG
+> und `seiten_uebersicht`. Achse B von `app_oeffnen` sind die `label`/`synonyme`
+> des Ansichts-Verzeichnisses; die HOE-/RAO-/WRO-Zeilen unten sind überholt.
+
+Skills, die eine Mini-App via Telegram-Inline-Button öffnen (damals fünf
 Skills: `einkauf_zeigen` EZG, `hoerspiel_oeffnen` HOE,
 `routine_anpassen_oeffnen` RAO, `seiten_uebersicht` MAU,
 `wetter_regeln_oeffnen` WRO — alle mit

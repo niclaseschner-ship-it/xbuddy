@@ -225,7 +225,17 @@ trägt; der Skill bleibt ein dünner Launcher.
 > Browser. Der Link ist **kein** Credential: ist der Browser noch nicht
 > angemeldet, gilt der Pairing-Weg (`auth.md` AUTH-2.a, „Cookie nachschicken").
 
-*Tickets:* #467 (SREG-12), #551, #678 (Pivot), #1946, #1953
+> **#1964 (Nic 2026-09-26) — einheitliche Knopfreihe, Registry-Konsument im
+> Chat.** Die Knöpfe kommen aus dem gemeinsamen Baustein
+> `eltern-chat/skills/app_knoepfe.py` (`eltern-chat.md` EC-46): „🏠 xbuddy
+> öffnen" + „🌐 Im Browser öffnen"; dass die Übersicht im Browser installierbar
+> ist, sagt jetzt der Satz. Eine **bestimmte** App — auch „Kacheln bearbeiten" —
+> öffnet der registry-getriebene Skill `app_oeffnen`; er ist (neben der
+> Übersicht) Konsument von `GET /api/v1/seiten` über den `SeitenClient`
+> (SREG-6). Der Satz „der Skill ruft `GET /api/v1/seiten` nicht selbst auf"
+> gilt weiter für `seiten_uebersicht`.
+
+*Tickets:* #467 (SREG-12), #551, #678 (Pivot), #1946, #1953, #1964
 
 ## SREG-5b — Opt-in-Direktantwort (Sekundärpfad nach SREG-5)
 
