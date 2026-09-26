@@ -110,8 +110,10 @@ def test_html_traegt_heim_origin_url_pro_karte(client):
 
 
 def test_html_traegt_copy_buttons(client):
+    """#1955: „Link kopieren" ist jetzt eine von drei Karten-Aktionen —
+    Klasse `class="aktion kopieren"` statt der früheren Alleinstellung."""
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    assert 'class="kopieren"' in body
+    assert 'class="aktion kopieren"' in body
     assert "Link kopieren" in body
 
 

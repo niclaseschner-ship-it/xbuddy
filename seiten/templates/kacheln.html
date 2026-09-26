@@ -23,6 +23,9 @@
 
   <link rel="stylesheet" href="/api/v1/seiten/static/uebersicht.css?v={{ build_id }}">
   <script src="/api/v1/seiten/static/telegram-anmeldung.js?v={{ build_id }}"{% if telegram_tauschen %} data-tauschen{% endif %}></script>
+  <!-- #1955: gemeinsames Install-Skript aller PWA-Mäntel — zeigt nur bei ?installieren=1
+       (Kacheln teilt sich den Mantel der Übersicht, siehe pwa_mantel.REGISTRY['uebersicht']) -->
+  <script src="/api/v1/seiten/static/app-installieren.js?v={{ build_id }}" defer></script>
 </head>
 <body>
   <header class="page">

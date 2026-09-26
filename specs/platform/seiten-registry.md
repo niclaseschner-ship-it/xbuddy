@@ -573,6 +573,17 @@ Buddy/App gruppiert, mit kopierbaren URLs. Volltextsuche filtert live.
 >   installieren → im Browser öffnen" (`Telegram.WebApp.openLink`); im
 >   Browser ein „App installieren"-Knopf, sobald `beforeinstallprompt` kommt;
 >   auf dem iPhone der Hinweis „Teilen → Zum Home-Bildschirm".
+> - **#1955 (Nic 2026-09-26) — drei Karten-Aktionen statt reinem Tap +
+>   Kopieren.** Jede Zeile trägt **„↗ Im Browser öffnen"** (normaler Browser:
+>   neuer Tab; Telegram: `Telegram.WebApp.openLink`) und **„📋 Link
+>   kopieren"** immer, **„⬇ Installieren"** nur bei einem echten PWA-Ziel
+>   (Manifest-Feld `typ: "pwa"`, `seiten/aggregator.py` — keine Handliste;
+>   Kinder-Display-Seiten unter `/display/...` und `kacheln` bleiben ohne
+>   diese Aktion). „Installieren" öffnet dieselbe Adresse mit
+>   `?installieren=1` — ein Browser kann nur die gerade offene Seite
+>   installieren. Der Install-Hinweis selbst (Telegram/Browser/iOS) kommt aus
+>   dem gemeinsamen Skript aller PWA-Mäntel (`seiten/static/app-installieren.js`,
+>   `conventions/pwa-mantel.md` PWAM-7) — keine Übersichts-Kopie mehr.
 > - **Aussehen:** eine Palette aus den Mantel-Tokens (Oliv `#47503C`, Sand
 >   `#F5F1E8`, Orange `#D87A3E` als einziger Akzent), eine Kartenform, eine
 >   Logo-Größe; mobile first, hell und dunkel (`prefers-color-scheme`).

@@ -290,6 +290,21 @@ konform** — `hoerspiel/static/eltern.css:24-29` setzt bereits `body { min-heig
 Geltungsbereich ist also die belegte Scroll-Root-Divergenz, nicht jede
 Mini-App-Fläche.
 
+### PWAM-7 — Install-Hinweis (`app-installieren.js`), ein Skript für alle Mäntel
+
+Ein Browser kann nur die gerade offene Seite installieren — jeder Mantel
+braucht darum denselben Install-Hinweis (`beforeinstallprompt`-Knopf,
+iOS-„Zum Home-Bildschirm"-Hinweis, Telegram-„im Browser öffnen") auf sich
+selbst. **EIN** Skript (`seiten/static/app-installieren.js`) trägt diese Logik;
+jeder Registry-Konsument bindet es im `<head>` ein — keine zweite Kopie
+(#1953 baute sie zuerst nur für die Übersicht, #1955 zog sie hierher).
+
+Sichtbarkeit: das Skript zeigt sich nur bei `?installieren=1` in der Adresse —
+ohne Parameter bleibt der Mantel unverändert. Die Übersicht ist die
+dokumentierte Ausnahme: ihr `<script>`-Tag trägt zusätzlich `data-immer` und
+zeigt den Hinweis wie vor #1955 unbedingt. `ENTSCHEID → #1955 → gemeinsames
+Install-Skript statt Übersichts-Kopie`.
+
 ---
 
 ## Offene Fragen

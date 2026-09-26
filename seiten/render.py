@@ -151,6 +151,10 @@ def _karte_basis(eintrag, heim_origin, tailscale_origin, funnel_origin=""):
         "web_app_url": eintrag.get("web_app_url", ""),
         "funnel_url": eintrag.get("funnel_url", ""),
         "audience": audience,
+        # #1955: echter PWA-Mantel (pwa_mantel.REGISTRY) — treibt die
+        # „Installieren"-Karten-Aktion der Übersicht. Aus dem Manifest,
+        # keine Handliste.
+        "pwa": bool(eintrag.get("pwa", False)),
     }
 
 
@@ -195,6 +199,8 @@ def _varianten_karten(eintrag, heim_origin, tailscale_origin, funnel_origin=""):
             "funnel_url": "",
             "audience": list(_ALLE_AUDIENCES),
             "variante": True,
+            # #1955: erbt den PWA-Marker vom Eintrag (dieselbe Ziel-Seite).
+            "pwa": bool(eintrag.get("pwa", False)),
         }
         karten.append(karte)
     return karten
@@ -281,7 +287,9 @@ def _zeile(karte, buddy):
 
     Keine sichtbare Adresse — `pfad` ist das Tap-Ziel, `kopier_url` die volle
     Adresse für „Link kopieren" (Funnel vor Heim; leer → der Browser setzt
-    location.origin davor)."""
+    location.origin davor). `ist_pwa` treibt #1955s „Installieren"-Aktion —
+    kommt 1:1 aus dem Manifest-Feld `typ: "pwa"` (aggregator.py), keine
+    Handliste im Template."""
     urls = karte.get("urls") or {}
     return {
         "key": karte["key"],
@@ -297,6 +305,7 @@ def _zeile(karte, buddy):
                               " ".join(karte.get("synonyme") or []),
                               logos.name(buddy)]),
         "variante": bool(karte.get("variante")),
+        "ist_pwa": bool(karte.get("pwa")),
     }
 
 

@@ -24,6 +24,8 @@
   <!-- platform.js (RAT-16) muss vor routine-anpassen.js geladen sein -->
   <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
   <script src="/api/v1/seiten/static/routine-anpassen.js?v={{ build_id }}" defer></script>
+  <!-- #1955: gemeinsames Install-Skript aller PWA-Mäntel — zeigt nur bei ?installieren=1 -->
+  <script src="/api/v1/seiten/static/app-installieren.js?v={{ build_id }}" defer></script>
 </head>
 <body>
   <header class="app-header">

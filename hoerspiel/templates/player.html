@@ -31,6 +31,8 @@
   window.__HSP_INSTANZEN__ = {{ instanzen_json }};
   window.__HSP_BUILD_ID__ = "{{ build_id }}";
 </script>
+<!-- #1955: gemeinsames Install-Skript aller PWA-Mäntel — zeigt nur bei ?installieren=1 -->
+<script src="/api/v1/seiten/static/app-installieren.js?v={{ build_id }}" defer></script>
 </head>
 
 <body class="hsp-player" data-stage="toddler">
