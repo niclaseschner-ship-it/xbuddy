@@ -40,7 +40,7 @@ generic demo family **Sonntag**, no real family content.
 | ![Audio plays](docs/screenshots/hoerspiel-alben.png) | ![Photo frame](docs/screenshots/photo-rahmen.png) |
 | Audio-play library | Photo frame |
 
-**What parents see** — the chat and four small web apps on the phone:
+**What parents see** — the chat and three small web apps on the phone:
 
 | | |
 |---|---|
@@ -48,8 +48,6 @@ generic demo family **Sonntag**, no real family content.
 | Parent chat in Telegram — the main interface | Shopping list |
 | ![Plan settings](docs/screenshots/plan-einstellungen.png) | ![Adjust routine](docs/screenshots/routine-anpassen.png) |
 | Setting up the week plan | Adjusting the morning routine |
-| ![Audio-play settings](docs/screenshots/hoerspiel-eltern.png) | |
-| Audio-play settings (speed, pauses, voice) | |
 
 > All views + how to regenerate them: [`docs/screenshots/`](docs/screenshots/).
 > The parent chat is an **invented** example transcript, not a real chat.

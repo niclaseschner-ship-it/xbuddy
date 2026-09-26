@@ -498,10 +498,21 @@ Schalter (Weg B aus #440) — Vorrats-Mechanik ohne Trigger.
 > Familien-Daten im Repo: die Liste kommt clientseitig per
 > `fetch('/api/v1/panels/')` vom panel-Service (same-origin-Cookie, PBE-3),
 > nicht aus einem committeten Manifest — `panel_eintraege()` bleibt
-> abgerissen. Die Seite teilt sich den PWA-Mantel der Übersicht (keine
+> abgerissen. ~~Die Seite teilt sich den PWA-Mantel der Übersicht (keine
 > zweite Install-Identität); dokumentiert als Ausnahme in
 > `tests/eltern_flaechen.py:AUSNAHMEN` (Achse `mantel`, Kennung
-> `seiten/kacheln`).
+> `seiten/kacheln`).~~
+>
+> **Überholt durch #1961 (Nic, 26.09.2026):** auch Einstellungs-Apps sind
+> eigene PWAs. „Kacheln bearbeiten" hat einen **eigenen Mantel**
+> (`pwa_mantel.REGISTRY['kacheln']`, eigenes Manifest/SW, Scope
+> `/api/v1/seiten/kacheln`) und ein **eigenes Logo** (`seiten/logos.json`,
+> Buddy `kacheln`, ARASAAC 4930). Die Seite wohnt dafür auf dem
+> Schwester-Pfad **`/api/v1/seiten/kacheln`** (RAT-45: Platform-HTML neben der
+> Registry) statt im Übersichts-Scope — zwei Apps mit nebeneinander liegenden
+> Scopes; `/api/v1/seiten/uebersicht/kacheln` leitet (302) um. Der Eintrag
+> trägt `typ: "pwa"`, die Übersicht bietet also „Installieren" an (#1955);
+> die `mantel`-Ausnahme ist entfernt.
 
 ## SREG-12 — Gerenderte Eltern-Übersichts-Seite (HTML, neben der Registry-API)
 
@@ -578,8 +589,8 @@ Buddy/App gruppiert, mit kopierbaren URLs. Volltextsuche filtert live.
 >   neuer Tab; Telegram: `Telegram.WebApp.openLink`) und **„📋 Link
 >   kopieren"** immer, **„⬇ Installieren"** nur bei einem echten PWA-Ziel
 >   (Manifest-Feld `typ: "pwa"`, `seiten/aggregator.py` — keine Handliste;
->   Kinder-Display-Seiten unter `/display/...` und `kacheln` bleiben ohne
->   diese Aktion). „Installieren" öffnet dieselbe Adresse mit
+>   Kinder-Display-Seiten unter `/display/...` bleiben ohne diese Aktion;
+>   `kacheln` hat sie seit #1961, eigener Mantel). „Installieren" öffnet dieselbe Adresse mit
 >   `?installieren=1` — ein Browser kann nur die gerade offene Seite
 >   installieren. Der Install-Hinweis selbst (Telegram/Browser/iOS) kommt aus
 >   dem gemeinsamen Skript aller PWA-Mäntel (`seiten/static/app-installieren.js`,
@@ -843,7 +854,9 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
 - `seiten/views.json` — Eintrag für `mini-app-uebersicht` (Selbst-
   Eintrag).
 - `hoerspiel/views.json` — Eintrag für die `hoerspiel-eltern` Mini-App
-  (Werft-Folge #848, Hörspiel-Eltern-Mini-App nach HSP-33). Vorlage:
+  (Werft-Folge #848, Hörspiel-Eltern-Mini-App nach HSP-33). **[Überholt —
+  #1962: die Eltern-App ist abgerissen, `hoerspiel/views.json` ist leer, die
+  Übersicht zeigt den Hörspiel-Player; die Vorlage unten ist Historie.]** Vorlage:
 
   Pro Instanz ein eigener Eintrag mit kind_id-tragender `pfad`-Form
   (URL-3a, RAT-17, #965). V1: zwei Einträge:

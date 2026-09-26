@@ -26,18 +26,18 @@ from seiten import pwa_mantel  # noqa: E402  # isort:skip
 _SKRIPT_PFAD = os.path.join(_SEITEN_DIR, "static", "app-installieren.js")
 
 # component -> Template-Datei, die den Mantel rendert (#1955-Abnahme:
-# „Test, dass alle Mäntel das Skript einbinden"). kacheln.html teilt sich
-# den uebersicht-Mantel und wird separat mitgeprüft (siehe unten).
+# „Test, dass alle Mäntel das Skript einbinden"). #1961: kacheln hat einen
+# eigenen Mantel; #1962: hoerspiel-eltern ist entfernt.
 _TEMPLATE_JE_KOMPONENTE = {
     "einkauf": os.path.join(_SEITEN_DIR, "templates", "essen-einkauf.html"),
     "plan": os.path.join(_SEITEN_DIR, "templates", "plan-einstellungen.html"),
     "routine": os.path.join(_SEITEN_DIR, "templates", "routine-anpassen.html"),
     "wetter-regeln": os.path.join(_SEITEN_DIR, "templates", "wetter-regeln.html"),
-    "hoerspiel-eltern": os.path.join(_REPO_ROOT, "hoerspiel", "templates", "eltern.html"),
     "hoerspiel-player": os.path.join(_REPO_ROOT, "hoerspiel", "templates", "player.html"),
     "connector": os.path.join(_SEITEN_DIR, "static", "connector", "index.html"),
     "shell": os.path.join(_SEITEN_DIR, "templates", "heim-shell.html"),
     "uebersicht": os.path.join(_SEITEN_DIR, "templates", "uebersicht.html"),
+    "kacheln": os.path.join(_SEITEN_DIR, "templates", "kacheln.html"),
 }
 
 
@@ -60,15 +60,6 @@ def test_mantel_bindet_das_gemeinsame_skript_ein(komponente):
         "%s (Komponente %r) bindet seiten/static/app-installieren.js nicht ein "
         "(#1955)" % (pfad, komponente)
     )
-
-
-def test_kacheln_teilt_sich_den_uebersicht_mantel_und_bindet_ein():
-    """kacheln.html hat keinen eigenen REGISTRY-Eintrag (teilt sich den der
-    Übersicht, #1906) — trotzdem dieselbe Einbindung, keine Sonderkopie."""
-    pfad = os.path.join(_SEITEN_DIR, "templates", "kacheln.html")
-    with open(pfad, encoding="utf-8") as fh:
-        html = fh.read()
-    assert "app-installieren.js" in html
 
 
 def test_uebersicht_bindet_mit_data_immer_ein_andere_maentel_nicht():

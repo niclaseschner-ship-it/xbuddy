@@ -17,7 +17,8 @@
     },
     {
       "slug": "kacheln",
-      "pfad": "/api/v1/seiten/uebersicht/kacheln",
+      "typ": "pwa",
+      "pfad": "/api/v1/seiten/kacheln",
       "label": "Kacheln bearbeiten",
       "synonyme": [
         "kacheln",
@@ -28,7 +29,12 @@
         "panels"
       ],
       "zeigt": "Panel auswählen, um seine Kacheln zu bearbeiten.",
-      "zielgruppe": "eltern"
+      "zielgruppe": "eltern",
+      "pwa": {
+        "manifest": "/api/v1/seiten/kacheln/manifest.json",
+        "start_url": "/api/v1/seiten/kacheln",
+        "service_worker": "/api/v1/seiten/kacheln/sw.js"
+      }
     },
     {
       "slug": "connector",

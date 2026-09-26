@@ -637,9 +637,9 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 # in keiner URL-Map mehr (RAT-31-Router-Tod) — Zeilen entfernt, #1863
 ```
 
-**Neun ungegatete Telegram-Shell-Routen — Auth-11-Anlass (#1805).** AUTH-11
+**Acht ungegatete Telegram-Shell-Routen — Auth-11-Anlass (#1805).** AUTH-11
 verlangt für jede ungegatete Route entweder einen Decorator oder eine
-namentliche Ausnahme; für diese neun ist **keins von beiden** angemessen,
+namentliche Ausnahme; für diese acht ist **keins von beiden** angemessen,
 weil `require_dual_gate` cookie-only prüft und unbelegt ist, ob der
 Telegram-WebView beim HTML-Initial-Load überhaupt einen `xbuddy_session`-
 Cookie mitschickt (MAD-11, `conventions/mini-app-design.md`, hält fest: der
@@ -657,18 +657,19 @@ statt Ausnahme, mit eigenem Auflösungs-Trigger:
 /seiten/routine/anpassen/                     (Trigger: #1859 Cookie-Probe)
 /seiten/wetter/regeln                         (Trigger: #1859 Cookie-Probe)
 /seiten/wetter/regeln/                        (Trigger: #1859 Cookie-Probe)
-/seiten/hoerspiel/<kind_id>/eltern            (Trigger: #1859 Cookie-Probe)
+# seiten/hoerspiel/<kind_id>/eltern: mit #1962 („Hörspiel verwalten" abgerissen)
+# nur noch Umleitung auf den Hörspiel-Player, gegatet (require_dual_gate) — Zeile entfernt
 ```
 
 *(#1946, 2026-09-25: die zehnte Zeile `/api/v1/seiten/mini-app-uebersicht`
 ist entfallen — die Route ist gelöscht. Für die Übersicht ist die Probe
 gegenstandslos: sie bleibt AUTH-7b-gegatet und holt sich das Cookie im
-Telegram-WebView selbst über AUTH-2.b. Derselbe Weg steht den neun Flächen
+Telegram-WebView selbst über AUTH-2.b. Derselbe Weg steht den acht Flächen
 oben offen; ob sie ihn nehmen, ist eigene Arbeit, nicht Teil von #1946.)*
 
 **Trigger #1859:** Nic tippt den Telegram-Button auf einem gepairten
 Elterngerät an und belegt live, ob der WebView den `xbuddy_session`-Cookie
-mitschickt. Trägt er ihn, wandern alle neun Routen mit dem Factory-Decorator
+mitschickt. Trägt er ihn, wandern alle acht Routen mit dem Factory-Decorator
 nach AUTH-3 (derselbe same-origin-Cookie-Pfad wie die übrigen
 Eltern-Mini-Apps); trägt er ihn nicht, braucht es eine eigene Auth-Lösung
 für den Telegram-Fall, bevor sie gaten können. Bis dahin sind sie hier
@@ -984,14 +985,18 @@ das Gate das System selbst bräche. Jede Zeile trägt ihren Grund:
 | `/seiten/wetter/regeln/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/seiten/wetter/regeln/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/seiten/wetter/regeln/wetter-regeln.css` | Einziges Nicht-Manifest-/Nicht-Icon-Asset, das eine der fünf Eltern-Shells über die gegatete `<path:asset>`-Route lädt (`seiten/templates/wetter-regeln.html:11`; `wetter_regeln_asset_view`, `seiten/main.py:1387`) — die anderen vier ziehen ihr CSS/JS aus dem ungegateten impliziten Static (AUTH-11-Ausnahme). Die Shell selbst steht als AUTH-6-Schuldstand offen (Trigger #1859); bliebe das Stylesheet gegatet, lüde die Fläche als unformatiertes HTML — Shell und Pflicht-Asset müssen dieselbe Auth-Antwort geben. |
-| `/seiten/hoerspiel/<kind_id>/eltern/manifest.json` | Ausgeliefert über den ungegateten `hoerspiel_eltern_asset_view` (`seiten/main.py:1285`); Icon-Set aus `REGISTRY["hoerspiel-eltern"].icons` (`seiten/pwa_mantel.py:477`). „SW/manifest: credential-los" (`seiten/main.py:1204`, `:1293`). |
-| `/seiten/hoerspiel/<kind_id>/eltern/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["hoerspiel-eltern"].icons`, `seiten/pwa_mantel.py:477`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
-| `/seiten/hoerspiel/<kind_id>/eltern/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
-| `/seiten/hoerspiel/<kind_id>/eltern/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/seiten/hoerspiel/<kind_id>/eltern/manifest.json` | **[ÜBERHOLT — #1962]** Keine Ausnahme mehr: „Hörspiel verwalten" ist abgerissen, die Route existiert nicht mehr (404); die Seite leitet gegatet auf den Hörspiel-Player um. Bis dahin: Ausgeliefert über den ungegateten `hoerspiel_eltern_asset_view` (`seiten/main.py:1285`); Icon-Set aus `REGISTRY["hoerspiel-eltern"].icons` (`seiten/pwa_mantel.py:477`). „SW/manifest: credential-los" (`seiten/main.py:1204`, `:1293`). |
+| `/seiten/hoerspiel/<kind_id>/eltern/icon-192.png` | **[ÜBERHOLT — #1962]** wie `manifest.json` oben. Bis dahin: Vom Manifest referenziertes Icon (`REGISTRY["hoerspiel-eltern"].icons`, `seiten/pwa_mantel.py:477`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
+| `/seiten/hoerspiel/<kind_id>/eltern/icon-512.png` | **[ÜBERHOLT — #1962]** wie `manifest.json` oben. |
+| `/seiten/hoerspiel/<kind_id>/eltern/icon-maskable-512.png` | **[ÜBERHOLT — #1962]** wie `manifest.json` oben. |
 | `/api/v1/seiten/uebersicht/manifest.json` | Ausgeliefert über den ungegateten `uebersicht_manifest_public` (`seiten/main.py`, #1940); Icon-Set aus `REGISTRY["uebersicht"].icons` (`seiten/pwa_mantel.py`). Gleiche Begründung wie `/seiten/essen/einkauf/manifest.json` oben — die Übersicht selbst bleibt AUTH-7b-gegatet, `sw.js` ebenfalls. |
 | `/api/v1/seiten/uebersicht/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["uebersicht"].icons`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
 | `/api/v1/seiten/uebersicht/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/api/v1/seiten/uebersicht/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/api/v1/seiten/kacheln/manifest.json` | Ausgeliefert über den ungegateten `kacheln_manifest_public` (`seiten/main.py`, #1961 — eigener Mantel „Kacheln bearbeiten"); Icon-Set aus `REGISTRY["kacheln"].icons` (`seiten/pwa_mantel.py`). Gleiche Begründung wie `/api/v1/seiten/uebersicht/manifest.json` oben — die Seite selbst und `sw.js` bleiben AUTH-7b-gegatet. |
+| `/api/v1/seiten/kacheln/icon-192.png` | Vom Manifest referenziertes Icon (`REGISTRY["kacheln"].icons`); gleiche Begründung wie `/seiten/essen/einkauf/icon-192.png` oben. |
+| `/api/v1/seiten/kacheln/icon-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
+| `/api/v1/seiten/kacheln/icon-maskable-512.png` | Gleiche Begründung wie `icon-192.png` oben. |
 | `/display/hoerspiel/static/manifest.webmanifest` | Seit #1858 über eine dedizierte Route ausgeliefert (`hoerspiel/main.py:534`), NICHT über den generischen (jetzt gegateten) Static-Endpoint. `hoerspiel/templates/alben.html:12` lädt das Manifest ohne `crossorigin="use-credentials"` — credential-los per Fetch-Spec, gleiche Klasse wie die `kibuddy`-Zeilen oben. Die drei PNG-Icons unter `/display/hoerspiel/static/` bleiben ungenutzt hinter dem generischen Static-Gate (kein Template/JS referenziert sie; das Manifest zeigt auf `/display/_shared/icons/arasaac/5915.png`, bereits ratifizierte Ausnahme) — sie brauchen keine eigene Zeile. |
 
 Die Asset-Zeilen oben (Manifest, Service-Worker, Icon-/Design-Assets sowie

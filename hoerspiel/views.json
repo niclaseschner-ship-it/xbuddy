@@ -1,19 +1,4 @@
 {
-  "views": [
-    {
-      "slug": "hoerspiel-eltern",
-      "typ": "pwa",
-      "pfad": "/seiten/hoerspiel/alle/eltern",
-      "label": "Hörspiel verwalten",
-      "synonyme": ["hörspiel", "einstellungen", "folgen", "alben verwalten", "hoerspiel verwalten"],
-      "zeigt": "Folgen aller Kinder und die Hörspiel-Einstellungen je Kind verwalten.",
-      "zielgruppe": "eltern",
-      "pwa": {
-        "manifest": "/seiten/hoerspiel/alle/eltern/manifest.json",
-        "start_url": "/seiten/hoerspiel/alle/eltern",
-        "service_worker": "/seiten/hoerspiel/alle/eltern/sw.js"
-      },
-      "auth": "tma"
-    }
-  ]
+  "_doc": "#1962 (Nic, 26.09.2026): „Hörspiel verwalten“ ist entfernt — auf der Übersicht steht der Hörspiel-Player (seiten/views.json:hoerspiel-player, für alle Kinder). Die Datei bleibt, weil jede Buddy-Komponente ihr Ansichts-Verzeichnis trägt (tools/views_manifest.py).",
+  "views": []
 }

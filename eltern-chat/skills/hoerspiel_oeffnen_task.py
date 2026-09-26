@@ -40,7 +40,7 @@ from skills import hoerspiel_oeffnen as hoe_mod
 logger = logging.getLogger(__name__)
 
 # HSP-47 / HSP-53: fester Pfad der Hörspiel-Player-PWA.
-# Löst /seiten/hoerspiel/mia/eltern (HSP-26, superseded) ab.
+# Löst die frühere Eltern-Mini-App (HSP-26, mit #1962 entfernt) ab.
 _HOE_APP_PATH = "/seiten/hoerspiel/player"
 
 

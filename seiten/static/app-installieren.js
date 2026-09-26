@@ -4,7 +4,7 @@
  * Vorgeschichte: #1953 baute den Install-Hinweis nur für die Übersicht (eigene
  * Kopie in uebersicht.html). Ein Browser kann aber nur die gerade offene Seite
  * installieren — jeder Mantel (einkauf, plan, routine, wetter-regeln,
- * hoerspiel-eltern, hoerspiel-player, connector, shell, uebersicht) braucht
+ * hoerspiel-player, connector, shell, uebersicht, kacheln) braucht
  * darum denselben Hinweis auf sich selbst. #1955 zieht die Logik hierher —
  * EINE Datei, von jedem Mantel eingebunden — statt einer zweiten Kopie.
  *

@@ -12,12 +12,11 @@ generische Demo-Familie, **keine echten Familiendaten**:
 - `hoerspiel-alben.png` — Hörspiel-Alben-Display (Cover + Player)
 - `photo-rahmen.png` — Photo-Buddy-Rahmen (gebündelte CC0-Demo-Fotos)
 
-**Eltern-Sicht** — die vier Mini-Apps im observe-Modus (560×1120) plus der Chat:
+**Eltern-Sicht** — die drei Mini-Apps im observe-Modus (560×1120) plus der Chat:
 
 - `einkauf.png` — Einkaufsliste
 - `plan-einstellungen.png` — Plan-Einstellungen
 - `routine-anpassen.png` — Morgenroutine anpassen
-- `hoerspiel-eltern.png` — Hörspiel-Einstellungen (Tempo, Pausen, Stimme)
 - `eltern-chat-sonntag.png` — synthetischer Eltern-Chat (Telegram-Look, 900×1500)
 
 Neu erzeugen: `tools/demo/run_stack.sh` starten, dann `tools/demo/shoot.sh <pfad>`

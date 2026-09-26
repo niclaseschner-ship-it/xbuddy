@@ -6,7 +6,7 @@
  * und negativ (Standalone-Dev-URL fällt auf 'mia').
  *
  * Testet die IIFE-Logik aus alben.js Z. 8-11 (HSP-26, URL-3a).
- * Analog zu test_eltern_js.test.js, andere URL-Pattern.
+ * (Vorbild war der mit #1962 entfernte Eltern-App-Test.)
  *
  * Kein jsdom, kein npm — vanilla node:test.
  */

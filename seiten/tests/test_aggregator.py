@@ -388,8 +388,8 @@ def test_aggregator_typ_mini_app(tmp_path, monkeypatch):
         _view_mini_app("mini-app-uebersicht", "/api/v1/seiten/mini-app-uebersicht", "uebersicht"),
     ])
     _schreibe_manifest(root, "hoerspiel", [
-        # HSP-26 / URL-3a / T970: kind_id-tragender Pfad (hier: mia als Beispiel-Instanz)
-        _view_mini_app("eltern", "/seiten/hoerspiel/mia/eltern", "hoerspiel"),
+        # synthetische Beispiel-Fläche (die frühere Eltern-App ist mit #1962 entfallen)
+        _view_mini_app("player", "/seiten/hoerspiel/player", "hoerspiel"),
     ])
 
     eintraege = aggregator.manifest_eintraege(

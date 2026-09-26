@@ -55,6 +55,7 @@ PWAM-1 Mantel-Definition`.
 | connector | `seiten/static/connector/manifest.json` | `seiten/static/connector/sw.js` | **fehlt** (statisch `BUILD='v1'` sw.js:15) | CONN-8 |
 | routine | LIB `build_manifest()` via `routine_anpassen_asset_view` | LIB `render_sw()` via `routine_anpassen_asset_view` | `/seiten/routine/anpassen/<asset>` `seiten/main.py` | ROUTINE-20/23 (T1665) |
 | uebersicht | LIB `build_manifest()` via `uebersicht_asset_view` | LIB `render_sw()` via `uebersicht_asset_view` (network-first, `Service-Worker-Allowed: /api/v1/seiten/uebersicht`) | `/api/v1/seiten/uebersicht/<asset>` `seiten/main.py` | SREG-12 (#1940) |
+| kacheln | LIB `build_manifest()` via `kacheln_asset_view` | LIB `render_sw()` via `kacheln_asset_view` (network-first, `Service-Worker-Allowed: /api/v1/seiten/kacheln`) | `/api/v1/seiten/kacheln/<asset>` `seiten/main.py` | SREG-11 (#1961) |
 
 **connector ist ein registrierter, aber noch nicht voll-konformer Mantel.** Er
 zählt erst **nach der Install-Probe** als voll konform — bis dahin trägt er drei
@@ -284,9 +285,10 @@ PWAM-6 Scroll-Baseline (mini-app-base.css, im selben Stein)` +
 (2026-07-01-2046-antiberater-1215-pwa-mantel-pass2.md:27-33)`.
 
 **Belegter Fall (das, was jetzt tatsächlich angleicht):** uebersicht/routine
-(kein einheitlicher Scroll-Root) auf die Base ziehen. **hoerspiel ist schon
-konform** — `hoerspiel/static/eltern.css:24-29` setzt bereits `body { min-height:
-100dvh }`; es braucht keine Angleichung und ist damit kein Bruchbeleg. Der
+(kein einheitlicher Scroll-Root) auf die Base ziehen. **hoerspiel war schon
+konform** — `hoerspiel/static/eltern.css:24-29` setzte bereits `body { min-height:
+100dvh }` (die Eltern-App ist mit #1962 entfernt); es brauchte keine Angleichung
+und war damit kein Bruchbeleg. Der
 Geltungsbereich ist also die belegte Scroll-Root-Divergenz, nicht jede
 Mini-App-Fläche.
 

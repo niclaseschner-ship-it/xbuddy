@@ -66,12 +66,11 @@ Tragfaehig ist nur die Start-Adresse — und die auch nur normalisiert:
    getrennte Flask-Routen, aber dieselbe Flaeche).
 2. Die normalisierte Adresse gegen die `url_map` des `seiten`-Dienstes
    aufloesen und die **Regel** als Schluessel nehmen. Das haelt auch
-   instanz-parametrische Flaechen zusammen:
-   `hoerspiel/views.json` deklariert `/seiten/hoerspiel/alle/eltern`, das
-   Mantel-Register bildet seine `start_url` aus der Instanzen-Registry
-   (`_hoerspiel_primary_slug()`) — ohne `instanzen.json` steht dort `kind1`.
-   Ein reiner String-Vergleich waere hier umgebungsabhaengig falsch; beide
-   loesen aber auf dieselbe Regel `/seiten/hoerspiel/<kind_id>/eltern` auf.
+   instanz-parametrische Flaechen zusammen (Anlass bis #1962: die
+   Hoerspiel-Eltern-App war im Verzeichnis generisch mit `alle`, im
+   Mantel-Register mit dem ersten Instanz-Slug eingetragen — ein reiner
+   String-Vergleich waere umgebungsabhaengig falsch gewesen, beide loesten
+   aber auf dieselbe `<kind_id>`-Regel auf).
 
 ## Beide Richtungen, nicht nur eine
 
@@ -173,27 +172,23 @@ class Ausnahme:
 
 
 AUSNAHMEN: tuple[Ausnahme, ...] = (
-    # ── Achse `mantel` ───────────────────────────────────────────────────────
+    # ── Achse `mantel`: keine Ausnahme mehr — „Kacheln bearbeiten" hat seit
+    #    #1961 einen eigenen vollen Mantel (pwa_mantel.REGISTRY['kacheln']). ──
+    # ── Achse `route` (#1962) ────────────────────────────────────────────────
     Ausnahme(
-        kennung="seiten/kacheln",
-        achse=ACHSE_MANTEL,
+        kennung="/seiten/hoerspiel/<kind_id>/eltern",
+        achse=ACHSE_ROUTE,
         sorte=SORTE_AUSNAHME,
         begruendung=(
-            "#1906 (Nic-Wahl C, 25.09.2026): die Auswahl-Seite 'Kacheln "
-            "bearbeiten' ist EINE Karte auf der Uebersicht, keine eigene "
-            "installierbare App. Sie teilt sich bewusst den vollen Mantel der "
-            "Uebersicht (pwa_mantel.py:REGISTRY['uebersicht'] — dieselbe "
-            "Scope /api/v1/seiten/uebersicht, dasselbe Manifest/SW/Icons); "
-            "ihre Start-Adresse /api/v1/seiten/uebersicht/kacheln loest aber "
-            "auf eine ANDERE Flask-Regel auf als REGISTRY['uebersicht']."
-            "start_url, darum findet der Verbund-Schluessel dieser Achse "
-            "keinen Treffer. Eine zweite Mantel-Registrierung nur fuer diesen "
-            "Verbund-Schluessel waere eine zweite, fiktive Install-Identitaet "
-            "fuer eine Flaeche, die keine sein soll — genau das Gegenteil "
-            "dessen, was #1906 entschieden hat (keine neue Familien-Daten- "
-            "tragende Registry-Sonderrolle, ein Registry-Eintrag)."
+            "#1962 (Nic, 26.09.2026): „Hoerspiel verwalten\" ist abgerissen, "
+            "der Hoerspiel-Player (seiten/views.json:hoerspiel-player) deckt "
+            "Folgen und Einstellungen ab. Die Route bleibt NUR als 302-Umleitung "
+            "auf den Player stehen, damit installierte Alt-PWAs (start_url "
+            "…/<kind_id>/eltern) und alte Chat-Links nicht ins Leere laufen. "
+            "Eine Umleitung ist keine Flaeche — ein Verzeichnis-Eintrag brachte "
+            "sie auf die Uebersicht zurueck, genau das Gegenteil des Abrisses."
         ),
-        quelle="seiten/main.py get_seiten_uebersicht_kacheln, seiten/views.json:kacheln",
+        quelle="seiten/main.py hoerspiel_eltern_umleitung",
     ),
     # ── Achse `anschluss` ────────────────────────────────────────────────────
     Ausnahme(
@@ -616,8 +611,8 @@ def ist_seiten_route(regel) -> bool:
       Erreichbarkeit prueft die Achse `pfad` ueber die PWA-Unterfelder; hier
       waeren sie Rauschen, das nach Ausnahmen verlangte.
 
-    Parametrische Regeln bleiben ausdruecklich DRIN:
-    `/seiten/hoerspiel/<kind_id>/eltern` ist eine echte Eltern-Flaeche.
+    Parametrische Regeln bleiben ausdruecklich DRIN (bis #1962 war die
+    Hoerspiel-Eltern-App unter einer `<kind_id>`-Regel eine echte Eltern-Flaeche).
     `views_manifest.kanonische_display_pfade` wirft solche Regeln weg
     (tools/views_manifest.py:308) — genau deshalb ist Richtung B fuer hoerspiel
     dort leer. Diese Achse macht den Fehler nicht mit; der Verbund laeuft
@@ -660,10 +655,9 @@ def route_befunde(root: str = REPO_ROOT, app=None) -> list[Befund]:
     blind, fuer den sie da ist.
 
     Der Verbund laeuft ueber dieselbe Normalisierung wie die Mantel-Achse:
-    `hoerspiel/views.json:6` deklariert `/seiten/hoerspiel/alle/eltern`,
-    ausgeliefert wird `/seiten/hoerspiel/<kind_id>/eltern` — ein String-
-    Vergleich waere hier umgebungsabhaengig falsch, die aufgeloeste Regel
-    traegt. `app` ist die Naht fuer die Fehlerpfad-Probe
+    ein instanz-parametrischer Eintrag (`/seiten/<komp>/alle/…`) und seine
+    `<kind_id>`-Regel sind dieselbe Flaeche — ein String-Vergleich waere
+    umgebungsabhaengig falsch, die aufgeloeste Regel traegt. `app` ist die Naht fuer die Fehlerpfad-Probe
     (`routentabelle_mit_zusatz`).
     """
     app = app if app is not None else _seiten_app()
@@ -768,7 +762,7 @@ def chat_befunde(root: str = REPO_ROOT, skills_dir: str | None = None,
     Eltern trotzdem zum Weitergeben. Verglichen wird normalisiert (Query und
     abschliessender Schraegstrich weg) und, wo der seiten-Dienst die Adresse
     bedient, zusaetzlich ueber die aufgeloeste Flask-Regel — so traegt auch
-    ein parametrischer Eintrag (`/seiten/hoerspiel/alle/eltern`).
+    ein instanz-parametrischer Eintrag.
     """
     app = app if app is not None else _seiten_app()
 

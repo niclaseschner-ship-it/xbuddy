@@ -41,7 +41,7 @@ generische Demo-Familie **Sonntag**, keine echten Familieninhalte.
 | ![Hörspiele](docs/screenshots/hoerspiel-alben.png) | ![Foto-Rahmen](docs/screenshots/photo-rahmen.png) |
 | Hörspiel-Bibliothek | Foto-Rahmen |
 
-**Was Eltern sehen** — der Chat und vier kleine Web-Apps am Handy:
+**Was Eltern sehen** — der Chat und drei kleine Web-Apps am Handy:
 
 | | |
 |---|---|
@@ -49,8 +49,6 @@ generische Demo-Familie **Sonntag**, keine echten Familieninhalte.
 | Eltern-Chat in Telegram — die Haupt-Schnittstelle | Einkaufsliste |
 | ![Plan-Einstellungen](docs/screenshots/plan-einstellungen.png) | ![Routine anpassen](docs/screenshots/routine-anpassen.png) |
 | Wochenplan einrichten | Morgenroutine anpassen |
-| ![Hörspiel-Einstellungen](docs/screenshots/hoerspiel-eltern.png) | |
-| Hörspiel-Einstellungen (Tempo, Pausen, Stimme) | |
 
 > Alle Views + Anleitung zum Neu-Erzeugen: [`docs/screenshots/`](docs/screenshots/).
 > Der Eltern-Chat ist ein **erfundener** Beispiel-Verlauf, kein echter Chat.

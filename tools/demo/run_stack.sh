@@ -125,7 +125,6 @@ cat <<INFO
     /seiten/essen/einkauf/         Einkauf
     /seiten/plan/einstellungen/    Plan-Einstellungen
     /seiten/routine/anpassen       Routine-Anpassen
-    /seiten/hoerspiel/mia/eltern   Hörspiel-Eltern
   Eltern-Chat — statische Demo-Seite (#1773, synthetisch, kein Server nötig):
     tools/demo/chat_transcript/eltern-chat-sonntag.html  (direkt im Browser öffnen)
   Screenshots: tools/demo/shoot.sh <pfad|datei.html>

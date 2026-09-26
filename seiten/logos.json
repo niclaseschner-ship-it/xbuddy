@@ -9,17 +9,19 @@
     "routine":   {"name": "Routine",          "arasaac": 30207, "wort": "liste"},
     "wetter":    {"name": "Wetter",           "arasaac": 24721, "wort": "wetter"},
     "seiten":    {"name": "Übersicht",        "arasaac": 2317,  "wort": "haus"},
-    "connector": {"name": "KI-Anbieter",      "arasaac": 2373,  "wort": "stecker"}
+    "connector": {"name": "KI-Anbieter",      "arasaac": 2373,  "wort": "stecker"},
+    "kacheln":   {"name": "Kacheln",          "arasaac": 4930,  "wort": "bausteine"}
   },
   "einstellungen": {
     "_doc": "Plattform-Dinge stehen auf der Übersicht als eigene Gruppe am Ende (Nic 2026-09-25).",
     "name": "Einstellungen",
-    "buddies": ["seiten", "connector"]
+    "buddies": ["seiten", "connector", "kacheln"]
   },
   "zuordnung": {
     "_doc": "Inventar-Schlüssel, deren Buddy nicht der Manifest-Ordner ist (vom seiten-Service gehostet, gehören aber einem Buddy).",
     "seiten-hoerspiel-player": "hoerspiel",
-    "seiten-connector": "connector"
+    "seiten-connector": "connector",
+    "seiten-kacheln": "kacheln"
   },
   "maentel": {
     "_doc": "Mantel (pwa_mantel.REGISTRY bzw. Display-Manifest) -> Buddy + Icon-Ordner (relativ zur Repo-Wurzel) + Dateien.",
@@ -27,11 +29,11 @@
     "plan":             {"buddy": "plan",      "ordner": "seiten/static/plan"},
     "routine":          {"buddy": "routine",   "ordner": "seiten/static/routine"},
     "wetter-regeln":    {"buddy": "wetter",    "ordner": "seiten/static/wetter"},
-    "hoerspiel-eltern": {"buddy": "hoerspiel", "ordner": "hoerspiel/static"},
     "hoerspiel-player": {"buddy": "hoerspiel", "ordner": "hoerspiel/static"},
     "connector":        {"buddy": "connector", "ordner": "seiten/static/connector"},
     "shell":            {"buddy": "seiten",    "ordner": "seiten/static/shell"},
     "uebersicht":       {"buddy": "seiten",    "ordner": "seiten/static/uebersicht"},
+    "kacheln":          {"buddy": "kacheln",   "ordner": "seiten/static/kacheln"},
     "kibuddy-frage":    {"buddy": "kibuddy",   "ordner": "kibuddy/static/icons", "dateien": ["icon-192.png", "icon-512.png"]}
   }
 }

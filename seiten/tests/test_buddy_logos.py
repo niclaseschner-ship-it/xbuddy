@@ -132,8 +132,18 @@ def test_keine_selbst_eintraege_keine_kind_alben():
 
 
 def test_hoerspiel_views_ohne_kindernamen():
-    """Keine Kindernamen fest im Repo (#1953): der Eltern-Eintrag ist generisch."""
+    """Keine Kindernamen fest im Repo (#1953). Seit #1962 ist der Eltern-Eintrag
+    („Hörspiel verwalten") ganz entfallen — die Übersicht zeigt nur den Player."""
     with open(os.path.join(_REPO_ROOT, "hoerspiel", "views.json"), encoding="utf-8") as fh:
         views = json.load(fh)["views"]
-    pfade = [v["pfad"] for v in views]
-    assert pfade == ["/seiten/hoerspiel/alle/eltern"]
+    assert views == []
+
+
+def test_kacheln_hat_eigenes_logo_nicht_das_haus():
+    """#1961: „Kacheln bearbeiten" trägt ein eigenes Logo, nicht das der Übersicht."""
+    zeilen = [z for g in _layout()["gruppen"] for z in g["zeilen"]]
+    kacheln = next(z for z in zeilen if z["pfad"] == "/api/v1/seiten/kacheln")
+    assert kacheln["logo"] == logos.logo_url("kacheln")
+    assert kacheln["logo"] != logos.logo_url("seiten")
+    # … und ist ein echtes PWA-Ziel: die Karte bietet „Installieren" an (#1955).
+    assert kacheln["ist_pwa"] is True

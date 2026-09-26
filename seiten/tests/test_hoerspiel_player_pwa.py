@@ -62,8 +62,9 @@ def client():
 # ── AC1 — Registry + build_manifest (Lib-Ebene) ──────────────────────────────
 
 def test_player_ist_siebter_registry_eintrag():
-    """AC1: hoerspiel-player ist in pwa_mantel.REGISTRY (8. Eintrag nach T1681 / hoerspiel-eltern;
-    seit #1940 zehn Eintraege mit der Uebersicht; #1946 streicht mini-app-uebersicht → neun)."""
+    """AC1: hoerspiel-player ist in pwa_mantel.REGISTRY (8. Eintrag nach T1681;
+    seit #1940 zehn Eintraege mit der Uebersicht; #1946 streicht mini-app-uebersicht → neun;
+    #1961/#1962: kacheln kommt dazu, der Hoerspiel-Eltern-Mantel faellt weg → neun)."""
     assert _COMPONENT in pwa_mantel.REGISTRY
     assert len(pwa_mantel.REGISTRY) == 9
     cfg = pwa_mantel.REGISTRY[_COMPONENT]

@@ -5,7 +5,7 @@ am ersten Durchgang, siehe Kommentare in `seiten/main.py`):
 
   Befund 1 (behoben, zweite Runde erweitert): Manifest + Icons der fuenf
   Eltern-PWA-Flaechen (einkauf, plan-einstellungen, routine-anpassen,
-  wetter-regeln, hoerspiel-eltern) sind credential-los per Fetch-Spec
+  wetter-regeln; hoerspiel-eltern bis #1962) sind credential-los per Fetch-Spec
   (#1437, analog /shell/<panel_id>/manifest.json) -- eigene, ungegatete
   Routen NEBEN dem gegateten `<path:asset>`-Catch-all (Vorbild:
   kibuddy/main.py:427-437, T1836). sw.js bleibt gegated. Zweite Runde:
@@ -18,8 +18,8 @@ am ersten Durchgang, siehe Kommentare in `seiten/main.py`):
 
   Befund 2 (zurueckgenommen, Ticket #1859): die fuenf Telegram-web_app-HTML-
   Shells (essen_einkauf_view, routine_anpassen_view, wetter_regeln_view,
-  plan_einstellungen_view, hoerspiel_eltern_view (#1946: mini_app_uebersicht_view
-  geloescht) +
+  plan_einstellungen_view; die Hoerspiel-Eltern-Shell ist mit #1962 entfallen,
+  #1946: mini_app_uebersicht_view geloescht) +
   ihre vier Trailing-Slash-Aliase) sind NICHT gegated -- offene Live-Probe,
   ob die Telegram-WebView den `xbuddy_session`-Cookie traegt (kein Spec-Ort
   behauptet es, MAD-11 belegt nur den fehlenden `Authorization`-Header beim
@@ -98,7 +98,14 @@ ROUTEN_DUAL_GATE = [
     ("GET", "/seiten/plan/einstellungen/sw.js"),
     ("GET", "/seiten/routine/anpassen/sw.js"),
     ("GET", "/seiten/wetter/regeln/sw.js"),
+    # #1962: „Hörspiel verwalten" ist entfernt — Umleitung + Abschalt-SW,
+    # beide gegatet wie der Rest der Seiten-Flächen.
+    ("GET", "/seiten/hoerspiel/mia/eltern"),
     ("GET", "/seiten/hoerspiel/mia/eltern/sw.js"),
+    # #1961: eigener Mantel „Kacheln bearbeiten" (+ Umleitung der alten Adresse).
+    ("GET", "/api/v1/seiten/kacheln"),
+    ("GET", "/api/v1/seiten/kacheln/sw.js"),
+    ("GET", "/api/v1/seiten/uebersicht/kacheln"),
 ]
 
 ROUTEN_INIT_DATA = [
@@ -139,15 +146,17 @@ ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS = [
     "/seiten/wetter/regeln/icon-512.png",
     "/seiten/wetter/regeln/icon-maskable-512.png",
     "/seiten/wetter/regeln/wetter-regeln.css",
-    "/seiten/hoerspiel/mia/eltern/manifest.json",
-    "/seiten/hoerspiel/mia/eltern/icon-192.png",
-    "/seiten/hoerspiel/mia/eltern/icon-512.png",
-    "/seiten/hoerspiel/mia/eltern/icon-maskable-512.png",
+    # #1962: die vier hoerspiel-eltern-Assets sind mit der Seite entfallen.
     # #1940: Mantel der Übersicht.
     "/api/v1/seiten/uebersicht/manifest.json",
     "/api/v1/seiten/uebersicht/icon-192.png",
     "/api/v1/seiten/uebersicht/icon-512.png",
     "/api/v1/seiten/uebersicht/icon-maskable-512.png",
+    # #1961: Mantel „Kacheln bearbeiten".
+    "/api/v1/seiten/kacheln/manifest.json",
+    "/api/v1/seiten/kacheln/icon-192.png",
+    "/api/v1/seiten/kacheln/icon-512.png",
+    "/api/v1/seiten/kacheln/icon-maskable-512.png",
 ]
 
 # Befund 2 (Watchdog-Fix, Ticket #1859): die fuenf Telegram-web_app-HTML-
@@ -166,7 +175,8 @@ ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE = [
     "/seiten/routine/anpassen",
     "/seiten/wetter/regeln/",
     "/seiten/wetter/regeln",
-    "/seiten/hoerspiel/mia/eltern",
+    # #1962: /seiten/hoerspiel/<kind_id>/eltern ist nur noch eine gegatete
+    # Umleitung auf den Player (ROUTEN_DUAL_GATE oben).
     # #1946: /api/v1/seiten/mini-app-uebersicht ist geloescht (eine Uebersicht).
 ]
 
