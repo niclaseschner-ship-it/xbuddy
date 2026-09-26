@@ -75,7 +75,9 @@ Listen-Reihenfolge.
 > **Der Ersatz-Weg ist gebaut** (#1906, Nic-Wahl C, 25.09.2026): keine Karte
 > je Panel-Instanz, sondern EINE Karte „Kacheln bearbeiten" auf der Übersicht
 > (Sorte-b-Eintrag `kacheln` in `seiten/views.json`, Platform-Eigentümer wie
-> `uebersicht`) auf `GET /api/v1/seiten/uebersicht/kacheln`. Diese
+> `uebersicht`) auf `GET /api/v1/seiten/uebersicht/kacheln` (seit #1961
+> `GET /api/v1/seiten/kacheln`, eigene installierbare App; die alte Adresse
+> leitet um). Diese
 > Auswahl-Seite listet die zur Laufzeit existierenden Panel-Instanzen
 > (clientseitig per `fetch('/api/v1/panels/')`, keine Familien-Daten im
 > Repo) und verlinkt je Instanz auf **diese** deterministische URL. Siehe

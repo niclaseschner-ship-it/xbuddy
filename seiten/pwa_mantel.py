@@ -327,25 +327,6 @@ def render_sw(component: str, build_id: str | None = None) -> str:
     return js
 
 
-def _hoerspiel_primary_slug() -> str:
-    """Primärer (erster) Hörspiel-Instanz-Slug aus der zentralen instanzen.json-
-    Registry (Option C #1732) — treibt den PWA-Default-Einstieg (start_url). So
-    zeigt der installierte Mantel auf die real existierende Live-Instanz statt auf
-    einen hardcodierten Slug. Fallback: der generische Einstieg „alle" (#1953) —
-    kein Kindername im Repo; die Route leitet zur Laufzeit auf die erste Instanz."""
-    try:
-        from tools import instanzen as _inst
-        insts = _inst.lade_instanzen("hoerspiel")
-        if insts and insts[0].get("slug"):
-            return insts[0]["slug"]
-    except Exception:  # Registry fehlt → INST-6-Default
-        pass
-    return "alle"
-
-
-_HOERSPIEL_PRIMARY = _hoerspiel_primary_slug()
-
-
 # Registrierte Konsumenten (conventions/pwa-mantel.md PWAM-1-Tabelle).
 # build_id_source_set: Dateinamen relativ zum jeweiligen Asset-Root (der
 # Aufrufer liefert den Root an build_id_for — connector ist Override-aware).
@@ -429,10 +410,7 @@ REGISTRY: dict[str, MantelConfig] = {
     #    Auth: HTML cookie-gegatet (AUTH-7b DUAL, #1832) wie bisher.
     "uebersicht": MantelConfig(
         build_id_source_set=("uebersicht.css", "telegram-anmeldung.js"),
-        # #1906: kacheln.html teilt sich diesen Mantel (dieselbe Scope,
-        # dasselbe Manifest/SW) — seine Aenderungen sollen den build_id-
-        # Cache-Buster trotzdem bumpen.
-        template_source_set=("uebersicht.html", "kacheln.html"),
+        template_source_set=("uebersicht.html",),
         name="Übersicht · XBuddy",
         short_name="XBuddy",
         start_url="/api/v1/seiten/uebersicht",
@@ -444,6 +422,30 @@ REGISTRY: dict[str, MantelConfig] = {
         stop_prefixes=(),
         sw_script_route="/api/v1/seiten/uebersicht/sw.js",
         sw_scope="/api/v1/seiten/uebersicht",
+    ),
+    # ── Kacheln bearbeiten (#1961) — eigene installierbare App neben der
+    #    Übersicht. Bis #1961 teilte sich kacheln.html den Übersichts-Mantel
+    #    (#1906); Nic 26.09.2026: auch Einstellungs-Apps sind eigene PWAs mit
+    #    eigenem Logo. Eigener Schwester-Pfad /api/v1/seiten/kacheln (RAT-45:
+    #    Platform-HTML neben der Registry) statt unter …/uebersicht/kacheln —
+    #    so liegen die Scopes nebeneinander statt ineinander (zwei Apps, eine
+    #    Adresse, kein Streit um den Link-Fang). Icons aus seiten/static/kacheln/
+    #    (logos.json, Buddy „kacheln"). Auth wie die Übersicht: HTML + sw.js
+    #    require_dual_gate, Manifest + Icons public (credential-los).
+    "kacheln": MantelConfig(
+        build_id_source_set=("uebersicht.css", "telegram-anmeldung.js"),
+        template_source_set=("kacheln.html",),
+        name="Kacheln bearbeiten · XBuddy",
+        short_name="Kacheln",
+        start_url="/api/v1/seiten/kacheln",
+        icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
+        display="standalone",
+        theme_color="#47503C",
+        background_color="#F5F1E8",
+        html_cache_mode="network-first",
+        stop_prefixes=(),
+        sw_script_route="/api/v1/seiten/kacheln/sw.js",
+        sw_scope="/api/v1/seiten/kacheln",
     ),
     # #1946: der Eintrag "mini-app-uebersicht" ist entfallen — Telegram öffnet
     # dieselbe Übersicht wie der Browser (REGISTRY['uebersicht']).
@@ -484,30 +486,9 @@ REGISTRY: dict[str, MantelConfig] = {
         sw_script_route="/seiten/wetter/regeln/sw.js",
         sw_scope="/seiten/wetter/regeln/",
     ),
-    # ── Hörspiel-Eltern (T1681 / ESB-1) — eltern-facing PWA-Mantel ──
-    #    Eigenstaendiger Mantel NEBEN hoerspiel-player (Kind-Sorte).
-    #    Route: /seiten/hoerspiel/<kind_id>/eltern (per-kind_id).
-    #    Manifest via build_manifest(), sw.js via render_sw() — kein Platte-Fork.
-    #    Icons: wiederverwendet aus hoerspiel/static/ (192/512/maskable, Motiv-Folge offen).
-    #    start_url/scope kanonisch ohne kind_id-Segment: der Mantel gilt fuer alle
-    #    Eltern-Instanzen — eltern.js laedt kind_id aus location.pathname.
-    #    Auth: HTML-Shell public (MAD-7); Datenrouten AUTH-3-hart (@require_init_data, ESB-2).
-    "hoerspiel-eltern": MantelConfig(
-        build_id_source_set=("eltern.js", "eltern.css"),
-        name="Hörspiel verwalten · XBuddy",
-        short_name="Hörspiel",
-        start_url=f"/seiten/hoerspiel/{_HOERSPIEL_PRIMARY}/eltern",
-        icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
-        display="fullscreen",
-        theme_color="#47503C",
-        background_color="#F5F1E8",
-        # network-first: HTML frisch vom Server (Stale-Cache-Haertung analog routine/plan);
-        # Offline-Fallback bleibt ueber den Cache erhalten.
-        html_cache_mode="network-first",
-        stop_prefixes=("/api/v1/hoerspiel/",),
-        sw_script_route=f"/seiten/hoerspiel/{_HOERSPIEL_PRIMARY}/eltern/sw.js",
-        sw_scope="/seiten/hoerspiel/",
-    ),
+    # ── Hörspiel-Eltern (T1681) — mit #1962 entfernt (Nic, 26.09.2026): der
+    #    Hörspiel-Player deckt Folgen und Einstellungen ab. Die alte Adresse
+    #    leitet um, ihr sw.js ist ein Abschalter (seiten/main.py, #1962).
     # ── Hörspiel-Player (HSP-47) — erster Voll-Konsument ÜBER die Lib ──
     #    Manifest via build_manifest(), sw.js via render_sw() (kein sw.js/
     #    manifest.json auf Platte). Assets (player.{css,js} + Icons) liefert

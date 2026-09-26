@@ -538,17 +538,16 @@ def get_seiten_uebersicht():
     return resp
 
 
-@app.route("/api/v1/seiten/uebersicht/kacheln", methods=["GET"])
+@app.route("/api/v1/seiten/kacheln", methods=["GET"])
 @require_dual_gate(mode=_AUTH_MODE)
-def get_seiten_uebersicht_kacheln():
+def get_seiten_kacheln():
     """#1906 (Nic-Wahl C, 25.09.2026): Auswahl-Seite „Kacheln bearbeiten".
 
-    Verlinkt von EINER Karte auf der Übersicht (Sorte-b-Eintrag in
-    seiten/views.json, wie die Übersicht sich selbst listet) — listet die
-    Panel-Instanzen, die zur LAUFZEIT existieren, und verlinkt je Instanz auf
-    den längst vorhandenen, deterministischen Editor
-    (`/controller/app-panel/<panel_id>/bearbeiten`, PBE-2). Genau EIN Panel
-    bleibt trotzdem gelistet (keine Sonderbehandlung).
+    Verlinkt von EINER Karte auf der Übersicht (Eintrag `kacheln` in
+    seiten/views.json) — listet die Panel-Instanzen, die zur LAUFZEIT
+    existieren, und verlinkt je Instanz auf den längst vorhandenen,
+    deterministischen Editor (`/controller/app-panel/<panel_id>/bearbeiten`,
+    PBE-2). Genau EIN Panel bleibt trotzdem gelistet (keine Sonderbehandlung).
 
     Keine Familien-Daten im Repo: die Panel-Liste ist NICHT committet und wird
     NICHT hier serverseitig aus panels.json/instanzen.json gebaut — RAT-31 E3
@@ -560,13 +559,11 @@ def get_seiten_uebersicht_kacheln():
     Identitäts-Lücke der Sorte #1854 (dortiger Proxy hat kein Cookie; dieser
     Client-Fetch hat es, weil der Browser ihn same-origin stellt).
 
-    Teilt sich BEWUSST den PWA-Mantel der Übersicht
-    (`pwa_mantel.REGISTRY['uebersicht']` — dieselbe Scope
-    `/api/v1/seiten/uebersicht`, dasselbe Manifest/SW/Icons): eine zweite
-    Mantel-Registrierung wäre eine zweite Install-Identität für eine Fläche,
-    die nur eine Auswahl INNERHALB der Übersicht ist. Dokumentiert als
-    bewusste Ausnahme in `tests/eltern_flaechen.py:AUSNAHMEN` (Achse
-    'mantel', Kennung 'seiten/kacheln').
+    #1961 (Nic, 26.09.2026): eigene installierbare App mit eigenem Mantel
+    (`pwa_mantel.REGISTRY['kacheln']`) und eigenem Logo — nicht mehr der
+    Übersichts-Mantel. Darum der eigene Schwester-Pfad neben der Übersicht
+    (RAT-45) statt `/api/v1/seiten/uebersicht/kacheln`: zwei Apps mit
+    nebeneinander liegenden Scopes; die alte Adresse leitet hierher um.
 
     Auth (AUTH-11): require_dual_gate(mode=_AUTH_MODE) — wortgleich zur
     Übersicht selbst (Browser-Fläche, kein tma-Aufrufer bekannt).
@@ -576,13 +573,89 @@ def get_seiten_uebersicht_kacheln():
         request.cookies.get(_session_cookie.COOKIE_NAME), bot_token)
     resp = make_response(render_template(
         "kacheln.html",
-        build_id=_uebersicht_build_id(),
-        sw_scope=pwa_mantel.REGISTRY["uebersicht"].sw_scope,
+        build_id=_kacheln_build_id(),
+        sw_scope=pwa_mantel.REGISTRY["kacheln"].sw_scope,
         telegram_tauschen=not angemeldet,
     ))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+@app.route("/api/v1/seiten/uebersicht/kacheln", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)
+def get_seiten_uebersicht_kacheln_umleitung():
+    """#1961: alte Adresse (#1906, im Übersichts-Scope) → eigener Pfad."""
+    return redirect("/api/v1/seiten/kacheln", code=302)
+
+
+# ============================================================
+#  #1961 — PWA-Mantel „Kacheln bearbeiten" (ESB-1 / PWAM-5)
+# ============================================================
+# Surface (analog Übersicht, #1740-Dispatcher):
+#   GET /api/v1/seiten/kacheln/manifest.json — build_manifest() aus der Lib.
+#   GET /api/v1/seiten/kacheln/sw.js         — render_sw() aus der Lib.
+#   GET /api/v1/seiten/kacheln/icon-*.png    — statisch aus seiten/static/kacheln/.
+# Manifest + Icons public (der Browser holt sie credential-los), sw.js und
+# alles andere hinter require_dual_gate.
+_KACHELN_MIME = {
+    ".json": "application/manifest+json",
+    ".js":   "application/javascript",
+    ".png":  "image/png",
+}
+
+
+def _kacheln_asset_root():
+    """Icons von „Kacheln bearbeiten" (#1961). Test-Naht: runtime['kacheln_asset_dir']."""
+    override = runtime.get("kacheln_asset_dir") if isinstance(runtime, dict) else None
+    return override or os.path.join(os.path.dirname(__file__), "static", "kacheln")
+
+
+def _kacheln_build_id():
+    """build_id aus uebersicht.css + telegram-anmeldung.js + Template kacheln.html."""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    return pwa_mantel.build_id_for("kacheln", static_dir)
+
+
+@app.route("/api/v1/seiten/kacheln/<path:asset>", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)
+def kacheln_asset_view(asset):
+    """#1961: PWA-Mantel-Assets von „Kacheln bearbeiten" — manifest.json/sw.js
+    aus der Lib, Icons statisch. Delegiert an `_kacheln_public_asset`."""
+    return _kacheln_public_asset(asset)
+
+
+def _kacheln_public_asset(asset):
+    """Der eine Dispatch-Pfad für alle Kacheln-Mantel-Assets (#1961)."""
+    cfg = pwa_mantel.REGISTRY["kacheln"]
+    return serve_mantel_asset(
+        asset,
+        asset_root=_kacheln_asset_root(),
+        mime_map=_KACHELN_MIME,
+        special=_mantel_special_generated(cfg, "kacheln", _kacheln_build_id()),
+    )
+
+
+# AUTH-11-Ausnahme — Begruendung wortgleich zu den Übersichts-Public-Routen
+# (#1437, credential-loser Manifest-/Icon-Fetch, sw.js bleibt gegated).
+@app.route("/api/v1/seiten/kacheln/manifest.json", methods=["GET"])
+def kacheln_manifest_public():
+    return _kacheln_public_asset("manifest.json")
+
+
+@app.route("/api/v1/seiten/kacheln/icon-192.png", methods=["GET"])
+def kacheln_icon_192_public():
+    return _kacheln_public_asset("icon-192.png")
+
+
+@app.route("/api/v1/seiten/kacheln/icon-512.png", methods=["GET"])
+def kacheln_icon_512_public():
+    return _kacheln_public_asset("icon-512.png")
+
+
+@app.route("/api/v1/seiten/kacheln/icon-maskable-512.png", methods=["GET"])
+def kacheln_icon_maskable_public():
+    return _kacheln_public_asset("icon-maskable-512.png")
 
 
 # ============================================================
@@ -993,8 +1066,8 @@ def _current_build_id():
 #  #1740 (PWML-4) — Uniformer PWA-Mantel-Asset-Dispatcher
 # ============================================================
 # Die uniformen public-HTML-Eltern-Mäntel (einkauf / plan-einstellungen /
-# routine-anpassen / hoerspiel-eltern / wetter-regeln) trugen die Auslieferungs-
-# Schicht als copy-paste pro Konsument: manifest/sw-Sonderfall + statischer
+# routine-anpassen / wetter-regeln; bis #1962 auch der Hörspiel-Eltern-Mantel)
+# trugen die Auslieferungs-Schicht als copy-paste pro Konsument: manifest/sw-Sonderfall + statischer
 # realpath-Traversal-Guard. serve_mantel_asset() vereint den statischen Teil;
 # die divergenten manifest/sw-Quellen (generiert via Lib vs. disk-committed)
 # kommen als special-Handler-Dict rein. AUSGENOMMEN bleiben die divergenten
@@ -1024,7 +1097,7 @@ def serve_mantel_asset(asset, *, asset_root, mime_map, special=None):
 
 
 def _mantel_special_generated(cfg, component, build_id):
-    """special-Handler für generierte Mäntel (routine/wetter/hoerspiel-eltern):
+    """special-Handler für generierte Mäntel (routine/wetter/uebersicht/kacheln):
     manifest.json→build_manifest, sw.js→render_sw (+ Service-Worker-Allowed aus
     cfg.sw_scope). PWML-1/2."""
     def _manifest():
@@ -1622,183 +1695,79 @@ def wetter_regeln_css_public():
 
 
 # ============================================================
-#  HSP-33 / T1681 — Hörspiel-Eltern-PWA (ESB-1..4 / PWAM-5)
+#  #1962 — „Hörspiel verwalten" abgerissen: Umleitung auf den Player
 # ============================================================
 #
-# Spec-Anker: specs/buddies/hoerspiel.md HSP-33 + conventions/eltern-seite.md ESB-1..4.
-# Surface:
-#   GET /seiten/hoerspiel/<kind_id>/eltern          — HTML-Shell (Template hoerspiel/)
-#   GET /seiten/hoerspiel/<kind_id>/eltern/manifest.json — build_manifest() aus Lib
-#   GET /seiten/hoerspiel/<kind_id>/eltern/sw.js         — render_sw() aus Lib
-#   GET /seiten/hoerspiel/<kind_id>/eltern/icon-*.png    — aus hoerspiel/static/
+# Die Eltern-Mini-App /seiten/hoerspiel/<kind_id>/eltern (HSP-33..40, Mantel
+# hoerspiel-eltern, T1681) ist entfernt (Nic, 26.09.2026): der Hörspiel-Player
+# (/seiten/hoerspiel/player, HSP-47..55) deckt Folgen und Einstellungen ab.
+# Was bleibt, hält installierte Alt-PWAs und alte Chat-Links am Leben:
 #
-# ESB-1 (PWAM-5): pwa_mantel.REGISTRY['hoerspiel-eltern'] — scope: /seiten/hoerspiel/.
-# ESB-2: Datenrouten (config/alben/resume/themen) sind AUTH-3-hart (@require_init_data).
-# ESB-3: hoerspiel/views.json traegt Eintrag mit zielgruppe: eltern (T1681).
-# ESB-4: eltern.css traegt kein body-overflow:hidden (scrollbar, nicht Kiosk-Sorte).
+#   GET /seiten/hoerspiel/<kind_id>/eltern         → 302 auf den Player
+#       (`?kind=<kind_id>`, wenn es die Instanz gibt; ein `#einstellungen`
+#       im Link überlebt die Umleitung und öffnet dort die Einstellungen).
+#   GET /seiten/hoerspiel/<kind_id>/eltern/sw.js   → Abschalt-Service-Worker:
+#       der alte Mantel-SW (Scope /seiten/hoerspiel/) holt beim nächsten
+#       Update-Check dieses Skript, löscht seine Caches und meldet sich ab.
+#       Ein 404 hielte den alten SW samt Offline-Cache der toten Seite am
+#       Leben (die Spec deregistriert bei einem fehlgeschlagenen Update nicht).
 #
-# scope-Entscheidung (T1681): /seiten/hoerspiel/ deckt ALLE kind_id-Instanzen;
-# start_url ist /seiten/hoerspiel/mia/eltern (repraesentativer kanonischer Pfad).
-# eltern.js laedt kind_id aus location.pathname — kein Mantel-Fork pro Kind.
-# Auth: HTML-Shell public (MAD-7: ensureAuth() im JS). SW/manifest: credential-los.
-#
-# Icons: hoerspiel/static/ (192/512/maskable, geteilt mit hoerspiel-player).
-# Manifest + sw.js lib-generiert — KEIN manifest.json/sw.js auf Platte.
+# Manifest und Icons des alten Mantels antworten 404 — ein installiertes
+# Symbol behält sein Bild, der Start landet über die Umleitung im Player.
 
-_HOERSPIEL_ELTERN_COMPONENT = "hoerspiel-eltern"
+HOERSPIEL_PLAYER_PFAD = "/seiten/hoerspiel/player"
 
-# #1953: reservierter Slug des generischen Einstiegs (kein Kindername im Repo).
-HOERSPIEL_ELTERN_GENERISCH = "alle"
+# Scope des entfernten Mantels (REGISTRY['hoerspiel-eltern'].sw_scope bis
+# #1962) — der Abschalt-SW braucht ihn als Service-Worker-Allowed, sonst
+# verweigert der Browser das Update auf eine Registrierung dieses Scopes.
+_HOERSPIEL_ELTERN_ALT_SCOPE = "/seiten/hoerspiel/"
 
-_HOERSPIEL_ELTERN_MIME = {
-    ".json": "application/manifest+json",
-    ".js":   "application/javascript",
-    ".png":  "image/png",
-}
+_HOERSPIEL_ELTERN_ABSCHALT_SW = """// sw.js — Abschalter fuer den entfernten Mantel „hoerspiel-eltern" (#1962).
+// Kein fetch-Handler: dieser SW faengt nichts ab. Er loescht die Caches
+// des alten Mantels und meldet sich ab; die Seite selbst leitet der
+// seiten-Dienst auf den Hoerspiel-Player um.
+'use strict';
 
+self.addEventListener('install', () => self.skipWaiting());
 
-def _hoerspiel_eltern_asset_root():
-    """Asset-Wurzel fuer hoerspiel-eltern-Mantel-Icons (hoerspiel/static/).
-
-    Geteilt mit hoerspiel-player (gleiche Icons). Test-Naht:
-    runtime['hoerspiel_eltern_asset_dir'].
-    """
-    override = (runtime.get("hoerspiel_eltern_asset_dir")
-                if isinstance(runtime, dict) else None)
-    if override:
-        return override
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(repo_root, "hoerspiel", "static")
-
-
-def _hoerspiel_eltern_build_id():
-    """build_id fuer den hoerspiel-eltern-SW aus [eltern.js, eltern.css]
-    (PWAM-4/5, pwa_mantel.REGISTRY['hoerspiel-eltern']).
-    """
-    return pwa_mantel.build_id_for(_HOERSPIEL_ELTERN_COMPONENT, _hoerspiel_eltern_asset_root())
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys.filter((k) => k.startsWith('hoerspiel-eltern-pwa-'))
+            .map((k) => caches.delete(k))))
+      .then(() => self.registration.unregister())
+  );
+});
+"""
 
 
 @app.route("/seiten/hoerspiel/<kind_id>/eltern", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): die
-# Flaeche ist in hoerspiel/views.json als typ:"pwa"/auth:"tma"/
-# zielgruppe:"eltern" gelistet und wurde bis #1946 ueber die Mini-App-Uebersicht
-# als Telegram-web_app-Kachel angeboten — derselbe WebView-Entry-Mechanismus wie
-# einkauf/routine/wetter (siehe Kommentar an essen_einkauf_view_trailing_slash
-# fuer die volle Begruendung: require_dual_gate ist cookie-only ohne
-# tma-Zweig, MAD-11 belegt fehlenden Authorization-Header beim Initial-Load,
-# Cookie-Traegung der WebView ist NICHT belegt). Offene Nic-Probe wie bei den
-# anderen fuenf Flaechen.
-def hoerspiel_eltern_view(kind_id: str):
-    """HSP-33 / T1681: Hörspiel-Eltern-PWA-Shell (kind_id-tragend, ESB-1, PWAM-5).
-
-    Auth (MAD-7): HTML-Skeleton ohne Auth, JS macht ensureAuth().
-    Datenrouten sind AUTH-3-hart (@require_init_data, ESB-2).
-
-    Template liegt in hoerspiel/templates/eltern.html (HSP-33: Wohnort im
-    hoerspiel/-Modul). Rendered via absoluten Pfad analog anderen Mini-Apps.
-
-    JS laedt beim Boot via:
-      GET /api/v1/hoerspiel/<kind_id>/config  (HSP-34: Einstellungen)
-      GET /api/v1/hoerspiel/<kind_id>/alben   (HSP-35: Folgen-Liste)
-    nginx routet /api/v1/hoerspiel/... zum hoerspiel-Buddy (Port 5053).
-    kind_id kommt aus location.pathname (eltern.js, T970).
-
-    Cache-Buster: build_id aus pwa_mantel (eltern.js + eltern.css, PWAM-4/5).
-    """
-    # #1953: generischer Einstieg ohne Kindernamen im Repo — die Übersicht
-    # verlinkt `/seiten/hoerspiel/alle/eltern` (hoerspiel/views.json). Der
-    # reservierte Slug leitet zur Laufzeit auf die erste Instanz der Registry
-    # (instanzen.json) um; die Folgen aller Kinder zeigt die Seite ohnehin
-    # (HSP-35), die Einstellungen gelten je Kind.
-    if kind_id == HOERSPIEL_ELTERN_GENERISCH:
-        instanz_slugs = [e["kind_id"] for e in _hsp_instanzen()]
-        if instanz_slugs:
-            return redirect("/seiten/hoerspiel/%s/eltern" % instanz_slugs[0], code=302)
-
-    # MAD-7-konform: HTML-Render-Route laed Skeleton OHNE Auth. JS macht ensureAuth().
-    build_id = _hoerspiel_eltern_build_id()
-    sw_scope = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT].sw_scope
-
-    # INST-1 (#1670): Instanz-Liste server-injiziert (analog hoerspiel_player_view).
-    # </script>-Guard analog CONN-7.
-    from markupsafe import Markup
-    _instanzen_blob = json.dumps(
-        _hsp_instanzen(), ensure_ascii=False
-    ).replace("</", "<\\/")
-    instanzen_json = Markup(_instanzen_blob)
-
-    # Template aus hoerspiel/templates/ via absolutem Pfad.
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    hoerspiel_templates = os.path.join(repo_root, "hoerspiel", "templates")
-    from jinja2 import Environment, FileSystemLoader
-    env = Environment(loader=FileSystemLoader(hoerspiel_templates), autoescape=True)
-    tmpl = env.get_template("eltern.html")
-    html = tmpl.render(build_id=build_id, instanzen_json=instanzen_json, sw_scope=sw_scope,
-                       kind_id=kind_id)
-
-    resp = make_response(html, 200)
-    resp.headers["Content-Type"] = "text/html; charset=utf-8"
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    resp.headers["Pragma"] = "no-cache"
-    return resp
-
-
-@app.route("/seiten/hoerspiel/<kind_id>/eltern/<path:asset>", methods=["GET"])
 @require_dual_gate(mode=_AUTH_MODE)
-def hoerspiel_eltern_asset_view(kind_id: str, asset: str):
-    """T1681 / ESB-1: PWA-Mantel-Asset-Auslieferung fuer hoerspiel-eltern (PWML-1/2).
+def hoerspiel_eltern_umleitung(kind_id: str):
+    """#1962: alte Adresse von „Hörspiel verwalten" → Hörspiel-Player.
 
-    - manifest.json → pwa_mantel.build_manifest(REGISTRY['hoerspiel-eltern']) (PWML-1).
-    - sw.js         → pwa_mantel.render_sw('hoerspiel-eltern', build_id) (PWML-2), no-store.
-    - icon-*.png    → statisch aus hoerspiel/static/ mit realpath-Traversal-Guard.
-
-    Auth: public (HTML-Shell public, MAD-7). SW/manifest: credential-los (Browser-Fetch).
-    kind_id ist scope-irrelevant (sw_scope /seiten/hoerspiel/ deckt alle Instanzen).
-
-    Delegiert an `_hoerspiel_eltern_public_asset` (Watchdog-Fix, T1832-S1):
-    EIN Dispatch-Pfad fuer gegatete UND public Adressen, analog einkauf.
-    kind_id fliesst bewusst nicht ein (s. o.).
+    Auth wie der Rest der Seiten-Flächen (require_dual_gate, ENV-getoggelt);
+    das Ziel gatet ohnehin per Cookie (HSP-47).
     """
-    return _hoerspiel_eltern_public_asset(asset)
+    ziel = HOERSPIEL_PLAYER_PFAD
+    if kind_id in {e["kind_id"] for e in _hsp_instanzen()}:
+        ziel += "?kind=" + kind_id
+    return redirect(ziel, code=302)
 
 
-def _hoerspiel_eltern_public_asset(asset):
-    """Der eine Dispatch-Pfad fuer alle hoerspiel-eltern-Assets (gegated UND
-    public, Watchdog-Fix T1832-S1). kind_id ist scope-irrelevant (s.
-    Docstring oben) und fliesst hier bewusst nicht ein — die Public-Routen
-    tragen ihn nur fuer die URL-Symmetrie zur gegateten Fassung."""
-    cfg = pwa_mantel.REGISTRY[_HOERSPIEL_ELTERN_COMPONENT]
-    return serve_mantel_asset(
-        asset,
-        asset_root=_hoerspiel_eltern_asset_root(),
-        mime_map=_HOERSPIEL_ELTERN_MIME,
-        special=_mantel_special_generated(
-            cfg, _HOERSPIEL_ELTERN_COMPONENT, _hoerspiel_eltern_build_id()),
-    )
+@app.route("/seiten/hoerspiel/<kind_id>/eltern/sw.js", methods=["GET"])
+@require_dual_gate(mode=_AUTH_MODE)
+def hoerspiel_eltern_abschalt_sw(kind_id: str):
+    """#1962: Abschalt-Service-Worker fuer den entfernten Mantel hoerspiel-eltern.
 
-
-# AUTH-11-Ausnahme (Watchdog-Fix #1832) — Begruendung wortgleich zu den
-# einkauf-Public-Routen oben (#1437, kibuddy-Vorbild, sw.js bleibt gegated).
-# <kind_id> bleibt Teil der URL (Symmetrie zur gegateten Fassung), ist aber
-# scope-irrelevant fuer den Dispatch (s. _hoerspiel_eltern_public_asset).
-@app.route("/seiten/hoerspiel/<kind_id>/eltern/manifest.json", methods=["GET"])
-def hoerspiel_eltern_manifest_public(kind_id: str):
-    return _hoerspiel_eltern_public_asset("manifest.json")
-
-
-@app.route("/seiten/hoerspiel/<kind_id>/eltern/icon-192.png", methods=["GET"])
-def hoerspiel_eltern_icon_192_public(kind_id: str):
-    return _hoerspiel_eltern_public_asset("icon-192.png")
-
-
-@app.route("/seiten/hoerspiel/<kind_id>/eltern/icon-512.png", methods=["GET"])
-def hoerspiel_eltern_icon_512_public(kind_id: str):
-    return _hoerspiel_eltern_public_asset("icon-512.png")
-
-
-@app.route("/seiten/hoerspiel/<kind_id>/eltern/icon-maskable-512.png", methods=["GET"])
-def hoerspiel_eltern_icon_maskable_public(kind_id: str):
-    return _hoerspiel_eltern_public_asset("icon-maskable-512.png")
+    Gegatet wie bis #1962 (sw.js lag hinter der gegateten `<path:asset>`-Route).
+    """
+    resp = make_response(_HOERSPIEL_ELTERN_ABSCHALT_SW, 200)
+    resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    resp.headers["Service-Worker-Allowed"] = _HOERSPIEL_ELTERN_ALT_SCOPE
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 
 # ============================================================
@@ -1894,7 +1863,7 @@ def hoerspiel_player_view():
 
     AUTH-2 Cookie-only (auth.md AUTH-2, #1292). Template liegt in
     hoerspiel/templates/player.html (Track B) und wird via absolutem Pfad
-    gerendert — analog hoerspiel_eltern_view, aber OHNE dessen tma-Auth.
+    gerendert (Wohnort im hoerspiel/-Modul).
 
     Cache-Buster: build_id aus dem Player-Source-Set (PWML-3).
 

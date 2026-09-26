@@ -105,6 +105,9 @@ def test_alle_seiten_subpfade_routen_im_manifest_gelistet():
             #           Geschwister zu /api/v1/seiten (Ableitung, nicht Seite)
         if pfad == "/api/v1/seiten/reset":
             continue  # #1461 Utility-Route (Client-Reset), kein View
+        if pfad == "/api/v1/seiten/uebersicht/kacheln":
+            continue  # #1961 Umleitung der alten Adresse auf
+            #           /api/v1/seiten/kacheln (eigener Mantel), kein View
         if "/static/" in pfad:
             continue  # Flask-static, kein View
         letzter = pfad.rsplit("/", 1)[-1]

@@ -60,6 +60,15 @@ test('initialKindId: ?kind= gewinnt, sonst 1. Eintrag, sonst mia (HSP-49)', () =
   assert.equal(P.initialKindId([], ''), 'mia'); // Fallback Standalone
 });
 
+test('startScreenAusHash: #einstellungen öffnet die Einstellungen, sonst Regal (#1962)', () => {
+  assert.equal(P.startScreenAusHash('#einstellungen'), 'settings');
+  assert.equal(P.startScreenAusHash('#Einstellungen'), 'settings');
+  assert.equal(P.startScreenAusHash('einstellungen'), 'settings');
+  assert.equal(P.startScreenAusHash('#folgen'), 'regal');
+  assert.equal(P.startScreenAusHash(''), 'regal');
+  assert.equal(P.startScreenAusHash(undefined), 'regal');
+});
+
 test('labelKindId: Fremd-Album → aktivKindId, eigenes Album/null → kindId (AC1, HSP-48/49)', () => {
   // kein aktivKindId → Regal-Kind bleibt
   assert.equal(P.labelKindId('mia', null), 'mia');

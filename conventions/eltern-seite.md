@@ -31,9 +31,10 @@ Jede Eltern-Seite wird **von `seiten` ausgeliefert**, unter dem Slug-Pfad
 Buddy-Service (`/api/v1/<buddy>/*`, AUTH-3, cross-service via nginx). Ein Buddy
 serviert seinen Eltern-Mantel **nicht** selbst — das hält alle Eltern-Apps
 symmetrisch (gleicher Pfad-Namespace, ein Mantel-Ort, ein Auslieferungs-Muster).
-Präzedenz (gebaut): `einkauf` (`/seiten/essen/einkauf`), `hoerspiel-eltern`
-(`/seiten/hoerspiel/<kind>/eltern`), `plan-einstellungen`
-(`/seiten/plan/einstellungen`), `routine-anpassen` (`/seiten/routine/anpassen`).
+Präzedenz (gebaut): `einkauf` (`/seiten/essen/einkauf`), `plan-einstellungen`
+(`/seiten/plan/einstellungen`), `routine-anpassen` (`/seiten/routine/anpassen`);
+bis #1962 auch `hoerspiel-eltern` (`/seiten/hoerspiel/<kind>/eltern`, abgerissen —
+der Hörspiel-Player deckt Folgen und Einstellungen ab).
 
 Nic-Setzung 2026-08-01 (#1715, berater-runde): **Einheitlichkeit vor
 Service-Kohäsion** — als sich am Nachzügler `wetter/regeln` die Wahl stellte

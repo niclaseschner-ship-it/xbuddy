@@ -15,6 +15,7 @@ Die NC-Frage für eine kommerzielle Nutzung ist offen und zentral in
 | `connector` | `arasaac:2373` | „stecker" | CC BY-NC-SA | 2026-09-25 |
 | `essen` | `arasaac:28339` | „obst" | CC BY-NC-SA | 2026-09-25 |
 | `hoerspiel` | `arasaac:5915` | „kopfhörer" | CC BY-NC-SA | 2026-09-25 |
+| `kacheln` (Kacheln bearbeiten, #1961) | `arasaac:4930` | „bausteine" | CC BY-NC-SA | 2026-09-26 |
 | `kibuddy` | `arasaac:37404` | „mikrofon" | CC BY-NC-SA | 2026-09-25 |
 | `photo` | `arasaac:3281` | „bilderrahmen" | CC BY-NC-SA | 2026-09-25 |
 | `plan` | `arasaac:32488` | „kalender" | CC BY-NC-SA | 2026-09-25 |

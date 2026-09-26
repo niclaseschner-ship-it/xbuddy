@@ -534,21 +534,22 @@ def test_parser_verwirft_ueberholte_tabellenzeile():
 def test_parser_auth6_schuldstand_kardinalitaet_und_stichproben():
     """Der AUTH-6-Parser liest alle Fence-Bloecke des Abschnitts.
 
-    Ist-Stand 2026-09-25: 13 literale Eintraege (#1946: zwei MAU-Zeilen entfallen). Zuvor 21 — #1865 hat sechs
+    Ist-Stand 2026-09-26: 12 literale Eintraege (#1962: die Hoerspiel-Eltern-Shell ist nur
+    noch eine gegatete Umleitung; #1946: zwei MAU-Zeilen entfallen). Zuvor 21 — #1865 hat sechs
     erledigte Posten ENTFERNT (drei tote Routen aus dem RAT-31-Router-Tod,
     drei mit am 2026-08-12 gefeuertem Trigger). Die Schwelle folgt der Spec
     nach unten: sie soll einen stillen Parse-Verlust fangen, nicht einen
     aufgeraeumten Schuldstand zurueckweisen.
     """
     schuld = auth6_schuldstand()
-    assert len(schuld) >= 13, (
-        "Nur %d AUTH-6-Schuldstand-Eintraege geparst (erwartet >=13, Ist: 13)"
+    assert len(schuld) >= 12, (
+        "Nur %d AUTH-6-Schuldstand-Eintraege geparst (erwartet >=12, Ist: 12)"
         % len(schuld)
     )
     for route in (
         "/seiten/essen/einkauf",                        # Telegram-Shell-Fence (#1859)
         "/seiten/essen/einkauf/",                       # Trailing-Slash-Variante
-        "/seiten/hoerspiel/<kind_id>/eltern",
+        "/seiten/wetter/regeln",
         "/api/v1/panels/<panel_id>/config.json",        # panel-Proxy-Fence (#1854)
         "/controller/app-panel/<panel_id>/bearbeiten.css",
     ):

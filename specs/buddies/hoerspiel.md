@@ -1239,6 +1239,17 @@ und nicht Teil der V1-Standard-Test-Suite.
 > HSP-36, Streaming HSP-37) lebt inhaltlich weiter, nur nicht mehr in der
 > Telegram-Tab-Hülle.
 >
+> **Abriss vollzogen (#1962, Nic 26.09.2026).** Die Seite „Hörspiel verwalten"
+> (`/seiten/hoerspiel/<kind_id>/eltern`, Mantel `hoerspiel-eltern`, Template/JS/CSS
+> `hoerspiel/{templates/eltern.html,static/eltern.{js,css}}`) ist aus dem Code
+> entfernt. Was bleibt: die alte Adresse leitet (302, gegatet) auf den Player um
+> (`?kind=<kind_id>`, wenn es die Instanz gibt), ein `#einstellungen` im Link
+> öffnet dort die Einstellungen (HSP-50); `…/eltern/sw.js` ist ein
+> Abschalt-Service-Worker (löscht die alten Caches, meldet sich ab), Manifest
+> und Icons antworten 404. Alle Datenrouten (config, alben, manifest, resume)
+> nutzt der Player weiter — keine API ist entfallen. Die Zeilen unten sind
+> Spec-Historie.
+>
 > V1 nach Werft-Lauf 2026-06-15 (Refs #848). Vorbild für Wohnort und
 > Auslieferung: Routine-Anpassen-Mini-App (#728, `<funnel>/seiten/routine/anpassen`).
 > Auth-Pattern: `Authorization: tma <initData>`-Header analog #708.
@@ -1767,10 +1778,11 @@ bekam 401 und meldete den Player als nicht installierbar
 *#1953 — Übersicht:* Die per-Kind-Einträge `alben-<kind>` sind aus
 `hoerspiel/views.json` entfernt; auf der Übersicht steht der Player (für alle
 Kinder, HSP-49). Die Tablet-`alben`-View selbst bleibt unverändert (Panels
-bekommen ihre Hörspiel-Kacheln aus der Instanz-Liste, INST-1). Der
+bekommen ihre Hörspiel-Kacheln aus der Instanz-Liste, INST-1). ~~Der
 Eltern-Eintrag ist generisch: `/seiten/hoerspiel/alle/eltern` leitet zur
 Laufzeit auf die erste Instanz der Registry (`instanzen.json`) um — kein
-Kindername im Repo.
+Kindername im Repo.~~ **Überholt durch #1962:** der Eltern-Eintrag ist
+entfallen, `hoerspiel/views.json` ist leer — die Übersicht zeigt nur den Player.
 
 ### HSP-48 — Startfläche „Regal" + Mini-Player + voller Player (Gate-B-Wahl B)
 Zwei Player-Ebenen, kein Tab-Chrome, kein Menü auf der Startfläche (HSP-3-Prinzip
@@ -1825,6 +1837,10 @@ Halte-/PIN-Hürde; **kein** Schloss-Symbol (würde eine nicht existierende Sperr
 andeuten). Kind-Abweisung ist eine spätere Erweiterung (OPEN-HSP-T). Der
 Eltern-Cookie (HSP-47) ist ohnehin die Auth-Membran.
 
+*#1962 — Deeplink:* `/seiten/hoerspiel/player#einstellungen` öffnet den
+Settings-Screen direkt (Ersatz für den HSP-33-Tab-Hash der abgerissenen
+Eltern-App; deren alte Adresse leitet samt Fragment hierher um).
+
 ### HSP-51 — Resume server-seitig, geräteübergreifend
 Der Player nutzt das **server-seitige** Resume (`GET/PUT /resume`, HSP-17/36) —
 Handy-Sessions teilen den Stand untereinander und potenziell mit dem Tablet.
@@ -1859,7 +1875,8 @@ Rand disabled; −15/+15 s verschieben nur die Position im selben Track.
 
 ### HSP-53 — Ablösung der Telegram-Eltern-Mini-App (HSP-33–40)
 Abschnitt 12 (HSP-33–40, Telegram-Tab-Form, `tma`-Auth, Hash-Deeplink) ist
-**superseded**. Die Bot-Menü-Buttons zeigen künftig auf die **PWA**
+**superseded** — seit #1962 auch im Code abgerissen (Umleitung auf den Player,
+siehe Kopf von Abschnitt 12). Die Bot-Menü-Buttons zeigen künftig auf die **PWA**
 (`setChatMenuButton`, `eltern-chat/config.py`). Die aggregierte Cross-Kind-
 Folgen-Verwaltung (HSP-35) entfällt als Tab — Folgen-Zugriff läuft über den
 Umschalter (HSP-49).

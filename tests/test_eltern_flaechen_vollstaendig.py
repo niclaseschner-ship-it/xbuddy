@@ -327,8 +327,8 @@ def test_betriebs_lader_ueberspringt_nichts_undokumentiertes():
 
     Der strenge Lader (`views_manifest.load`) wuerde bei genau einem defekten
     Eintrag die GANZE Datei fallen lassen — bei `hoerspiel/views.json` waere
-    damit auch `hoerspiel-eltern` verschwunden und dieser Guard gruen ohne
-    Gegenstand. Deshalb Ueberspringen-Semantik plus Meldepflicht.
+    damit bis #1962 auch die Hoerspiel-Eltern-App verschwunden und dieser
+    Guard gruen ohne Gegenstand gewesen. Deshalb Ueberspringen-Semantik plus Meldepflicht.
     """
     offen = [b for b in ef.lader_befunde() if b.ausnahme is None]
     assert not offen, (

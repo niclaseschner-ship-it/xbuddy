@@ -9,6 +9,7 @@
  *   - Regal        (HSP-48): 2-spaltiges Kachel-Raster + Sticky-Mini-Player.
  *   - Voller Player(HSP-52): großes Cover, Play/Skip, −15/+15s, Kapitel-Liste.
  *   - Settings     (HSP-34/50): Regler + PATCH /config, kein Schloss/PIN.
+ *                  Direkt per `#einstellungen` erreichbar (#1962).
  *
  * Offline-Cache (HSP-54): Page-Context Cache API. Beim Laden + Kind-Wechsel
  *   werden die Audio-Tracks (+Cover) der jüngsten N=3 Folgen je aktivem Kind
@@ -70,6 +71,19 @@ function initialKindId(liste, search) {
     if (ids.includes(wunsch)) return wunsch;
   }
   return ids.length > 0 ? ids[0] : 'mia';
+}
+
+/**
+ * Start-Screen aus dem URL-Hash (#1962): `#einstellungen` öffnet direkt die
+ * Einstellungen — der Deeplink der abgerissenen Eltern-App „Hörspiel
+ * verwalten" (HSP-33) überlebt so deren Umleitung auf den Player (der Browser
+ * trägt das Fragment über das 302 mit). Alles andere (auch `#folgen`) → Regal.
+ * @param {string} hash  location.hash (z. B. "#einstellungen")
+ * @returns {'settings'|'regal'}
+ */
+function startScreenAusHash(hash) {
+  const h = String(hash || '').replace(/^#/, '').trim().toLowerCase();
+  return h === 'einstellungen' ? 'settings' : 'regal';
 }
 
 /** Nächstes Kind im Ring (Umschalter iteriert die Liste, kein 2-Hardcode). */
@@ -1054,6 +1068,10 @@ async function init() {
   // Config des aktiven Kindes vorab für playback_tempo.
   try { S.cfg = await apiConfigGet(kindId); } catch (e) { S.cfg = {}; }
   await ladeKind(kindId);
+  // #1962: Deeplink #einstellungen (alte Eltern-App-Links) → Settings-Screen.
+  if (startScreenAusHash(typeof location !== 'undefined' ? location.hash : '') === 'settings') {
+    await oeffneSettings();
+  }
 }
 
 if (typeof document !== 'undefined' && document.addEventListener) {
@@ -1066,7 +1084,7 @@ if (typeof document !== 'undefined' && document.addEventListener) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     // reine Helfer
-    instanzen, initialKindId, nextKindId, instanzFuer, initialen,
+    instanzen, initialKindId, startScreenAusHash, nextKindId, instanzFuer, initialen,
     trackLabel, skipDisabled, planNext, sortTracks, resumeStartIdx, audioCacheName, fmtZeit, esc,
     // Cache-API (HSP-54)
     CACHE_N, LRU_KEY, ALBUM_META_PREFIX, albumUrls,

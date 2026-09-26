@@ -519,8 +519,8 @@ app.view_functions["static"] = require_dual_gate(mode=_AUTH_MODE)(app.view_funct
 # NICHT im Manifest verlinkt (das Manifest zeigt auf
 # /display/_shared/icons/arasaac/5915.png — bereits ratifizierte
 # AUTH-11-Ausnahme) und in keinem Template/JS referenziert — sie bleiben
-# ungenutzt hinter dem generischen Static-Gate. eltern.html/player.html
-# haengen an /seiten/hoerspiel/… (separater seiten-Dienst, out of scope hier).
+# ungenutzt hinter dem generischen Static-Gate. player.html (die fruehere
+# Eltern-Shell ist mit #1962 entfallen) haengt an /seiten/hoerspiel/… (separater seiten-Dienst, out of scope hier).
 #
 # Eigene, explizite Route statt einer Bedingung im Wrapper: Werkzeug matcht
 # einen literalen Pfad IMMER vor dem generischen `<path:filename>`-Catch-all
@@ -990,7 +990,7 @@ def album_audio(kind_id: str, album_id: str, track_filename: str):
     über diesen Pfad, sondern über den Manifest-`audio-asset`, der auf
     `/display/hoerspiel/<kind_id>/data/alben/…` zeigt (dual-gate-geschützt,
     `album_manifest.py`); diese Route hat aktuell keinen realen Caller
-    (verifiziert: `hoerspiel/static/eltern.js:726-731`-Kommentar). Gaten
+    (verifiziert am Kommentar der mit #1962 entfernten Eltern-App). Gaten
     bricht daher kein Live-Playback. send_from_directory blockt Pfad-
     Traversal. `Content-Type: audio/mpeg`, `Cache-Control: private, max-age=86400`.
     """

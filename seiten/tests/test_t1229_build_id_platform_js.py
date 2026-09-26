@@ -222,7 +222,7 @@ def test_ac3_vier_routen_nutzen_helper(monkeypatch, client):
 
 
 def test_ac3_hoerspiel_und_shell_nicht_umgebaut():
-    """AC3: Scope-Check — hoerspiel eltern.js und heim-shell ausserhalb der vier
+    """AC3: Scope-Check — hoerspiel (Eltern-App bis #1962) und heim-shell ausserhalb der vier
     Mini-App-Komponenten. Kein scope_breach: nur seiten/main.py + seiten/tests/ geaendert.
 
     T1284: Adapter retired. Statischer Check: build_id_for wird NICHT mit
