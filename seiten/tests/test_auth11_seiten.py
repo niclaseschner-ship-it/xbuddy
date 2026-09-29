@@ -19,13 +19,18 @@ am ersten Durchgang, siehe Kommentare in `seiten/main.py`):
   Befund 2 (zurueckgenommen, Ticket #1859): die fuenf Telegram-web_app-HTML-
   Shells (essen_einkauf_view, routine_anpassen_view, wetter_regeln_view,
   plan_einstellungen_view; die Hoerspiel-Eltern-Shell ist mit #1962 entfallen,
-  #1946: mini_app_uebersicht_view geloescht) +
-  ihre vier Trailing-Slash-Aliase) sind NICHT gegated -- offene Live-Probe,
-  ob die Telegram-WebView den `xbuddy_session`-Cookie traegt (kein Spec-Ort
-  behauptet es, MAD-11 belegt nur den fehlenden `Authorization`-Header beim
-  Initial-Load). Diese Datei testet sie deshalb NUR auf "bleibt erreichbar",
-  nicht auf "ist gegated". Die offene Probe traegt jetzt Ticket #1859 (statt
-  nur #1832, das beim Merge schliesst).
+  #1946: mini_app_uebersicht_view geloescht) sind NICHT gegated -- offene
+  Live-Probe, ob die Telegram-WebView den `xbuddy_session`-Cookie traegt (kein
+  Spec-Ort behauptet es, MAD-11 belegt nur den fehlenden `Authorization`-Header
+  beim Initial-Load). Diese Datei testet sie deshalb NUR auf "bleibt
+  erreichbar", nicht auf "ist gegated". Die offene Probe traegt jetzt Ticket
+  #1859 (statt nur #1832, das beim Merge schliesst).
+
+  SREG-15 (#1968, kanonische Adresse): die Shells liegen jetzt unter ihrer
+  Slash-Adresse (= Manifest-`start_url`/`scope`); ihre vier No-Slash-Formen
+  sind KEINE Aliase mehr, sondern 301-Redirects auf die Slash-Form (ebenfalls
+  ungegated, aber 301 statt 200 -- eigene Kategorie `*_view_no_slash` /
+  `ROUTEN_BEFUND2_NO_SLASH_REDIRECT` unten).
 
 Was WEITERHIN gegated ist (require_dual_gate(mode=_AUTH_MODE), Cookie-only,
 ENV-getoggelt): /api/v1/seiten/uebersicht, /api/v1/seiten/connector/,
@@ -160,24 +165,31 @@ ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS = [
 ]
 
 # Befund 2 (Watchdog-Fix, Ticket #1859): die fuenf Telegram-web_app-HTML-
-# Shells + ihre vier Trailing-Slash-Aliase -- NICHT gegated, offene Live-
-# Probe (Nic muss auf einem Elterngeraet den Telegram-Button antippen;
+# Shells (kanonische Slash-Adresse, SREG-15/#1968) -- NICHT gegated, offene
+# Live-Probe (Nic muss auf einem Elterngeraet den Telegram-Button antippen;
 # Cookie-Traegung der WebView ist nicht belegt). NICHT in
 # `_AUTH11_AUSNAHMEN` (kein Spec-Ort fuehrt sie), NICHT `_AUTH2_INLINE_ROUTEN`
 # (kein Gate ueberhaupt, nicht mal inline) -- eigene, ehrlich benannte vierte
 # Kategorie.
 ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE = [
     "/seiten/essen/einkauf/",
-    "/seiten/essen/einkauf",
     "/seiten/plan/einstellungen/",
-    "/seiten/plan/einstellungen",
     "/seiten/routine/anpassen/",
-    "/seiten/routine/anpassen",
     "/seiten/wetter/regeln/",
-    "/seiten/wetter/regeln",
     # #1962: /seiten/hoerspiel/<kind_id>/eltern ist nur noch eine gegatete
     # Umleitung auf den Player (ROUTEN_DUAL_GATE oben).
     # #1946: /api/v1/seiten/mini-app-uebersicht ist geloescht (eine Uebersicht).
+]
+
+# SREG-15 (#1968): die vier No-Slash-Formen sind ab jetzt 301-Redirects auf
+# die kanonische Slash-Form oben -- ebenfalls ungegated (der Redirect selbst
+# liest/schreibt nichts), aber NICHT mehr 200. Eigene Kategorie statt
+# stillschweigend aus ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE zu verschwinden.
+ROUTEN_BEFUND2_NO_SLASH_REDIRECT = [
+    ("/seiten/essen/einkauf", "/seiten/essen/einkauf/"),
+    ("/seiten/plan/einstellungen", "/seiten/plan/einstellungen/"),
+    ("/seiten/routine/anpassen", "/seiten/routine/anpassen/"),
+    ("/seiten/wetter/regeln", "/seiten/wetter/regeln/"),
 ]
 
 # AUTH-11-Ausnahmen fuer seiten -- EXAKTE Teilmenge der Tabelle in
@@ -382,9 +394,9 @@ def test_pwa_manifest_und_icons_sind_public_auch_hart(hard_client, path):
 
 
 # ---------------------------------------------------------------------------
-# Befund 2 (Watchdog-Fix, Ticket #1859) — die fuenf Telegram-web_app-Shells +
-# Trailing-Slash-Aliase sind NICHT gegated (offene Live-Probe). Diese Tests
-# pruefen NUR "bleibt erreichbar", nicht "ist gegated" -- das waere die
+# Befund 2 (Watchdog-Fix, Ticket #1859) — die fuenf Telegram-web_app-Shells
+# (kanonische Slash-Adresse) sind NICHT gegated (offene Live-Probe). Diese
+# Tests pruefen NUR "bleibt erreichbar", nicht "ist gegated" -- das waere die
 # falsche Zusicherung fuer eine bewusst offene Frage.
 # ---------------------------------------------------------------------------
 
@@ -399,6 +411,22 @@ def test_telegram_shell_bleibt_ohne_cookie_erreichbar_offene_probe(hard_client, 
     MUSS die Route ohne jede Auth-Quelle laden."""
     r = hard_client.get(path, headers=EXTERN_HEADERS)
     assert r.status_code == 200, "%s ist eine offene Telegram-Probe (#1859) -- darf NICHT 401 werden" % path
+
+
+@pytest.mark.parametrize(("no_slash", "kanonisch"), ROUTEN_BEFUND2_NO_SLASH_REDIRECT)
+def test_telegram_shell_no_slash_ist_301_ohne_auth_zwang(hard_client, no_slash, kanonisch):
+    """SREG-15 (#1968): die No-Slash-Form liegt AUSSERHALB des Manifest-scope
+    und leitet mit 301 auf die kanonische Slash-Form weiter -- OHNE
+    Auth-Zwang (kein 401), selbst im hard-Modus und ohne Cookie. Die
+    Auth-Invariante der offenen Telegram-Probe (#1859) bleibt gewahrt: die
+    No-Slash-Form ist weiterhin nicht gegated, antwortet aber jetzt 301 statt
+    200 (die kanonische Slash-Form liefert das eigentliche HTML, oben
+    getestet)."""
+    r = hard_client.get(no_slash, headers=EXTERN_HEADERS)
+    assert r.status_code == 301, (
+        "%s muss ohne Auth-Zwang mit 301 auf die kanonische Adresse leiten (SREG-15/#1968)"
+        % no_slash)
+    assert r.headers.get("Location", "").endswith(kanonisch)
 
 
 # ---------------------------------------------------------------------------
@@ -503,8 +531,10 @@ def test_url_map_jede_regel_erklaert():
           `test_hoerspiel_player_inline_gate_*`-Tests oben VERHALTLICH, nicht
           per Form,
       (d) steht in `ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS` (bewusst oeffentlich,
-          #1437, Spec-PR folgt separat) oder `ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE`
-          (bewusst NICHT gegated, offene Nic-Probe).
+          #1437, Spec-PR folgt separat), `ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE`
+          (bewusst NICHT gegated, offene Nic-Probe) oder den No-Slash-Pfaden aus
+          `ROUTEN_BEFUND2_NO_SLASH_REDIRECT` (SREG-15/#1968: 301 ohne
+          Auth-Zwang, dieselbe offene Nic-Probe wie ihre Slash-Form).
 
     (b)-(d) sind bewusst getrennte, disjunkte Mengen (s. u.) -- eine
     Watchdog-Ausnahme wird nie in die Spec-Tabellen-Menge (b) einsortiert,
@@ -516,6 +546,7 @@ def test_url_map_jede_regel_erklaert():
         | _AUTH2_INLINE_ROUTEN
         | {_als_rule_pattern(p) for p in ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS}
         | {_als_rule_pattern(p) for p in ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE}
+        | {_als_rule_pattern(no_slash) for no_slash, _ in ROUTEN_BEFUND2_NO_SLASH_REDIRECT}
     )
     ungeklaert = []
     for rule in main_mod.app.url_map.iter_rules():
@@ -545,6 +576,8 @@ def test_bekannte_offene_kategorien_sind_paarweise_disjunkt():
         "AUTH2_INLINE_ROUTEN": _AUTH2_INLINE_ROUTEN,
         "BEFUND1_PUBLIC_PWA_ASSETS": {_als_rule_pattern(p) for p in ROUTEN_BEFUND1_PUBLIC_PWA_ASSETS},
         "BEFUND2_OFFENE_TELEGRAM_PROBE": {_als_rule_pattern(p) for p in ROUTEN_BEFUND2_OFFENE_TELEGRAM_PROBE},
+        "BEFUND2_NO_SLASH_REDIRECT": {
+            _als_rule_pattern(no_slash) for no_slash, _ in ROUTEN_BEFUND2_NO_SLASH_REDIRECT},
     }
     namen = list(kategorien)
     for i, a in enumerate(namen):

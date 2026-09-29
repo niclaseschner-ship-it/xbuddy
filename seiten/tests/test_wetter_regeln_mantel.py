@@ -24,16 +24,21 @@ def _client():
 
 
 def test_shell_html_public_200():
-    """MAD-7: die HTML-Shell ist public (JS macht ensureAuth) → 200 + no-store."""
-    r = _client().get("/seiten/wetter/regeln")
+    """MAD-7 / SREG-15 (#1968): die kanonische HTML-Shell (Slash-Adresse, =
+    Manifest-start_url/scope) ist public (JS macht ensureAuth) → 200 + no-store."""
+    r = _client().get("/seiten/wetter/regeln/")
     assert r.status_code == 200
     assert "Garderoben-Regeln" in r.get_data(as_text=True)
     assert "no-store" in r.headers.get("Cache-Control", "")
 
 
-def test_trailing_slash_alias_200():
-    r = _client().get("/seiten/wetter/regeln/")
-    assert r.status_code == 200
+def test_no_slash_leitet_301_auf_kanonische_adresse():
+    """SREG-15 (#1968): GET /seiten/wetter/regeln (ohne Slash) liegt AUSSERHALB
+    des Manifest-scope ("/seiten/wetter/regeln/") -- 301 statt eigenem 200,
+    Query-String bleibt erhalten."""
+    r = _client().get("/seiten/wetter/regeln?installieren=1")
+    assert r.status_code == 301
+    assert r.headers["Location"].endswith("/seiten/wetter/regeln/?installieren=1")
 
 
 def test_manifest_baut_aus_registry():

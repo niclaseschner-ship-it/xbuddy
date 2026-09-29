@@ -22,7 +22,7 @@ sys.path.insert(0, _REPO_ROOT)
 from seiten import main as seiten_main  # noqa: E402
 from seiten import pwa_mantel  # noqa: E402
 
-_HTML_PATH = "/seiten/essen/einkauf"
+_HTML_PATH = "/seiten/essen/einkauf/"  # SREG-15/#1968: kanonische Adresse
 
 
 @pytest.fixture(autouse=True)

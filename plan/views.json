@@ -17,14 +17,14 @@
     {
       "slug": "einstellungen",
       "typ": "pwa",
-      "pfad": "/seiten/plan/einstellungen",
+      "pfad": "/seiten/plan/einstellungen/",
       "label": "Plan-Einstellungen",
       "synonyme": ["verantwortlichkeiten", "wer macht was"],
       "zeigt": "Festlegen, wer an welchem Wochentag wofür zuständig ist.",
       "zielgruppe": "eltern",
       "pwa": {
         "manifest": "/seiten/plan/einstellungen/manifest.json",
-        "start_url": "/seiten/plan/einstellungen",
+        "start_url": "/seiten/plan/einstellungen/",
         "service_worker": "/seiten/plan/einstellungen/sw.js"
       },
       "auth": "public"

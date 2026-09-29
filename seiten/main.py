@@ -967,6 +967,22 @@ def auth_telegram():
     return resp
 
 
+# SREG-15 (#1968) — Kanonische Adresse: jede Eltern-Homescreen-PWA liegt mit
+# `pfad`/`start_url` INNERHALB ihres Manifest-scope (Android ordnet einen Link
+# sonst evtl. einer fremden installierten App zu). Die vier Mäntel mit
+# Schrägstrich-Scope (einkauf, plan-einstellungen, routine-anpassen,
+# wetter-regeln) teilen sich diesen EINEN Redirect-Helfer statt vier Kopien.
+def _kanonische_pwa_redirect(ziel_pfad_mit_slash):
+    """301 auf die kanonische (Slash-)Adresse einer Eltern-PWA (SREG-15, #1968).
+
+    Query-String bleibt erhalten (z. B. `?installieren=1`), analog dem
+    Controller-App-Panel-Vorbild (app_panel_index_no_slash, seiten/main.py).
+    """
+    qs = request.query_string.decode("utf-8")
+    ziel = ziel_pfad_mit_slash + ("?" + qs if qs else "")
+    return redirect(ziel, code=301)
+
+
 @app.route("/seiten/essen/einkauf/", methods=["GET"])
 # AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859):
 # der echte Entry-Point ist ein Telegram-web_app-Button
@@ -979,23 +995,16 @@ def auth_telegram():
 # /api/v1/init-data/validate liefert. Probe steht aus: Nic tippt auf einem
 # gepairten Elterngeraet den Telegram-Button an — erst danach ist belegt, ob
 # diese Route sicher hinter require_dual_gate/require_init_data kann.
-def essen_einkauf_view_trailing_slash():
-    """ESSEN-34 Trailing-Slash-Alias: GET /seiten/essen/einkauf/ → HTML.
+def essen_einkauf_view():
+    """ESSEN-34 / SREG-15 (#1968): HTML-Render-Route unter der kanonischen
+    Adresse GET /seiten/essen/einkauf/ (= Manifest-`start_url` = `scope`).
 
     manifest.json traegt start_url: "/seiten/essen/einkauf/" — der PWA-Open
     nach Install laedt diese URL. Ohne diese Route landet der Nutzer in 404.
     Form: Option C (dedizierter Handler, kein strict_slashes, kein Reihenfolge-
     Risiko gegenueber einkauf_asset_view bei /seiten/essen/einkauf/<asset>).
-    """
-    return essen_einkauf_view()
 
-
-@app.route("/seiten/essen/einkauf", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
-# essen_einkauf_view_trailing_slash oben (dieselbe Begruendung, derselbe
-# Telegram-web_app-Entry-Point, dieselbe offene Nic-Probe).
-def essen_einkauf_view():
-    """EZG-6 / ESSEN-31 / ESSEN-33: Eltern-Mini-App-View fuer die Einkaufsliste.
+    EZG-6 / ESSEN-31 / ESSEN-33: Eltern-Mini-App-View fuer die Einkaufsliste.
 
     HTML-Render-Route lädt Skeleton OHNE Auth (MAD-7-konform: Telegram-WebView
     sendet beim HTML-Initial-Load KEINEN Authorization-Header — initData kommt
@@ -1017,6 +1026,18 @@ def essen_einkauf_view():
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+@app.route("/seiten/essen/einkauf", methods=["GET"])
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
+# essen_einkauf_view oben (dieselbe Begruendung, derselbe Telegram-web_app-
+# Entry-Point, dieselbe offene Nic-Probe). Die 301-Antwort selbst braucht kein
+# Gate — sie liest/schreibt nichts, nur der gerenderte HTML-Inhalt zaehlt.
+def essen_einkauf_view_no_slash():
+    """SREG-15 (#1968): No-Slash-Form liegt AUSSERHALB des Manifest-scope
+    ("/seiten/essen/einkauf/") — 301 auf die kanonische Adresse statt eigenem
+    200 (Query-String bleibt erhalten)."""
+    return _kanonische_pwa_redirect("/seiten/essen/einkauf/")
 
 
 # ============================================================
@@ -1238,25 +1259,16 @@ def _plan_einst_build_id():
 # und wurde bis #1946 ueber die Mini-App-Uebersicht als Telegram-web_app-Kachel
 # angeboten — derselbe
 # WebView-Entry-Mechanismus wie einkauf/routine/wetter (siehe Kommentar an
-# essen_einkauf_view_trailing_slash fuer die volle Begruendung: require_dual_gate
+# essen_einkauf_view fuer die volle Begruendung: require_dual_gate
 # ist cookie-only ohne tma-Zweig, MAD-11 belegt fehlenden Authorization-Header
 # beim Initial-Load, Cookie-Traegung der WebView ist NICHT belegt). Offene
 # Nic-Probe wie bei den anderen fuenf Flaechen.
-def plan_einstellungen_view_trailing_slash():
-    """PLAN-35 Trailing-Slash-Alias: GET /seiten/plan/einstellungen/ → HTML.
+def plan_einstellungen_view():
+    """PLAN-35 / SREG-15 (#1968): HTML-Render-Route unter der kanonischen
+    Adresse GET /seiten/plan/einstellungen/ (= Manifest-`start_url` = `scope`).
 
     manifest.json traegt start_url: "/seiten/plan/einstellungen/" — der PWA-Open
     nach Install laedt diese URL. Ohne diese Route landet der Nutzer in 404.
-    Form: Option C (dedizierter Handler, analog essen_einkauf_view_trailing_slash).
-    """
-    return plan_einstellungen_view()
-
-
-@app.route("/seiten/plan/einstellungen", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
-# plan_einstellungen_view_trailing_slash oben.
-def plan_einstellungen_view():
-    """PLAN-35: Plan-Einstellungs-PWA — HTML-Render-Route.
 
     PUBLIC / Netz-Trust (auth.md AUTH-6): kein Auth-Header, kein initData.
     Cache-Buster: build_id aus mtime der plan-einstellungen.js (platform.js einbezogen, T1229).
@@ -1270,6 +1282,16 @@ def plan_einstellungen_view():
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+@app.route("/seiten/plan/einstellungen", methods=["GET"])
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
+# plan_einstellungen_view oben. Die 301-Antwort selbst braucht kein Gate.
+def plan_einstellungen_view_no_slash():
+    """SREG-15 (#1968): No-Slash-Form liegt AUSSERHALB des Manifest-scope
+    ("/seiten/plan/einstellungen/") — 301 auf die kanonische Adresse statt
+    eigenem 200 (Query-String bleibt erhalten)."""
+    return _kanonische_pwa_redirect("/seiten/plan/einstellungen/")
 
 
 @app.route("/seiten/plan/einstellungen/<path:asset>", methods=["GET"])
@@ -1448,23 +1470,17 @@ def connector_sw_view():
 # AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): der
 # echte Entry-Point ist ein Telegram-web_app-Button
 # (eltern-chat/skills/app_oeffnen.py, EC-46 seit 1964). Begruendung wortgleich
-# zu essen_einkauf_view_trailing_slash oben (require_dual_gate cookie-only
+# zu essen_einkauf_view oben (require_dual_gate cookie-only
 # ohne tma-Zweig, MAD-11-Befund fehlender Authorization-Header beim
 # Initial-Load, Cookie-Traegung der WebView unbelegt). Offene Nic-Probe.
-def routine_anpassen_view_trailing_slash():
-    """ROUTINE-23 Trailing-Slash-Alias: GET /seiten/routine/anpassen/ → HTML (T1665).
+def routine_anpassen_view():
+    """ROUTINE-23 / SREG-15 (#1968): HTML-Render-Route unter der kanonischen
+    Adresse GET /seiten/routine/anpassen/ (= Manifest-`start_url` = `scope`, T1665).
 
     manifest.json traegt start_url: "/seiten/routine/anpassen/" — der PWA-Open
     nach Install laedt diese URL. Ohne diese Route landet der Nutzer in 404.
-    """
-    return routine_anpassen_view()
 
-
-@app.route("/seiten/routine/anpassen", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
-# routine_anpassen_view_trailing_slash oben.
-def routine_anpassen_view():
-    """ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View (T1665: PWA-Mantel).
+    ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View (T1665: PWA-Mantel).
 
     Auth (MAD-7 / T708-C): Authorization: tma <initData>-Header Pflicht.
     Fehlender oder ungültiger Header → 401. Nicht-Familienmitglied → 403.
@@ -1493,6 +1509,16 @@ def routine_anpassen_view():
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+@app.route("/seiten/routine/anpassen", methods=["GET"])
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
+# routine_anpassen_view oben. Die 301-Antwort selbst braucht kein Gate.
+def routine_anpassen_view_no_slash():
+    """SREG-15 (#1968): No-Slash-Form liegt AUSSERHALB des Manifest-scope
+    ("/seiten/routine/anpassen/") — 301 auf die kanonische Adresse statt
+    eigenem 200 (Query-String bleibt erhalten)."""
+    return _kanonische_pwa_redirect("/seiten/routine/anpassen/")
 
 
 # ============================================================
@@ -1614,25 +1640,30 @@ def _wetter_regeln_build_id():
 # AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (nicht gegatet, Ticket #1859): der
 # echte Entry-Point ist ein Telegram-web_app-Button
 # (eltern-chat/skills/app_oeffnen.py, EC-46 seit 1964). Begruendung wortgleich
-# zu essen_einkauf_view_trailing_slash oben (require_dual_gate cookie-only
+# zu essen_einkauf_view oben (require_dual_gate cookie-only
 # ohne tma-Zweig, MAD-11-Befund fehlender Authorization-Header beim
 # Initial-Load, Cookie-Traegung der WebView unbelegt). Offene Nic-Probe.
-def wetter_regeln_view_trailing_slash():
-    """Trailing-Slash-Alias (manifest start_url) → HTML-Shell."""
-    return wetter_regeln_view()
-
-
-@app.route("/seiten/wetter/regeln", methods=["GET"])
-# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
-# wetter_regeln_view_trailing_slash oben.
 def wetter_regeln_view():
-    """#1715 (ESB-1.a): HTML-Shell des Garderoben-Editors (MAD-7: public, JS
+    """SREG-15 (#1968): HTML-Render-Route unter der kanonischen Adresse GET
+    /seiten/wetter/regeln/ (= Manifest-`start_url` = `scope`).
+
+    #1715 (ESB-1.a): HTML-Shell des Garderoben-Editors (MAD-7: public, JS
     macht ensureAuth über /api/v1/wetter/regeln). PWA-Mantel via Lib."""
     resp = make_response(render_template(
         "wetter-regeln.html", build_id=_wetter_regeln_build_id()))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+@app.route("/seiten/wetter/regeln", methods=["GET"])
+# AUTH-11 (#1832) — Watchdog-Befund, OFFENE Live-Probe (Ticket #1859): siehe Kommentar an
+# wetter_regeln_view oben. Die 301-Antwort selbst braucht kein Gate.
+def wetter_regeln_view_no_slash():
+    """SREG-15 (#1968): No-Slash-Form liegt AUSSERHALB des Manifest-scope
+    ("/seiten/wetter/regeln/") — 301 auf die kanonische Adresse statt eigenem
+    200 (Query-String bleibt erhalten)."""
+    return _kanonische_pwa_redirect("/seiten/wetter/regeln/")
 
 
 @app.route("/seiten/wetter/regeln/<path:asset>", methods=["GET"])

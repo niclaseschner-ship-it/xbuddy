@@ -71,15 +71,18 @@ def client():
 
 # ── AC1: HTML-Route ───────────────────────────────────────────────────────────
 
-def test_ac1_html_route_200(client):
-    """AC1: GET /seiten/plan/einstellungen → 200 text/html (PUBLIC, kein Auth noetig)."""
-    resp = client.get(_ENTRY_PATH)
-    assert resp.status_code == 200
-    assert "text/html" in resp.mimetype
+def test_ac1_no_slash_leitet_301_auf_kanonische_adresse(client):
+    """SREG-15 (#1968): GET /seiten/plan/einstellungen (ohne Slash) liegt
+    AUSSERHALB des Manifest-scope ("/seiten/plan/einstellungen/") -- 301 statt
+    eigenem 200, Query-String bleibt erhalten."""
+    resp = client.get(_ENTRY_PATH + "?installieren=1")
+    assert resp.status_code == 301
+    assert resp.headers["Location"].endswith(_ASSET_PREFIX + "?installieren=1")
 
 
 def test_ac1_trailing_slash_200(client):
-    """AC1 Trailing-Slash: GET /seiten/plan/einstellungen/ → 200 text/html.
+    """AC1 / SREG-15 (#1968) kanonische Adresse: GET /seiten/plan/einstellungen/
+    → 200 text/html.
 
     manifest.start_url = /seiten/plan/einstellungen/ — dieser Pfad muss
     als HTML-Route erreichbar sein, sonst landet PWA-Open nach Install in 404.
@@ -241,14 +244,14 @@ def test_ac4_nonexistent_asset_404(client):
 
 def test_ac_entry_html_manifest_link(client):
     """AC_ENTRY / PWA-1: HTML traegt <link rel='manifest'>."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'rel="manifest"' in body
     assert "/seiten/plan/einstellungen/manifest.json" in body
 
 
 def test_ac_entry_html_service_worker(client):
     """AC_ENTRY / PWA-1: HTML registriert sw.js mit Scope."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "navigator.serviceWorker" in body
     assert "/seiten/plan/einstellungen/sw.js" in body
     assert "/seiten/plan/einstellungen/" in body
@@ -256,7 +259,7 @@ def test_ac_entry_html_service_worker(client):
 
 def test_ac_entry_html_wake_lock(client):
     """AC_ENTRY / PWA-3: HTML enthaelt navigator.wakeLock.request."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "navigator.wakeLock" in body
     assert "wakeLock.request" in body
     assert "visibilitychange" in body
@@ -264,7 +267,7 @@ def test_ac_entry_html_wake_lock(client):
 
 def test_ac_entry_html_fullscreen(client):
     """AC_ENTRY / PWA-3: HTML enthaelt requestFullscreen aus touchend/click."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "requestFullscreen" in body
     assert "touchend" in body
     assert "click" in body
@@ -272,48 +275,48 @@ def test_ac_entry_html_fullscreen(client):
 
 def test_ac_entry_html_theme_color(client):
     """AC_ENTRY: HTML traegt <meta name='theme-color'>."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'name="theme-color"' in body
 
 
 def test_ac_entry_html_slots_container(client):
     """AC_ENTRY: HTML traegt #slots-container (JS rendert Slot-Liste darin)."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'id="slots-container"' in body, \
         "#slots-container fehlt — Slot-Liste kann nicht gerendert werden"
 
 
 def test_ac_entry_html_speichern_btn(client):
     """AC_ENTRY: HTML traegt #speichern-btn (sichtbarer Speichern-Knopf statt Telegram MainButton)."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'id="speichern-btn"' in body, \
         "#speichern-btn fehlt — Speichern-Button (kein Telegram MainButton) muss sichtbar sein"
 
 
 def test_ac_entry_html_sheet_icon(client):
     """AC_ENTRY: HTML traegt #sheet-icon (ARASAAC-Such-Bottom-Sheet)."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'id="sheet-icon"' in body, \
         "#sheet-icon fehlt — ARASAAC-Icon-Picker-Sheet nicht vorhanden"
 
 
 def test_ac_entry_html_sheet_person(client):
     """AC_ENTRY: HTML traegt #sheet-person (Personen-Picker-Sheet)."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'id="sheet-person"' in body, \
         "#sheet-person fehlt — Personen-Picker-Sheet nicht vorhanden"
 
 
 def test_ac_entry_html_plan_einstellungen_js(client):
     """AC_ENTRY: HTML laedt plan-einstellungen.js."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "plan-einstellungen.js" in body, \
         "plan-einstellungen.js fehlt im Template"
 
 
 def test_ac_entry_html_plan_einstellungen_css(client):
     """AC_ENTRY: HTML laedt plan-einstellungen.css."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "plan-einstellungen.css" in body, \
         "plan-einstellungen.css fehlt im Template"
 
@@ -508,7 +511,7 @@ def test_ac1_neu_icon_suche_input_im_html(client):
     Benutzer muss 'kalender' suchen koennen, auch wenn Slot-Name 'Termine Emil' ist.
     Das Suchfeld ist von .neu-label-input getrennt.
     """
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'class="neu-icon-suche"' in body or "neu-icon-suche" in body, (
         ".neu-icon-suche fehlt in plan-einstellungen.html (AC1: freies Suchfeld im Anlege-Flow)"
     )

@@ -19,7 +19,7 @@
     {
       "slug": "einkauf",
       "typ": "pwa",
-      "pfad": "/seiten/essen/einkauf",
+      "pfad": "/seiten/essen/einkauf/",
       "label": "Einkaufsliste pflegen",
       "synonyme": ["einkaufen", "liste", "abhaken"],
       "zeigt": "Einkaufsliste bearbeiten — abhaken, hinzufügen, Wünsche übernehmen.",

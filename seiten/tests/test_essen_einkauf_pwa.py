@@ -73,13 +73,27 @@ def client():
 
 # ── ESSEN-34 Acceptance-Tabelle ──────────────────────────────────────────────
 
+def test_essen34_no_slash_leitet_301_auf_kanonische_adresse(client):
+    """ESSEN-34 / SREG-15 (#1968): GET /seiten/essen/einkauf (ohne Slash) liegt
+    AUSSERHALB des Manifest-scope ("/seiten/essen/einkauf/") -- 301 auf die
+    kanonische Adresse statt eigenem 200.
+
+    Die bestehende HTML-Route (ESSEN-31 / EZG-6) darf nicht brechen, wenn
+    daneben die Asset-Routes hinzukommen — die kanonische Slash-Form liefert
+    weiterhin 200 (test_essen34_html_route_bleibt_200 unten, kanonische Adresse)."""
+    resp = client.get(_ENTRY_PATH)
+    assert resp.status_code == 301
+    assert resp.headers["Location"].endswith(_ASSET_PREFIX)
+
+
 def test_essen34_html_route_bleibt_200(client):
-    """ESSEN-34 Acceptance-Tabelle Zeile 1: GET /seiten/essen/einkauf → 200 text/html.
+    """ESSEN-34 / SREG-15 (#1968): GET /seiten/essen/einkauf/ (kanonische
+    Adresse) → 200 text/html.
 
     Die bestehende HTML-Route (ESSEN-31 / EZG-6) darf nicht brechen, wenn
     daneben die Asset-Routes hinzukommen.
     """
-    resp = client.get(_ENTRY_PATH)
+    resp = client.get(_ASSET_PREFIX)
     assert resp.status_code == 200
     assert "text/html" in resp.mimetype
 
@@ -178,14 +192,14 @@ def test_essen34_privatfile_nicht_ausgeliefert(client):
 
 def test_essen33_html_bindet_manifest_ein(client):
     """ESSEN-33 / PWA-1: HTML traegt <link rel="manifest" href=...>."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'rel="manifest"' in body
     assert "/seiten/essen/einkauf/manifest.json" in body
 
 
 def test_essen33_html_registriert_service_worker(client):
     """ESSEN-33 / PWA-1: HTML registriert sw.js."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "navigator.serviceWorker" in body
     assert "/seiten/essen/einkauf/sw.js" in body
     # Scope explizit auf den Mini-App-Namespace (ESSEN-34 Schluss-Note).
@@ -194,7 +208,7 @@ def test_essen33_html_registriert_service_worker(client):
 
 def test_essen33_html_wake_lock_pfad(client):
     """ESSEN-33 / PWA-3: HTML enthaelt navigator.wakeLock.request-Aufruf."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "navigator.wakeLock" in body
     assert "wakeLock.request" in body
     # visibilitychange-Reaktivierung (PWA-3 self-healing).
@@ -203,7 +217,7 @@ def test_essen33_html_wake_lock_pfad(client):
 
 def test_essen33_html_fullscreen_aus_geste(client):
     """ESSEN-33 / PWA-3: requestFullscreen aus touchend/click-Geste."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "requestFullscreen" in body
     # PWA-3: touchend (NICHT touchstart) + click sind die gueltigen Trigger.
     assert "touchend" in body
@@ -215,7 +229,7 @@ def test_essen33_html_fullscreen_aus_geste(client):
 
 def test_essen33_html_theme_color_meta(client):
     """ESSEN-33: <meta name="theme-color"> setzt die System-Statusleisten-Farbe."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'name="theme-color"' in body
 
 

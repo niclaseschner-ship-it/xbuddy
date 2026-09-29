@@ -17,7 +17,7 @@
     {
       "slug": "anpassen",
       "typ": "pwa",
-      "pfad": "/seiten/routine/anpassen",
+      "pfad": "/seiten/routine/anpassen/",
       "label": "Morgenroutine anpassen",
       "synonyme": ["routine", "morgenroutine", "anpassen", "aufgaben", "reihenfolge", "routine bearbeiten", "punkte umsortieren", "punkt hinzufügen", "ablauf", "tagesablauf"],
       "zeigt": "Schritte der Morgenroutine hinzufügen, umsortieren oder entfernen.",
