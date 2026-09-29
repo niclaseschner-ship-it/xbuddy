@@ -413,7 +413,8 @@ genannten Dienste waren **nie** Abriss-Ziele und laufen weiter:
 - **`wetter`** — in RAT-31 nirgends genannt, ein regulärer Buddy.
 
 `hoerspiel` fiel bereits per RAT-32-Amendment vom 2026-07-30 heraus; `familie`
-ist extern per nginx-403 dicht (#1638). Damit gilt für alle verbliebenen
+ist extern per nginx-403 dicht (#1638) — bis auf die zwei Leserouten, die seit
+2026-09-29 hinter dem Cookie stehen (#1969, s. u.). Damit gilt für alle verbliebenen
 Dienste ohne Ausnahme **AUTH-11**: was echten Inhalt ausliefert, sitzt hinter
 dem Cookie. Nic 2026-08-11: „Wenn kein Abriss mehr kommt, dann muss alles, was
 wirklich Content hat, hinter dem Cookie sein."
@@ -731,14 +732,29 @@ wäre eine Entscheidung, dies ist eine offene Frage mit Verfallsdatum.
 > für zwei. Dazu ein Existenz-Orakel (unbekannte `panel_id` → `404`, bekannte
 > → `200`).
 
-**familie-Datenrouten sind KEIN AUTH-6-Migrations-Backlog (RAT-32-Amendment, #1638).**
-`/api/v1/familie/personen*` und `/api/v1/familie/foto/*` tragen keinen Defer-Trigger
-mehr: `familie` ist ein RAT-31-Abriss-Ziel — es kommt keine extern erreichbare
-Familien-Editor-Mini-App. Statt Migration nach AUTH-3 werden diese Routen **extern
-permanent per nginx-403 abgeschaltet** (Funnel → `403`); intern (Loopback/Kiosk)
-bleiben sie erreichbar. Damit gehören sie nicht in die AUTH-6-Backlog-Liste (die nur
-Routen mit Defer-Trigger führt, s. o.). Ratifiziert: RAT-32-Amendment 2026-07-30
-(`decisions/RAT-32-auth-cookie-only-hart.md`, nennt #1638) unter RAT-31.
+**familie-Datenrouten sind KEIN AUTH-6-Migrations-Backlog (RAT-32-Amendment, #1638;
+amendiert 2026-09-29, #1969).**
+`familie` bleibt als Dienst extern geschlossen: nginx beantwortet `/api/v1/familie/*`
+extern mit `403`, intern (Loopback/Kiosk) bleibt alles erreichbar. **Ausnahme — zwei
+Leserouten hinter dem Cookie:** `GET /api/v1/familie/personen` und
+`GET /api/v1/familie/foto/<person_id>` reicht nginx an den familie-Dienst durch; dort
+gilt AUTH-3 HART (`require_init_data`: `xbuddy_session`-Cookie oder gültiger
+tma-Header eines Familien-Mitglieds, sonst `401`/`403`). nginx setzt dabei
+`X-Forwarded-For`, damit der Loopback-Bypass (AUTH-5) extern nie greift. Alle
+übrigen familie-Routen (`GET /api/v1/familie/personen/<id>`, alle `POST`) bleiben
+extern `403`.
+
+*Warum:* Die 403-Klausel vom 2026-07-30 beruhte auf der Annahme „es kommt keine
+extern erreichbare Familien-Oberfläche". Sie war falsch — die Plan-Einstellungen
+(PLAN-35, Personen-Picker) und die Personenfotos in Browser-Seiten lesen genau
+diese zwei Routen; seit dem Live-Gang der 403 am 2026-09-25 luden sie nicht mehr
+(#1969). Nic-Setzung 2026-08-11 gilt: „alles, was wirklich Content hat, sitzt
+hinter dem Cookie" — das Cookie ist die Schutzgrenze, nicht die Unerreichbarkeit.
+Nic 2026-09-29: „wir sichern durch den Cookie alles, das war immer die Maßgabe".
+
+**Regel für Browser-Code:** Browser-seitiger Code ruft `/api/v1/familie/…` nur über
+diese zwei Leserouten auf. Ein neuer Browser-Leser einer anderen familie-Route ist
+eine Spec-Änderung an dieser Stelle, kein stiller nginx-Edit.
 
 Phase 6 (vollständige Migration) löst AUTH-6 auf. Solange Einträge in
 AUTH-6 stehen, ist MAD-7 in `conventions/mini-app-design.md` mit dem

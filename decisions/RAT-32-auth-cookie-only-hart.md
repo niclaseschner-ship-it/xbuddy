@@ -79,3 +79,18 @@ ersatzlos; für alle verbliebenen Dienste gilt AUTH-11 ohne Ausnahme.
 *Anlass:* #1805 — die Reifeprüfung fand den Widerspruch zwischen dieser Klausel
 und der am selben Tag gemergten AUTH-11.
 
+---
+
+## [AMENDIERT 2026-09-29] familie: zwei Leserouten hinter dem Cookie statt nginx-403
+
+Die 403-Klausel für `familie` (#1638, Amendment 2026-07-30) nahm an, es gebe
+keine externe Familien-Oberfläche. Das stimmte nicht: die Plan-Einstellungen
+(PLAN-35) und Browser-Seiten mit Personenfotos lesen `GET /api/v1/familie/personen`
+und `GET /api/v1/familie/foto/<id>`; seit dem Live-Gang der 403 (2026-09-25) luden
+sie nicht mehr (#1969).
+
+**Setzung Nic 2026-09-29:** „wir sichern durch den Cookie alles, das war immer die
+Maßgabe." Diese zwei Leserouten gehen extern wieder an den familie-Dienst und
+stehen dort hinter AUTH-3 HART (Cookie oder tma eines Familien-Mitglieds). Alles
+andere von `familie` bleibt extern `403`. Normativ: `specs/platform/auth.md`,
+Absatz „familie-Datenrouten sind KEIN AUTH-6-Migrations-Backlog".
