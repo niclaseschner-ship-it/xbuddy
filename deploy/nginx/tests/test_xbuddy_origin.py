@@ -8,7 +8,9 @@ Origin-Routing-Tabelle aus `specs/platform/urls.md` URL-14 abgebildet ist.
 Familie (RAT-31/#1638/#1339): `location /api/v1/familie/` gibt extern 403 zurück.
 Familie ist eine interne Registry; interne Leser (eltern-chat, plan, kibuddy)
 rufen sie per Loopback direkt an (http://127.0.0.1:5010), nicht über nginx.
-Der upstream-Block `xbuddy_familie` bleibt erhalten (wird intern direkt genutzt).
+Ausnahme #1969 (auth.md, familie-Absatz): GET /api/v1/familie/personen und
+GET /api/v1/familie/foto/<id> gehen an `xbuddy_familie` durch — dort gilt
+AUTH-3 HART hinter dem Cookie.
 
 Diese Tests parsen die Conf nicht semantisch (kein nginx im Loop), sondern
 fixieren die textuellen Eigenschaften, die das Routing tragen: ein Lookup-
@@ -47,12 +49,13 @@ def test_URL_14_familie_upstream_zeigt_auf_5010():
     )
 
 
-def test_URL_14_familie_location_gibt_403_zurueck():
-    """RAT-31 / #1638 / #1339: /api/v1/familie/ gibt extern 403 zurück.
+def test_URL_14_familie_rest_location_gibt_403_zurueck():
+    """RAT-31 / #1638 / #1339 / #1969: der Rest von /api/v1/familie/ gibt extern 403.
 
     familie ist eine interne Registry; interne Leser (eltern-chat, plan, kibuddy)
     rufen sie per Loopback direkt an (http://127.0.0.1:5010), nicht über nginx.
-    Die nginx-Location ist ausschließlich von externen Clients erreichbar → 403.
+    Außer den zwei #1969-Leserouten (eigene Locations, s. u.) bleibt alles unter
+    /api/v1/familie/ — GET /personen/<id>, alle POST — extern 403.
     """
     text = _conf_text()
     # `location /api/v1/familie/ { ... return 403; ... }`
@@ -65,6 +68,106 @@ def test_URL_14_familie_location_gibt_403_zurueck():
         "location /api/v1/familie/ fehlt oder gibt nicht 403 zurück "
         "(RAT-31, #1638, #1339: externe Familie-Routen abgeschaltet)"
     )
+
+
+# ============================================================
+#  Familie #1969: zwei Leserouten hinter dem Cookie
+# ============================================================
+
+_FAMILIE_PERSONEN_LOC = r"location\s+=\s+/api/v1/familie/personen\s*\{"
+_FAMILIE_FOTO_LOC = r"location\s+~\s+\^/api/v1/familie/foto/\[\^/\]\+\$\s*\{"
+
+
+def _location_body(text: str, kopf_regex: str) -> str:
+    """Body einer location (zwischen `{` und passender `}`, verschachtelt ok)."""
+    m = re.search(kopf_regex, text)
+    assert m is not None, f"location nicht gefunden: {kopf_regex}"
+    tiefe, i = 1, m.end()
+    while tiefe:
+        if text[i] == "{":
+            tiefe += 1
+        elif text[i] == "}":
+            tiefe -= 1
+        i += 1
+    return text[m.end():i - 1]
+
+
+def _nur_direktiven(body: str) -> str:
+    """Body ohne Kommentarzeilen — Direktiven-Prüfung ohne Prosa-Treffer."""
+    return "\n".join(
+        z for z in body.splitlines() if not z.strip().startswith("#")
+    )
+
+
+def test_1969_familie_personen_exakt_nur_get_an_familie():
+    """#1969: `= /api/v1/familie/personen` — exakt, nur GET, an xbuddy_familie."""
+    body = _nur_direktiven(_location_body(_conf_text(), _FAMILIE_PERSONEN_LOC))
+    assert re.search(r"proxy_pass\s+http://xbuddy_familie\s*;", body), (
+        "personen-Leseroute muss an xbuddy_familie proxypassen (#1969)"
+    )
+    assert re.search(r"limit_except\s+GET\s*\{\s*deny\s+all\s*;\s*\}", body), (
+        "personen-Leseroute: nur GET (limit_except GET { deny all; }) — POST extern 403"
+    )
+
+
+def test_1969_familie_foto_genau_ein_segment_nur_get_an_familie():
+    """#1969: `~ ^/api/v1/familie/foto/[^/]+$` — genau ein id-Segment, nur GET."""
+    body = _nur_direktiven(_location_body(_conf_text(), _FAMILIE_FOTO_LOC))
+    assert re.search(r"proxy_pass\s+http://xbuddy_familie\s*;", body), (
+        "foto-Leseroute muss an xbuddy_familie proxypassen (#1969)"
+    )
+    assert re.search(r"limit_except\s+GET\s*\{\s*deny\s+all\s*;\s*\}", body), (
+        "foto-Leseroute: nur GET (limit_except GET { deny all; }) — POST extern 403"
+    )
+
+
+def test_1969_familie_leserouten_behalten_x_forwarded_for():
+    """#1969 / AUTH-5: extern darf der Loopback-Bypass nie greifen.
+
+    nginx vererbt die server-weiten proxy_set_header nur, wenn die Location
+    KEINE eigenen setzt. Also: entweder gar keine proxy_set_header in den zwei
+    Leserouten, oder X-Forwarded-For explizit mit.
+    """
+    text = _conf_text()
+    assert re.search(
+        r"^\s{4}proxy_set_header\s+X-Forwarded-For\s+\$proxy_add_x_forwarded_for\s*;",
+        text, re.MULTILINE,
+    ), "server-weites X-Forwarded-For fehlt"
+    for kopf in (_FAMILIE_PERSONEN_LOC, _FAMILIE_FOTO_LOC):
+        body = _nur_direktiven(_location_body(text, kopf))
+        if "proxy_set_header" in body:
+            assert re.search(r"proxy_set_header\s+X-Forwarded-For\s", body), (
+                f"{kopf}: eigene proxy_set_header ohne X-Forwarded-For — "
+                "Loopback-Bypass (AUTH-5) würde extern greifen"
+            )
+
+
+def test_1969_keine_weitere_familie_location_proxypasst():
+    """#1969: genau die zwei Leserouten gehen an xbuddy_familie, sonst nichts.
+
+    Keine `^~`-/Prefix-Location unter /api/v1/familie/ außer der 403-Rest-
+    Location — ein neuer Browser-Leser ist eine Spec-Änderung (auth.md).
+    """
+    text = _conf_text()
+    koepfe = re.findall(r"location\s+(?:[=~^]+\s+)?\^?/api/v1/familie/[^\s{]*", text)
+    assert sorted(k.split()[-1] for k in koepfe) == sorted([
+        "/api/v1/familie/personen",
+        "^/api/v1/familie/foto/[^/]+$",
+        "/api/v1/familie/",
+    ]), f"unerwartete familie-Locations: {koepfe}"
+    assert text.count("proxy_pass http://xbuddy_familie;") == 2, (
+        "genau zwei Locations dürfen an xbuddy_familie proxypassen (#1969)"
+    )
+
+
+def test_1969_familie_ausnahme_in_kommentaren_benannt():
+    """AC1: Routing-Header und familie-Block nennen die Ausnahme mit #1969."""
+    text = _conf_text()
+    kopf = text[:text.find("upstream ")]
+    assert "/api/v1/familie/personen" in kopf, "Routing-Header nennt personen nicht"
+    assert "#1969" in kopf, "Routing-Header muss die #1969-Leserouten nennen"
+    block = text[text.find("# --- Familie:"):text.find("location /api/v1/familie/ {")]
+    assert "#1969" in block, "familie-Block-Kommentar muss #1969 nennen"
 
 
 def test_URL_14_familie_location_vorhanden_ohne_api_v1_fallback():
