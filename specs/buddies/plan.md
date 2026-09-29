@@ -1114,7 +1114,9 @@ Die Eltern-Einstellungs-Seite des Plan-Buddys ist eine **Homescreen-PWA**
 (`typ: "pwa"`, SREG-15) — kein Telegram-Mini-App-Formfaktor. Frontend-Mantel
 (Manifest, Service-Worker, statische Assets) lebt im Aggregator-Service `seiten`
 unter dessen Asset-Wurzel; die Daten-API bleibt beim Plan-Buddy (APP-1-Eigentum,
-PLAN-36/PLAN-37). Surface: `/seiten/plan/einstellungen`.
+PLAN-36/PLAN-37). Surface: `/seiten/plan/einstellungen/` (kanonische Adresse =
+`start_url` = `scope`); `/seiten/plan/einstellungen` ohne Schrägstrich leitet mit
+301 dorthin weiter (SREG-15 „Kanonische Adresse", #1968).
 
 Die Seite trägt **zwei Editor-Bereiche** nebeneinander: den **Defaults-Editor**
 (Default-Verantwortlichkeiten, PLAN-10, über PLAN-36) und den
@@ -1162,7 +1164,7 @@ Berechtigungs-Gate (SREG-6).
 **keine** Identitäts-Header — der Browser-Pfad liefert leere Auth (kein `initData`,
 keine `authHeaders`/`ensureAuth`).
 
-*Tickets:* #1126 (Refs #259)
+*Tickets:* #1126 (Refs #259) · #1968 (kanonische Adresse)
 
 ### PLAN-36 — Defaults-Schreib-API: `GET/PUT /api/v1/plan/defaults`
 

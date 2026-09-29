@@ -74,7 +74,7 @@ Eintrags-Schema (SREG-4):
 | (c) Controller-App | `/controller/figuren-erkennung/` | nein | Controller-Manifest (BUD-3) |
 | ~~(d) Panel-Instanz~~ | ~~`/controller/app-panel/<panel_id>`~~ | ~~**ja**~~ | ~~`panels.json`-Snapshot (PREG)~~ — **entfernt RAT-31 E3 (#1496)** |
 | ~~(e) Display-Client~~ | ~~`/display/<display_id>`~~ | ~~**ja**~~ | ~~Geräte-Registry-Snapshot (GER)~~ — **entfernt RAT-31 E3 (#1496)** |
-| (f) Homescreen-PWA | `/seiten/plan/einstellungen` | nein | Buddy- **oder Platform-Service-Manifest** (`views.json`, typ: "pwa"); Form SREG-15 |
+| (f) Homescreen-PWA | `/seiten/plan/einstellungen/` | nein | Buddy- **oder Platform-Service-Manifest** (`views.json`, typ: "pwa"); Form SREG-15 |
 | (g) Mini-App (Telegram) | `/seiten/mini-app-uebersicht` | nein | Buddy- **oder Platform-Service-Manifest** (`views.json`, typ: "mini-app"); Form SREG-14 |
 
 Sorte (b) deckt zwei Eigentümer-Klassen:
@@ -949,14 +949,14 @@ müssen.
 {
   "slug": "einstellungen",
   "typ": "pwa",
-  "pfad": "/seiten/plan/einstellungen",
+  "pfad": "/seiten/plan/einstellungen/",
   "label": "Plan-Einstellungen",
   "synonyme": ["verantwortlichkeiten", "wer macht was"],
   "zeigt": "Default-Verantwortlichkeiten je Slot und Wochentag setzen.",
   "zielgruppe": "eltern",
   "pwa": {
     "manifest": "/seiten/plan/einstellungen/manifest.json",
-    "start_url": "/seiten/plan/einstellungen",
+    "start_url": "/seiten/plan/einstellungen/",
     "service_worker": "/seiten/plan/einstellungen/sw.js"
   },
   "auth": "public"
@@ -975,6 +975,26 @@ müssen.
   Pairing nach AUTH-3, falls/wenn gehärtet). **`initData` ist hier NICHT zulässig**
   (das ist die Mini-App-Welt). V1 (P2): `"public"`.
 
+**Kanonische Adresse — jeder Einstieg liegt im eigenen Scope (#1968):**
+Android ordnet einen Link einer installierten Web-App nach Hostname und Pfad
+zu (nicht nach Port): ein Link, der außerhalb des Manifest-`scope` einer PWA
+liegt, gehört **nicht** zu ihr und kann in einer fremden installierten App
+aufgehen. Daher gilt für jede `typ: "pwa"`:
+- `pfad` und `pwa.start_url` sind die **kanonische Adresse** und liegen
+  **innerhalb** des Manifest-`scope` (Präfix-Treffer). Endet der `scope` auf
+  `/`, tragen `pfad` und `start_url` diesen Schrägstrich.
+- Liefert der Mantel seine Seite unter einer **Form ohne Schrägstrich**, die
+  außerhalb des `scope` liegt, **leitet diese Form mit 301 auf die kanonische
+  Form weiter** (Query-String bleibt erhalten, z. B. `?installieren=1`) statt
+  sie selbst mit 200 auszuliefern. Vorbild: der 301 der Controller-PWAs
+  (`specs/platform/router.md`, Trailing-Slash und 301-Redirect).
+- Kein Einstiegslink (Registry, Übersicht, Chat-Knopf) zeigt auf eine Adresse
+  außerhalb des Manifest-`scope` der Ziel-PWA.
+
+Mäntel, deren `scope` ohne Schrägstrich endet (z. B. Übersicht, Kacheln,
+Hörspiel-Player), sind davon nicht betroffen — dort ist die Form ohne
+Schrägstrich bereits die kanonische.
+
 **Abgrenzung — was diese Sorte NICHT ist:**
 - **≠ `typ: "mini-app"` (SREG-14):** Mini-Apps laufen im Telegram-WebView mit
   `initData`-Auth und einem `web_app`-Block (Bot-Username, Botfather-Short-Name).
@@ -987,7 +1007,7 @@ müssen.
 - `typ = "pwa"` — **explizit aus dem Manifest**, nicht aus `zielgruppe` abgeleitet
   (Sonderfall analog SREG-14; neue Konstante, z. B. `TYP_PWA = "pwa"`).
 
-*Tickets:* #1126 (Refs #259)
+*Tickets:* #1126 (Refs #259) · #1968 (kanonische Adresse)
 
 ## SREG-16 — Ein Layout-Kontrakt (`/layout`) für alle Übersichts-/Registry-Oberflächen
 

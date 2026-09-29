@@ -1357,12 +1357,14 @@ das ohne Cross-Origin-/Pfad-Sprung erreichbar ist (ROU-23-Vorbild).
 
 Konkrete URL-Form (analog ROU-23 für Controller-PWAs):
 
-Sowohl die Form ohne Trailing-Slash als auch die Form mit Trailing-Slash sind zulässig; die Trailing-Slash-Form ist die `start_url` der installierten PWA.
+Die Trailing-Slash-Form ist die kanonische Adresse und die `start_url` der
+installierten PWA; die Form ohne Trailing-Slash leitet mit 301 dorthin weiter
+(SREG-15 „Kanonische Adresse", #1968).
 
 | Pfad | Antwort |
 |---|---|
-| `GET /seiten/essen/einkauf` | 200, `text/html`, Inhalt aus `essen-einkauf.html` |
-| `GET /seiten/essen/einkauf/` | 200, `text/html` (PWA-Install start_url, ESSEN-33) |
+| `GET /seiten/essen/einkauf` | 301 → `/seiten/essen/einkauf/` (Query-String bleibt erhalten) |
+| `GET /seiten/essen/einkauf/` | 200, `text/html`, Inhalt aus `essen-einkauf.html` (PWA-Install start_url, ESSEN-33) |
 | `GET /seiten/essen/einkauf/manifest.json` | 200, `application/manifest+json` |
 | `GET /seiten/essen/einkauf/sw.js` | 200, `application/javascript` |
 | `GET /seiten/essen/einkauf/icon-192.png` | 200, `image/png` |
@@ -1385,7 +1387,7 @@ Mini-App-Namensraum `/seiten/essen/einkauf/` — nicht den ganzen
 `/seiten/`-Prefix. Andere Mini-Apps (z. B. `mini-app-uebersicht`,
 `routine-anpassen`) bleiben außerhalb des PWA-Caches.
 
-*Tickets:* #949
+*Tickets:* #949 · #1968 (301 statt 200 ohne Slash)
 
 ### ESSEN-35 — Service-Worker-Cache-Strategie
 
