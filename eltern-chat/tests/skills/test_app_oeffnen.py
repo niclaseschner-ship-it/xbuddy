@@ -144,8 +144,11 @@ def test_natuerliche_frage_trifft_das_vokabular_der_app(frage, key):
 # ── Garderobe: der tote Knopf ist weg ───────────────────────────────────────
 
 def test_garderoben_knopf_zeigt_auf_seiten_wetter_regeln():
+    """SREG-15 (#1968): `pfad` traegt jetzt die kanonische Slash-Form
+    ("/seiten/wetter/regeln/", = Manifest-scope) -- echte views.json-Form,
+    kein Fixture-Wert."""
     knoepfe = _task().run({"apps": ["wetter-regeln"]}, _turn())["presentation"]["inline_buttons"]
-    assert knoepfe[0]["web_app_url"] == _BASIS + "/seiten/wetter/regeln"
+    assert knoepfe[0]["web_app_url"] == _BASIS + "/seiten/wetter/regeln/"
     assert all("/display/wetter/regeln" not in (k.get("web_app_url") or k["url"])
                for k in knoepfe)
 
@@ -221,11 +224,13 @@ def test_ist_lesende_aufgabe_mit_anzeige_copy():
 
 
 def test_render_form_b_schickt_die_knopfreihe_an_telegram():
+    """SREG-15 (#1968): `pfad` traegt jetzt die kanonische Slash-Form
+    ("/seiten/routine/anpassen/", = Manifest-scope) -- echte views.json-Form."""
     tg = MagicMock()
     result = _task().run({"apps": ["routine-anpassen"]}, _turn())
     render_form_b(result, tg, 42)
     knoepfe = tg.send_inline_keyboard.call_args[0][2]
-    assert knoepfe[0]["web_app_url"] == _BASIS + "/seiten/routine/anpassen"
+    assert knoepfe[0]["web_app_url"] == _BASIS + "/seiten/routine/anpassen/"
     assert knoepfe[2]["url"].endswith("?installieren=1")
 
 

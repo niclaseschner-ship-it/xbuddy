@@ -182,7 +182,7 @@ def test_ac2_platform_bump_sichtbar_in_route_html(monkeypatch, client):
         return 1.0
 
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
-    resp = client.get("/seiten/routine/anpassen")
+    resp = client.get("/seiten/routine/anpassen/")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "?v=999" in body, \
@@ -204,9 +204,9 @@ def test_ac3_vier_routen_nutzen_helper(monkeypatch, client):
     static_dir = os.path.join(_SEITEN_DIR, "static")
 
     routes_und_komponenten = [
-        ("/seiten/essen/einkauf",              "einkauf"),
-        ("/seiten/plan/einstellungen",         "plan"),
-        ("/seiten/routine/anpassen",           "routine"),
+        ("/seiten/essen/einkauf/",              "einkauf"),
+        ("/seiten/plan/einstellungen/",         "plan"),
+        ("/seiten/routine/anpassen/",           "routine"),
     ]
 
     for url, component in routes_und_komponenten:

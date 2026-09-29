@@ -70,15 +70,17 @@ def client():
 
 # ── AC1: HTML-Route ───────────────────────────────────────────────────────────
 
-def test_ac1_html_route_200(client):
-    """AC1: GET /seiten/routine/anpassen → 200 text/html."""
+def test_ac1_no_slash_leitet_301_auf_kanonische_adresse(client):
+    """AC1 / SREG-15 (#1968): GET /seiten/routine/anpassen (ohne Slash) liegt
+    AUSSERHALB des Manifest-scope ("/seiten/routine/anpassen/") -- 301 auf die
+    kanonische Adresse statt eigenem 200."""
     resp = client.get(_ENTRY_PATH)
-    assert resp.status_code == 200
-    assert "text/html" in resp.mimetype
+    assert resp.status_code == 301
+    assert resp.headers["Location"].endswith(_ASSET_PREFIX)
 
 
 def test_ac1_trailing_slash_200(client):
-    """AC1 Trailing-Slash: GET /seiten/routine/anpassen/ → 200 text/html.
+    """AC1 / SREG-15 (#1968) kanonische Adresse: GET /seiten/routine/anpassen/ → 200 text/html.
 
     manifest.start_url = /seiten/routine/anpassen/ — dieser Pfad muss
     als HTML-Route erreichbar sein, sonst landet PWA-Open nach Install in 404.
@@ -253,48 +255,48 @@ def test_ac4_private_asset_404(client):
 
 def test_ac_entry_html_manifest_link(client):
     """AC_ENTRY / PWAM-5: HTML traegt <link rel='manifest'> auf routine-Manifest-Route."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'rel="manifest"' in body
     assert "/seiten/routine/anpassen/manifest.json" in body
 
 
 def test_ac_entry_html_service_worker(client):
     """AC_ENTRY / PWAM-3: HTML registriert sw.js mit Scope."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "navigator.serviceWorker" in body
     assert "/seiten/routine/anpassen/sw.js" in body
 
 
 def test_ac_entry_html_sw_scope(client):
     """AC_ENTRY / PWAM-3: HTML-SW-Registrierung nutzt scope aus REGISTRY (nicht hartkodiert)."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     # sw_scope aus REGISTRY: /seiten/routine/anpassen/
     assert "/seiten/routine/anpassen/" in body
 
 
 def test_ac_entry_html_theme_color(client):
     """AC_ENTRY / PWAM-2: HTML traegt <meta name='theme-color'>."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'name="theme-color"' in body
 
 
 def test_ac_entry_html_hauptcontainer(client):
     """AC_ENTRY: HTML traegt #routine-inhalt (JS rendert Cards darin)."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert 'id="routine-inhalt"' in body, \
         "#routine-inhalt fehlt im Template"
 
 
 def test_ac_entry_html_routine_anpassen_js(client):
     """AC_ENTRY: HTML laedt routine-anpassen.js."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "routine-anpassen.js" in body, \
         "routine-anpassen.js fehlt im Template"
 
 
 def test_ac_entry_html_routine_anpassen_css(client):
     """AC_ENTRY: HTML laedt routine-anpassen.css."""
-    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    body = client.get(_ASSET_PREFIX).get_data(as_text=True)
     assert "routine-anpassen.css" in body, \
         "routine-anpassen.css fehlt im Template"
 
@@ -397,8 +399,9 @@ def test_entry_path_probe_sw_route(client):
 
 
 def test_entry_path_probe_html_traegt_manifest_link(client):
-    """entry_path_probe: GET /seiten/routine/anpassen → HTML traegt <link rel='manifest'>."""
-    resp = client.get(_ENTRY_PATH)
+    """entry_path_probe / SREG-15 (#1968): GET /seiten/routine/anpassen/
+    (kanonische Adresse) → HTML traegt <link rel='manifest'>."""
+    resp = client.get(_ASSET_PREFIX)
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert 'rel="manifest"' in body, "HTML traegt keinen <link rel='manifest'>"

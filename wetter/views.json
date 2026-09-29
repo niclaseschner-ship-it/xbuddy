@@ -18,7 +18,7 @@
     {
       "slug": "regeln",
       "typ": "pwa",
-      "pfad": "/seiten/wetter/regeln",
+      "pfad": "/seiten/wetter/regeln/",
       "label": "Wetter-Regeln",
       "synonyme": [
         "Garderoben-Editor",

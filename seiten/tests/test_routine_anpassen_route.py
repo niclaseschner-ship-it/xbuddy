@@ -107,7 +107,7 @@ def test_ac1_route_liefert_200(client):
     """AC1: GET /seiten/routine/anpassen mit gueltiger initData → 200 HTML (MAD-7 Header)."""
     init_data = _baue_init_data()
     resp = client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "tma " + init_data},
     )
     assert resp.status_code == 200
@@ -123,12 +123,21 @@ def test_ac1_route_in_main_py():
         "Route /seiten/routine/anpassen fehlt in seiten/main.py"
 
 
+def test_ac1_no_slash_leitet_301_auf_kanonische_adresse(client):
+    """SREG-15 (#1968): GET /seiten/routine/anpassen (ohne Slash) liegt
+    AUSSERHALB des Manifest-scope ("/seiten/routine/anpassen/") -- 301 statt
+    eigenem 200, Query-String bleibt erhalten."""
+    resp = client.get("/seiten/routine/anpassen?installieren=1")
+    assert resp.status_code == 301
+    assert resp.headers["Location"].endswith("/seiten/routine/anpassen/?installieren=1")
+
+
 # ── AC2-Auth — Init-Data-Auth: drei Pfade ─────────────────────────────────────
 
 @pytest.mark.skip(reason="V2 MAD-11: HTML-Route public, Auth-Probe via JS-ensureAuth")
 def test_ac2_ohne_init_data_liefert_200_skeleton(client):
     """AC2 (MAD-7): Request ohne Authorization-Header → 401."""
-    resp = client.get("/seiten/routine/anpassen")
+    resp = client.get("/seiten/routine/anpassen/")
     assert resp.status_code == 200  # MAD-7: HTML lädt public, Auth via JS-ensureAuth
     body = resp.get_json()
     assert body is not None
@@ -140,7 +149,7 @@ def test_ac2_manipulierter_hash_liefert_200_skeleton(client):
     """AC2 (MAD-7): Authorization-Header mit manipuliertem Hash → 401."""
     init_data = _baue_init_data_manipuliert()
     resp = client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "tma " + init_data},
     )
     assert resp.status_code == 200  # MAD-7: HTML lädt public, Auth via JS-ensureAuth
@@ -152,7 +161,7 @@ def test_ac2_gueltiger_init_data_liefert_200(client):
     """AC2 (MAD-7): Authorization-Header mit gueltiger HMAC-Signatur → 200."""
     init_data = _baue_init_data(user_id=99)
     resp = client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "tma " + init_data},
     )
     assert resp.status_code == 200
@@ -163,7 +172,7 @@ def test_ac2_falsches_schema_liefert_200_skeleton(client):
     """AC2 (MAD-7): Authorization-Header mit falschem Schema (kein 'tma '-Praefix) → 401."""
     init_data = _baue_init_data()
     resp = client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "Bearer " + init_data},
     )
     assert resp.status_code == 200  # MAD-7: HTML lädt public, Auth via JS-ensureAuth
@@ -174,7 +183,7 @@ def test_ac2_abgelaufener_init_data_liefert_200_skeleton(client):
     """AC2 (MAD-7): auth_date mehr als max_age_seconds in der Vergangenheit → 401."""
     init_data = _baue_init_data(offset_seconds=-(86400 + 1))
     resp = client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "tma " + init_data},
     )
     assert resp.status_code == 200  # MAD-7: HTML lädt public, Auth via JS-ensureAuth
@@ -189,7 +198,7 @@ def test_ac2_fehlendes_bot_token_liefert_200_skeleton(client, monkeypatch):
 
     init_data = _baue_init_data()
     resp = client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "tma " + init_data},
     )
     assert resp.status_code == 200  # MAD-7: HTML lädt public, Token-Check nur am validate-Endpoint
@@ -208,7 +217,7 @@ def test_ac4_fremde_user_id_liefert_200_skeleton(client, tmp_path):
     # User-ID 42 ist nicht in der Registry (nur 99999 ist drin)
     init_data = _baue_init_data(user_id=42)
     resp = client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "tma " + init_data},
     )
     assert resp.status_code == 200  # MAD-7: HTML lädt public, FAM-Check via JS-ensureAuth
@@ -228,7 +237,7 @@ def test_ac4_bekannte_user_id_liefert_200(client, tmp_path):
 
     init_data = _baue_init_data(user_id=42)
     resp = client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "tma " + init_data},
     )
     assert resp.status_code == 200
@@ -243,7 +252,7 @@ def _get_html(client, user_id=42):
     """Helper: GET /seiten/routine/anpassen mit gueltiger MAD-7-Auth."""
     init_data = _baue_init_data(user_id=user_id)
     return client.get(
-        "/seiten/routine/anpassen",
+        "/seiten/routine/anpassen/",
         headers={"Authorization": "tma " + init_data},
     ).get_data(as_text=True)
 
